@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://6w82ilq1u7j6"]
+
+[ext_resource type="PackedScene" uid="uid://ctuakifyo3wa3" path="res://scenes/dialogs/base_dialog.tscn" id="1_fqlyb"]
+[ext_resource type="Script" uid="uid://y2igx3uo8dbe" path="res://scenes/dialogs/opc_ua_status_dialog/opc_ua_status_dialog.gd" id="2_jx71u"]
+
+[node name="StatusDialog" unique_id=980154428 instance=ExtResource("1_fqlyb")]
+script = ExtResource("2_jx71u")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer" parent_id_path=PackedInt32Array(1803083427) index="0" unique_id=1160938639]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" index="0" unique_id=2077625792]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" index="0" unique_id=70999693]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ShowAllButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" index="1" unique_id=863132106]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Show All"
+
+[node name="Tree" type="Tree" parent="Panel/MarginContainer/VBoxContainer" index="1" unique_id=651061097]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StatusLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer" index="2" unique_id=854197467]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CloseButton" type="Button" parent="Panel/MarginContainer/VBoxContainer" index="3" unique_id=1171215944]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close"
+
+[node name="RefreshTimer" type="Timer" parent="." index="1" unique_id=2061509247]
+unique_name_in_owner = true
+autostart = true

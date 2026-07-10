@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://dcy0pgg4mjk2r"]
+
+[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/base_widget.tscn" id="1_x2h80"]
+[ext_resource type="Script" uid="uid://cpe7hcit157ty" path="res://widgets/label_widget/label_widget.gd" id="2_4d460"]
+
+[node name="BaseWidget" unique_id=954027860 instance=ExtResource("1_x2h80")]
+script = ExtResource("2_4d460")
+
+[node name="Label" type="Label" parent="MarginContainer/ContentSlot" parent_id_path=PackedInt32Array(227595631) index="0" unique_id=1667019848]
+layout_mode = 2

@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://i6gdfpekjne2"]
+
+[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/base_widget.tscn" id="1_grp56"]
+[ext_resource type="Script" uid="uid://df2l4l721feto" path="res://widgets/led_indicator_widget/led_indicator_widget.gd" id="2_n6rof"]
+
+[sub_resource type="Gradient" id="Gradient_n6rof"]
+interpolation_mode = 1
+offsets = PackedFloat32Array(0, 0.5)
+colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 0)
+metadata/_snap_count = 8
+metadata/_snap_enabled = true
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_0lkaj"]
+gradient = SubResource("Gradient_n6rof")
+width = 48
+height = 48
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0, 0)
+
+[node name="BaseWidget" unique_id=954027860 instance=ExtResource("1_grp56")]
+script = ExtResource("2_n6rof")
+color_on = Color(0, 1, 0, 1)
+color_off = Color(0, 0.39215687, 0, 1)
+
+[node name="Lamp" type="TextureRect" parent="MarginContainer/ContentSlot" parent_id_path=PackedInt32Array(227595631) index="0" unique_id=772807564]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+texture = SubResource("GradientTexture2D_0lkaj")
+expand_mode = 1
