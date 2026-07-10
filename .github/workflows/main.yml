@@ -43,20 +43,46 @@ jobs:
           unzip templates.tpz -d ./templates_extracted
           Move-Item -Path ./templates_extracted/templates/* -Destination $templateDir
 
-      - name: Verify Project Structure
+      - name: Diagnose Environment
         run: |
-          Get-ChildItem -Recurse ${{ github.workspace }} -Filter "project.godot"
-          Get-ChildItem -Recurse ${{ github.workspace }} -Filter "export_presets.cfg"
+          Write-Host "=== Godot Binary ==="
+          Get-ChildItem ./godot/
+
+          Write-Host "=== Export Templates ==="
+          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          if (Test-Path $templateDir) {
+            Get-ChildItem $templateDir
+          } else {
+            Write-Host "ERROR: Template directory missing!"
+          }
+
+          Write-Host "=== GDExtension Files ==="
+          Get-ChildItem -Recurse ${{ github.workspace }}/bin/
+
+          Write-Host "=== export_presets.cfg ==="
+          Get-Content ${{ github.workspace }}/export_presets.cfg
+
+          Write-Host "=== godot_opcua.gdextension ==="
+          Get-Content ${{ github.workspace }}/bin/godot_opcua.gdextension
 
       - name: Export Project
         run: |
           New-Item -ItemType Directory -Force -Path ${{ github.workspace }}/build
+          $env:GODOT_DEBUG_GDEXTENSION = "1"
           ./godot/Godot_v${{ env.GODOT_VERSION }}_win64.exe `
             --headless `
             --verbose `
+            --debug-stringnames `
             --path ${{ github.workspace }} `
             --export-debug "win64" `
-            ${{ github.workspace }}/build/tagview.exe
+            ${{ github.workspace }}/build/tagview.exe 2>&1 | Tee-Object -FilePath "${{ github.workspace }}/godot_log.txt"
+
+      - name: Upload Godot Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Godot Export Log
+          path: ${{ github.workspace }}/godot_log.txt
 
       - name: List Build Directory
         run: Get-ChildItem -Recurse ${{ github.workspace }}/build
