@@ -7,25 +7,49 @@ on:
 jobs:
   Godot:
     runs-on: windows-latest
+    env:
+      GODOT_VERSION: "4.7-stable"
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
 
+      - name: Cache Godot Executable
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ./godot
+          key: godot-${{ env.GODOT_VERSION }}
+
       - name: Download Godot
+        if: steps.cache-godot.outputs.cache-hit != 'true'
         run: |
-          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_win64.exe.zip"
-          unzip godot.zip
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_win64.exe.zip"
+          unzip godot.zip -d ./godot
+
+      - name: Cache Export Templates
+        id: cache-templates
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.APPDATA }}/Godot/export_templates
+          key: godot-templates-${{ env.GODOT_VERSION }}
 
       - name: Download Export Templates
+        if: steps.cache-templates.outputs.cache-hit != 'true'
         run: |
-          curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
-          mkdir -p "$env:APPDATA/Godot/export_templates/4.7.stable"
+          curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
+          New-Item -ItemType Directory -Force -Path "$env:APPDATA/Godot/export_templates/4.7.stable"
           unzip templates.tpz -d "$env:APPDATA/Godot/export_templates/4.7.stable"
+
+      - name: Create Build Directory
+        run: New-Item -ItemType Directory -Force -Path ./build
 
       - name: Export Project
         run: |
-          ./Godot_v4.7-stable_win64.exe --headless --export-debug "win64" ./build/example.exe
+          ./godot/Godot_v${{ env.GODOT_VERSION }}_win64.exe --headless --export-debug "win64" ./build/example.exe
+
+      - name: List Build Directory
+        run: Get-ChildItem -Recurse ./build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
