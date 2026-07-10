@@ -54,7 +54,7 @@ jobs:
             --verbose `
             --path ${{ github.workspace }} `
             --export-debug "win64" `
-            ${{ github.workspace }}/build/example.exe
+            ${{ github.workspace }}/build/tagview.exe
 
       - name: List Build Directory
         run: Get-ChildItem -Recurse ${{ github.workspace }}/build
