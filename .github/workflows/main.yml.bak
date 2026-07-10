@@ -8,7 +8,7 @@ jobs:
   Godot:
     runs-on: windows-latest
     env:
-      GODOT_VERSION: "4.7-stable"
+      GODOT_VERSION: "4.6.3-stable"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,25 +38,29 @@ jobs:
         if: steps.cache-templates.outputs.cache-hit != 'true'
         run: |
           curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
-          New-Item -ItemType Directory -Force -Path "$env:APPDATA/Godot/export_templates/4.7.stable"
-          unzip templates.tpz -d "$env:APPDATA/Godot/export_templates/4.7.stable"
+          New-Item -ItemType Directory -Force -Path "$env:APPDATA/Godot/export_templates/${{ env.GODOT_VERSION }}"
+          unzip templates.tpz -d "$env:APPDATA/Godot/export_templates/${{ env.GODOT_VERSION }}"
 
-      - name: Create Build Directory
-        run: New-Item -ItemType Directory -Force -Path ./build
+      - name: Verify Project Structure
+        run: |
+          Get-ChildItem -Recurse ${{ github.workspace }} -Filter "project.godot"
+          Get-ChildItem -Recurse ${{ github.workspace }} -Filter "export_presets.cfg"
 
       - name: Export Project
         run: |
+          New-Item -ItemType Directory -Force -Path ${{ github.workspace }}/build
           ./godot/Godot_v${{ env.GODOT_VERSION }}_win64.exe `
-          --headless `
-          --verbose `
-          --export-debug "win64" `
-          ./build/example.exe
+            --headless `
+            --verbose `
+            --path ${{ github.workspace }} `
+            --export-debug "win64" `
+            ${{ github.workspace }}/build/example.exe
 
       - name: List Build Directory
-        run: Get-ChildItem -Recurse ./build
+        run: Get-ChildItem -Recurse ${{ github.workspace }}/build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Client - win64
-          path: ./build/
+          path: ${{ github.workspace }}/build/
