@@ -6,26 +6,29 @@ on:
 
 jobs:
   Godot:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [win64]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
 
-      - name: Export with Godot
-        id: build
-        uses: firebelley/godot-export@v5.2.1
-        with:
-          godot_executable_download_url: "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip"
-          godot_export_templates_download_url: "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
-          relative_project_path: "./"
-          export_debug: true
+      - name: Download Godot
+        run: |
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_win64.exe.zip"
+          unzip godot.zip
+
+      - name: Download Export Templates
+        run: |
+          curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
+          mkdir -p "$env:APPDATA/Godot/export_templates/4.7.stable"
+          unzip templates.tpz -d "$env:APPDATA/Godot/export_templates/4.7.stable"
+
+      - name: Export Project
+        run: |
+          ./Godot_v4.7-stable_win64.exe --headless --export-debug "win64" ./build/example.exe
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Client - ${{ matrix.platform }}
-          path: ${{ steps.build.outputs.archive_directory }}
+          name: Client - win64
+          path: ./build/
