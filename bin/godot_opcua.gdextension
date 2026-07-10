@@ -6,4 +6,5 @@ reloadable            = false
 [libraries]
 
 ; ── Windows ───────────────────────────────────────────────────────────────────
-windows.debug.x86_64   = "res://bin/libgodot_opcua.windows.template_debug.x86_64.dll"
+windows.x86_64       = "res://bin/libgodot_opcua.windows.template_debug.x86_64.dll"
+windows.debug.x86_64 = "res://bin/libgodot_opcua.windows.template_debug.x86_64.dll"

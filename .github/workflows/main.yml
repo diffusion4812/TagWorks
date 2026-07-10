@@ -34,12 +34,14 @@ jobs:
           path: ${{ env.APPDATA }}/Godot/export_templates
           key: godot-templates-${{ env.GODOT_VERSION }}
 
-      - name: Download Export Templates
+      - name: Download and Install Export Templates
         if: steps.cache-templates.outputs.cache-hit != 'true'
         run: |
           curl -L -o templates.tpz "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
-          New-Item -ItemType Directory -Force -Path "$env:APPDATA/Godot/export_templates/4.6.3.stable"
-          unzip templates.tpz -d "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          New-Item -ItemType Directory -Force -Path $templateDir
+          unzip templates.tpz -d ./templates_extracted
+          Move-Item -Path ./templates_extracted/templates/* -Destination $templateDir
 
       - name: Verify Project Structure
         run: |
