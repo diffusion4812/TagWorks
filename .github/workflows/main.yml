@@ -15,16 +15,17 @@ jobs:
         with:
           lfs: true
 
-      - name: Build
+      - name: Export with Godot
         id: build
-        uses: manleydev/build-godot-action@v1.4.1
+        uses: firebelley/godot-export@v5.2.1
         with:
-          name: example
-          preset: ${{ matrix.platform }}
-          debugMode: "true"
+          godot_executable_download_url: "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip"
+          godot_export_templates_download_url: "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
+          relative_project_path: "./"
+          export_debug: true
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Client - ${{ matrix.platform }}
-          path: ${{ github.workspace }}/${{ steps.build.outputs.build }}
+          path: ${{ steps.build.outputs.archive_directory }}
