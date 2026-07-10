@@ -9,11 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [win64] # This project will only export using the export presets `win32` and `win64`
+        platform: [win64]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           lfs: true
+
       - name: Build
         id: build
         uses: manleydev/build-godot-action@v1.4.1
@@ -21,8 +22,9 @@ jobs:
           name: example
           preset: ${{ matrix.platform }}
           debugMode: "true"
+
       - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: Client - ${{ matrix.platform }}
           path: ${{ github.workspace }}/${{ steps.build.outputs.build }}
