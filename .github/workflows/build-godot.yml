@@ -1,0 +1,104 @@
+name: Build Godot
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/godot-version.txt'
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  GODOT_VERSION: "4.6.3-stable"
+  GODOT_REPO: "https://github.com/godotengine/godot.git"
+  SCONS_FLAGS: >-
+    platform=windows
+    arch=x86_64
+    disable_3d=yes
+    module_webrtc_enabled=no
+    module_webxr_enabled=no
+    module_mono_enabled=no
+    module_navigation_enabled=no
+    module_multiplayer_enabled=no
+    module_physics_3d_enabled=no
+    module_gridmap_enabled=no
+    module_csg_enabled=no
+    module_skeleton_3d_enabled=no
+
+jobs:
+  build-godot:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # ── Python / SCons ────────────────────────────────────────────────────────
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SCons
+        run: pip install scons
+
+      # ── Godot Source ──────────────────────────────────────────────────────────
+
+      - name: Cache Godot Source
+        id: cache-godot-source
+        uses: actions/cache@v4
+        with:
+          path: ./godot-source
+          key: godot-source-${{ env.GODOT_VERSION }}
+
+      - name: Checkout Godot Source
+        if: steps.cache-godot-source.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.GODOT_VERSION }} ${{ env.GODOT_REPO }} ./godot-source
+
+      # ── Build Godot Editor ────────────────────────────────────────────────────
+
+      - name: Cache Godot Editor
+        id: cache-godot-editor
+        uses: actions/cache@v4
+        with:
+          path: ./godot-source/bin/godot.windows.editor.x86_64.exe
+          key: godot-editor-${{ env.GODOT_VERSION }}-${{ hashFiles('godot-source/**/*.cpp', 'godot-source/**/*.h') }}
+
+      - name: Build Godot Editor
+        if: steps.cache-godot-editor.outputs.cache-hit != 'true'
+        working-directory: ./godot-source
+        run: scons target=editor ${{ env.SCONS_FLAGS }}
+
+      # ── Build Export Template ─────────────────────────────────────────────────
+
+      - name: Cache Godot Export Template
+        id: cache-godot-template
+        uses: actions/cache@v4
+        with:
+          path: ./godot-source/bin/godot.windows.template_debug.x86_64.exe
+          key: godot-template-${{ env.GODOT_VERSION }}-${{ hashFiles('godot-source/**/*.cpp', 'godot-source/**/*.h') }}
+
+      - name: Build Godot Export Template
+        if: steps.cache-godot-template.outputs.cache-hit != 'true'
+        working-directory: ./godot-source
+        run: scons target=template_debug ${{ env.SCONS_FLAGS }}
+
+      # ── Upload Artifacts ──────────────────────────────────────────────────────
+
+      - name: Upload Godot Editor Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-editor-${{ env.GODOT_VERSION }}
+          path: ./godot-source/bin/godot.windows.editor.x86_64.exe
+          retention-days: 90
+
+      - name: Upload Godot Template Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-template-${{ env.GODOT_VERSION }}
+          path: ./godot-source/bin/godot.windows.template_debug.x86_64.exe
+          retention-days: 90

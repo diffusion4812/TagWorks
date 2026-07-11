@@ -1,0 +1,127 @@
+name: Build Project
+
+on:
+  push: {}
+  pull_request: {}
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  GODOT_VERSION: "4.6.3-stable"
+
+jobs:
+  build-project:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # ── Download Godot Editor ─────────────────────────────────────────────────
+
+      - name: Download Godot Editor Artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: build-godot.yml
+          name: godot-editor-${{ env.GODOT_VERSION }}
+          path: ./godot/
+          workflow_conclusion: success
+          branch: main
+          if_no_artifact_found: fail
+
+      # ── Download Export Template ──────────────────────────────────────────────
+
+      - name: Download Godot Template Artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: build-godot.yml
+          name: godot-template-${{ env.GODOT_VERSION }}
+          path: ./godot-template/
+          workflow_conclusion: success
+          branch: main
+          if_no_artifact_found: fail
+
+      - name: Install Export Template
+        run: |
+          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          New-Item -ItemType Directory -Force -Path $templateDir
+          Copy-Item `
+            "./godot-template/godot.windows.template_debug.x86_64.exe" `
+            "$templateDir/windows_debug_x86_64.exe"
+
+      # ── Download GDExtension ──────────────────────────────────────────────────
+
+      - name: Download GDExtension Artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: build-extension.yml
+          name: godot-opcua-extension
+          path: ./bin/
+          workflow_conclusion: success
+          branch: main
+          if_no_artifact_found: fail
+
+      # ── Diagnose Environment ──────────────────────────────────────────────────
+
+      - name: Diagnose Environment
+        run: |
+          Write-Host "=== Godot Binary ==="
+          Get-ChildItem ./godot/
+
+          Write-Host "=== Export Templates ==="
+          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          if (Test-Path $templateDir) {
+            Get-ChildItem $templateDir
+          } else {
+            Write-Host "ERROR: Template directory missing!"
+          }
+
+          Write-Host "=== GDExtension Files ==="
+          Get-ChildItem -Recurse ${{ github.workspace }}/bin/
+
+          Write-Host "=== export_presets.cfg ==="
+          Get-Content ${{ github.workspace }}/export_presets.cfg
+
+          Write-Host "=== godot_opcua.gdextension ==="
+          Get-Content ${{ github.workspace }}/bin/godot_opcua.gdextension
+
+      # ── Export Project ────────────────────────────────────────────────────────
+
+      - name: Export Project
+        run: |
+          New-Item -ItemType Directory -Force -Path ${{ github.workspace }}/build
+          $env:GODOT_DEBUG_GDEXTENSION = "1"
+          ./godot/godot.windows.editor.x86_64.exe `
+            --headless `
+            --verbose `
+            --debug-stringnames `
+            --path ${{ github.workspace }} `
+            --export-debug "win64" `
+            ${{ github.workspace }}/build/tagview.exe 2>&1 | Tee-Object -FilePath "${{ github.workspace }}/godot_log.txt"
+
+      - name: Upload Godot Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Godot Export Log
+          path: ${{ github.workspace }}/godot_log.txt
+
+      # ── Compress & Upload ─────────────────────────────────────────────────────
+
+      - name: Install UPX
+        run: choco install upx -y
+
+      - name: Compress Executable
+        run: upx --best --lzma ${{ github.workspace }}/build/tagview.exe
+
+      - name: List Build Directory
+        run: Get-ChildItem -Recurse ${{ github.workspace }}/build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Client - win64
+          path: ${{ github.workspace }}/build/

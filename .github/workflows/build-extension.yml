@@ -1,0 +1,61 @@
+name: Build GDExtension
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'SConstruct'
+      - 'godot-cpp/**'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build-extension:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+
+      # ── Python / SCons ────────────────────────────────────────────────────────
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SCons
+        run: pip install scons
+
+      # ── Build GDExtension ─────────────────────────────────────────────────────
+
+      - name: Cache GDExtension Build
+        uses: actions/cache@v4
+        with:
+          path: |
+            .sconsign.dblite
+            bin/
+          key: gdextension-${{ runner.os }}-${{ hashFiles('src/**/*.cpp', 'src/**/*.h') }}
+          restore-keys: |
+            gdextension-${{ runner.os }}-
+
+      - name: Build GDExtension
+        run: |
+          scons `
+            platform=windows `
+            target=template_debug `
+            arch=x86_64
+
+      # ── Upload Artifact ───────────────────────────────────────────────────────
+
+      - name: Upload GDExtension Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-opcua-extension
+          path: bin/
+          retention-days: 90
