@@ -1,8 +1,12 @@
 name: Build Project
 
 on:
-  push: {}
-  pull_request: {}
+  workflow_run:
+    workflows:
+      - "Build Godot"
+      - "Build GDExtension"
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -15,6 +19,10 @@ env:
 jobs:
   build-project:
     runs-on: windows-latest
+    # Only run if both upstream workflows succeeded
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,23 +33,21 @@ jobs:
       - name: Download Godot Editor Artifact
         uses: dawidd6/action-download-artifact@v7
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: build-godot.yml
           name: godot-editor-${{ env.GODOT_VERSION }}
           path: ./godot/
-          workflow_conclusion: success
-          branch: main
           if_no_artifact_found: fail
 
       # ── Download Export Template ──────────────────────────────────────────────
 
       - name: Download Godot Template Artifact
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v7
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: build-godot.yml
           name: godot-template-${{ env.GODOT_VERSION }}
           path: ./godot-template/
-          workflow_conclusion: success
-          branch: main
           if_no_artifact_found: fail
 
       - name: Install Export Template
@@ -55,13 +61,12 @@ jobs:
       # ── Download GDExtension ──────────────────────────────────────────────────
 
       - name: Download GDExtension Artifact
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v7
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: build-extension.yml
           name: godot-opcua-extension
           path: ./bin/
-          workflow_conclusion: success
-          branch: main
           if_no_artifact_found: fail
 
       # ── Diagnose Environment ──────────────────────────────────────────────────
