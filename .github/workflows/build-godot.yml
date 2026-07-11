@@ -13,13 +13,12 @@ permissions:
 env:
   GODOT_VERSION: "4.6.3-stable"
   GODOT_REPO: "https://github.com/godotengine/godot.git"
-  SCONS_FLAGS: >-
+  SCONS_FLAGS_COMMON: >-
     platform=windows
     arch=x86_64
     d3d12=no
     vulkan=no
     opengl3=yes
-    disable_3d=yes
     use_lto=yes
     production=yes
     module_webrtc_enabled=no
@@ -31,6 +30,8 @@ env:
     module_gridmap_enabled=no
     module_csg_enabled=no
     module_skeleton_3d_enabled=no
+  SCONS_FLAGS_TEMPLATE: >-
+    disable_3d=yes
 
 jobs:
   build-godot:
@@ -76,7 +77,7 @@ jobs:
       - name: Build Godot Editor
         if: steps.cache-godot-editor.outputs.cache-hit != 'true'
         working-directory: ./godot-source
-        run: scons target=editor -j4 ${{ env.SCONS_FLAGS }}
+        run: scons target=editor -j4 ${{ env.SCONS_FLAGS_COMMON }}
 
       # ── Build Export Template ─────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ jobs:
       - name: Build Godot Export Template
         if: steps.cache-godot-template.outputs.cache-hit != 'true'
         working-directory: ./godot-source
-        run: scons target=template_debug -j4 ${{ env.SCONS_FLAGS }}
+        run: scons target=template_debug -j4 ${{ env.SCONS_FLAGS_COMMON }} ${{ env.SCONS_FLAGS_TEMPLATE }}
 
       # ── Verify Build Output ───────────────────────────────────────────────────
 
