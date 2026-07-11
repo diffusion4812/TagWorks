@@ -23,7 +23,7 @@ jobs:
       # ── Download Godot Editor ─────────────────────────────────────────────────
 
       - name: Download Godot Editor Artifact
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v7
         with:
           workflow: build-godot.yml
           name: godot-editor-${{ env.GODOT_VERSION }}
