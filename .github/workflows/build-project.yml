@@ -120,7 +120,17 @@ jobs:
         run: choco install upx -y
 
       - name: Compress Executable
-        run: upx --best --lzma ${{ github.workspace }}/build/tagview.exe
+        run: |
+          # 1. Compress the raw engine template binary runner
+          upx --best --lzma ${{ github.workspace }}/build/tagview.exe
+          
+          # 2. Append the loose game pack onto the compressed binary manually
+          cmd.exe /c "copy /b ${{ github.workspace }}\build\tagview.exe + ${{ github.workspace }}\build\tagview.pck ${{ github.workspace }}\build\tagview_merged.exe"
+          
+          # 3. Clean up the loose assets and swap the merged file back to the original name
+          Remove-Item ${{ github.workspace }}/build/tagview.pck
+          Remove-Item ${{ github.workspace }}/build/tagview.exe
+          Move-Item -Path ${{ github.workspace }}/build/tagview_merged.exe -Destination ${{ github.workspace }}/build/tagview.exe
 
       - name: List Build Directory
         run: Get-ChildItem -Recurse ${{ github.workspace }}/build
