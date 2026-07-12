@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  GODOT_VERSION: "4.6.3-stable"
+  GODOT_VERSION: "4.7-stable"
   GODOT_REPO: "https://github.com/godotengine/godot.git"
   SCONS_FLAGS_COMMON: >-
     platform=windows
