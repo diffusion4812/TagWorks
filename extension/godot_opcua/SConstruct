@@ -1,0 +1,157 @@
+#!/usr/bin/env python
+# =============================================================================
+# SConstruct  (v4 — updated for extension/godot_opcua/ project structure)
+#
+# Directory structure:
+#   tag-view/
+#   ├── extension/
+#   │   ├── godot-cpp/          ← godot-cpp submodule
+#   │   └── godot_opcua/        ← this file lives here
+#   │       ├── SConstruct
+#   │       ├── open62541.c
+#   │       ├── open62541.h
+#   │       ├── opcua_node_id.cpp
+#   │       ├── godot_opcua.cpp
+#   │       └── register_types.cpp
+#   └── project/
+#       └── bin/                ← compiled .dll output
+#
+# Usage:
+#   scons                                         # Windows x86_64 debug
+#   scons target=template_release                 # Windows release
+#   scons platform=windows target=template_debug  # Windows debug (explicit)
+#   scons platform=android arch=arm64 target=template_debug android_api_level=21
+# =============================================================================
+
+import os
+import sys
+
+# ── Resolve paths relative to this SConstruct ─────────────────────────────────
+script_dir   = Dir(".").abspath                        # extension/godot_opcua/
+ext_dir      = os.path.dirname(script_dir)             # extension/
+repo_root    = os.path.dirname(ext_dir)                # tag-view/
+godot_cpp    = os.path.join(ext_dir, "godot-cpp")      # extension/godot-cpp/
+project_bin  = os.path.join(repo_root, "project", "bin")  # project/bin/
+
+if not os.path.isfile(os.path.join(godot_cpp, "SConstruct")):
+    print("\nERROR: godot-cpp submodule not found at: {}\n"
+          "       Run:  git submodule update --init --recursive\n".format(godot_cpp))
+    Exit(1)
+
+# ── Additional variables ──────────────────────────────────────────────────────
+opts = Variables([], ARGUMENTS)
+opts.Add("android_api_level", "Minimum Android API level", "21")
+opts.Add(PathVariable(
+    "android_ndk_root",
+    "Android NDK root (falls back to $ANDROID_NDK_ROOT)",
+    os.environ.get("ANDROID_NDK_ROOT", ""),
+    PathVariable.PathAccept))
+
+env = SConscript(os.path.join(godot_cpp, "SConstruct"))
+opts.Update(env)
+Help(opts.GenerateHelpText(env))
+
+# ── Android NDK toolchain ─────────────────────────────────────────────────────
+if env["platform"] == "android":
+    ndk_root    = env.get("android_ndk_root", "").strip()
+    api_level   = env.get("android_api_level", "21")
+    target_arch = env.get("arch", "arm64")
+
+    if not ndk_root:
+        ndk_root = os.environ.get("ANDROID_NDK_ROOT", "")
+    if not ndk_root or not os.path.isdir(ndk_root):
+        print("\nERROR: Android NDK not found. Set ANDROID_NDK_ROOT or pass "
+              "android_ndk_root=...\n")
+        Exit(1)
+
+    host_tag = {
+        "linux":  "linux-x86_64",
+        "darwin": "darwin-x86_64",
+    }.get(sys.platform.split("-")[0], "windows-x86_64")
+
+    toolchain_bin = os.path.join(
+        ndk_root, "toolchains", "llvm", "prebuilt", host_tag, "bin")
+
+    arch_triple = {
+        "arm64":  "aarch64-linux-android",
+        "arm32":  "armv7a-linux-androideabi",
+        "x86_64": "x86_64-linux-android",
+        "x86_32": "i686-linux-android",
+    }.get(target_arch)
+
+    if arch_triple is None:
+        print("ERROR: Unsupported android arch '{}'.".format(target_arch))
+        Exit(1)
+
+    cc  = os.path.join(toolchain_bin, "{}{}-clang".format(arch_triple, api_level))
+    cxx = os.path.join(toolchain_bin, "{}{}-clang++".format(arch_triple, api_level))
+
+    if not os.path.isfile(cc) and not os.path.isfile(cc + ".cmd"):
+        cc  = os.path.join(toolchain_bin, "{}-clang".format(arch_triple))
+        cxx = os.path.join(toolchain_bin, "{}-clang++".format(arch_triple))
+
+    env["CC"]     = cc
+    env["CXX"]    = cxx
+    env["LINK"]   = cxx
+    env["AR"]     = os.path.join(toolchain_bin, "llvm-ar")
+    env["RANLIB"] = os.path.join(toolchain_bin, "llvm-ranlib")
+    env["STRIP"]  = os.path.join(toolchain_bin, "llvm-strip")
+    env.Append(CCFLAGS=["-fPIC"])
+    env.Append(LINKFLAGS=["-Wl,--no-undefined"])
+
+# ── Windows: disable pthreads + link WinSock ─────────────────────────────────
+if env["platform"] == "windows":
+    env.Append(CPPDEFINES=[("UA_MULTITHREADING", "0")])
+    env.Append(LIBS=["ws2_32", "iphlpapi"])
+
+# ── Android: no pthreads needed either ───────────────────────────────────────
+if env["platform"] == "android":
+    env.Append(CPPDEFINES=[("UA_MULTITHREADING", "0")])
+
+# ── open62541 amalgamation ────────────────────────────────────────────────────
+env.Append(CPPPATH=[script_dir])
+
+ua_env = env.Clone()
+ua_env.Append(CPPDEFINES=[("UA_MULTITHREADING", "0")])
+
+if env["platform"] == "windows":
+    ua_env.Append(CCFLAGS=["/w"])
+else:
+    ua_env.Append(CCFLAGS=[
+        "-Wno-unused-parameter", "-Wno-unused-variable",
+        "-Wno-unused-function",  "-Wno-missing-field-initializers",
+        "-Wno-implicit-fallthrough", "-Wno-type-limits", "-Wno-pedantic",
+    ])
+
+open62541_obj = ua_env.SharedObject(
+    os.path.join(script_dir, "open62541.c"))
+
+# ── Extension sources ─────────────────────────────────────────────────────────
+sources = [
+    open62541_obj,
+    os.path.join(script_dir, "opcua_node_id.cpp"),
+    os.path.join(script_dir, "godot_opcua.cpp"),
+    os.path.join(script_dir, "register_types.cpp"),
+]
+
+# ── Output to project/bin/ ────────────────────────────────────────────────────
+os.makedirs(project_bin, exist_ok=True)
+
+lib_name = "libgodot_opcua{}{}".format(env["suffix"], env["SHLIBSUFFIX"])
+lib_path = os.path.join(project_bin, lib_name)
+library  = env.SharedLibrary(lib_path, source=sources)
+Default(library)
+
+print("")
+print("┌─ GodotOpcUa v4 build ─────────────────────────────────────────────")
+print("│  platform  : {}".format(env["platform"]))
+print("│  target    : {}".format(env["target"]))
+print("│  arch      : {}".format(env.get("arch", "?")))
+print("│  source    : {}".format(script_dir))
+print("│  godot-cpp : {}".format(godot_cpp))
+print("│  output    : {}".format(lib_path))
+if env["platform"] == "android":
+    print("│  NDK       : {}".format(env.get("android_ndk_root", os.environ.get("ANDROID_NDK_ROOT", "?"))))
+    print("│  API lvl   : {}".format(env.get("android_api_level", "21")))
+print("└───────────────────────────────────────────────────────────────────")
+print("")

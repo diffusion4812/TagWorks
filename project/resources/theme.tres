@@ -1,0 +1,5 @@
+[gd_resource type="Theme" format=3 uid="uid://2pnop8nm7lxm"]
+
+[resource]
+TabContainer/constants/side_margin = 0
+Tree/constants/v_separation = 0

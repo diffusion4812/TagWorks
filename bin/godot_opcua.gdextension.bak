@@ -1,9 +1,0 @@
-[configuration]
-entry_symbol          = "opcua_library_init"
-compatibility_minimum = "4.1"
-reloadable            = false
-
-[libraries]
-
-; ── Windows ───────────────────────────────────────────────────────────────────
-windows.debug.x86_64   = "res://bin/libgodot_opcua.windows.template_debug.x86_64.dll"

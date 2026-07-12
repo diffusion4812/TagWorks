@@ -1,7 +1,0 @@
-[gd_scene format=3 uid="uid://vrgs878xuvko"]
-
-[ext_resource type="PackedScene" uid="uid://ctuakifyo3wa3" path="res://scenes/dialogs/base_dialog.tscn" id="1_185re"]
-[ext_resource type="Script" uid="uid://ct2cjsk8363mm" path="res://scenes/dialogs/file_dialog/file_dialog.gd" id="2_pqout"]
-
-[node name="BaseDialog" unique_id=425608285 instance=ExtResource("1_185re")]
-script = ExtResource("2_pqout")

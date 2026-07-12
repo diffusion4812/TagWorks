@@ -1,0 +1,35 @@
+[gd_scene format=3 uid="uid://dboogkhxgmb3d"]
+
+[ext_resource type="Script" uid="uid://uyai1027sfbd" path="res://scenes/toolbar/toolbar.gd" id="1_vpmve"]
+
+[node name="Toolbar" type="HBoxContainer" unique_id=981355469]
+script = ExtResource("1_vpmve")
+
+[node name="ToggleModeButton" type="Button" parent="." unique_id=1576743616]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "✏️ Edit Mode"
+
+[node name="SaveButton" type="Button" parent="." unique_id=1947907784]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "💾 Save"
+
+[node name="LoadButton" type="Button" parent="." unique_id=1588888222]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "📂 Load"
+
+[node name="ConnectButton" type="Button" parent="." unique_id=590945614]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "🔌 Connect"
+
+[node name="Spacer" type="Control" parent="." unique_id=1711945259]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SettingsButton" type="Button" parent="." unique_id=1452075773]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+text = "⚙️"

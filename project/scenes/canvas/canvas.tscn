@@ -1,0 +1,46 @@
+[gd_scene format=3 uid="uid://bslxag80uy0pi"]
+
+[ext_resource type="Script" uid="uid://dhcttkq3x2jo6" path="res://scenes/canvas/canvas.gd" id="1_gasuo"]
+
+[node name="Canvas" type="Control" unique_id=543402477]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_gasuo")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1121104254]
+visible = false
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -40.0
+offset_top = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="HBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=2100758096]
+layout_mode = 2
+
+[node name="AddWidgetButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=1974907041]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "➕"
+
+[node name="EditWidgetButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=904329333]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+disabled = true
+text = "✏"

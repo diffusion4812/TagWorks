@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'src/**'
-      - 'include/**'
-      - 'SConstruct'
-      - 'godot-cpp/**'
+      - 'extension/godot_opcua/**.cpp'
+      - 'extension/godot_opcua/**.h'
+      - 'extension/godot_opcua/**.c'
+      - 'extension/godot_opcua/SConstruct'
+      - 'extension/godot-cpp/**'
 
 permissions:
   actions: read
@@ -22,8 +23,6 @@ jobs:
           lfs: true
           submodules: recursive
 
-      # ── Python / SCons ────────────────────────────────────────────────────────
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -32,30 +31,27 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
-      # ── Build GDExtension ─────────────────────────────────────────────────────
-
       - name: Cache GDExtension Build
         uses: actions/cache@v4
         with:
           path: |
-            .sconsign.dblite
-            bin/
-          key: gdextension-${{ runner.os }}-${{ hashFiles('src/**/*.cpp', 'src/**/*.h') }}
+            extension/godot_opcua/.sconsign.dblite
+            project/bin/
+          key: gdextension-${{ runner.os }}-${{ hashFiles('extension/godot_opcua/**/*.cpp', 'extension/godot_opcua/**/*.h') }}
           restore-keys: |
             gdextension-${{ runner.os }}-
 
       - name: Build GDExtension
+        working-directory: ./extension/godot_opcua
         run: |
           scons `
             platform=windows `
             target=template_debug `
             arch=x86_64
 
-      # ── Upload Artifact ───────────────────────────────────────────────────────
-
       - name: Upload GDExtension Artifact
         uses: actions/upload-artifact@v4
         with:
           name: godot-opcua-extension
-          path: bin/
+          path: project/bin/
           retention-days: 90

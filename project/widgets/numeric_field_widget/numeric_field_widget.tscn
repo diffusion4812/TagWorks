@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://bdhnj63tjvijj"]
+
+[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/base_widget.tscn" id="1_nfivn"]
+[ext_resource type="Script" uid="uid://bidie4ym1srt8" path="res://widgets/numeric_field_widget/numeric_field_widget.gd" id="2_5cq1f"]
+
+[node name="BaseWidget" unique_id=954027860 instance=ExtResource("1_nfivn")]
+script = ExtResource("2_5cq1f")
+decimal_places = null
+unit = null
+widget_label = null
+
+[node name="LineEdit" type="LineEdit" parent="MarginContainer/ContentSlot" parent_id_path=PackedInt32Array(227595631) index="0" unique_id=941607770]
+layout_mode = 2

@@ -1,0 +1,33 @@
+; =============================================================================
+; godot_opcua.gdextension  (v3 — unchanged library names; new class OpcUaNodeId
+; is registered from the same shared library)
+; =============================================================================
+
+[configuration]
+entry_symbol         = "opcua_library_init"
+compatibility_minimum = "4.1"
+reloadable           = false
+
+[libraries]
+
+; ── Linux ─────────────────────────────────────────────────────────────────────
+linux.debug.x86_64          = "res://bin/libgodot_opcua.linux.template_debug.x86_64.so"
+linux.release.x86_64        = "res://bin/libgodot_opcua.linux.template_release.x86_64.so"
+linux.debug.arm64           = "res://bin/libgodot_opcua.linux.template_debug.arm64.so"
+linux.release.arm64         = "res://bin/libgodot_opcua.linux.template_release.arm64.so"
+
+; ── Windows ───────────────────────────────────────────────────────────────────
+windows.debug.x86_64        = "res://bin/libgodot_opcua.windows.template_debug.x86_64.dll"
+windows.release.x86_64      = "res://bin/libgodot_opcua.windows.template_release.x86_64.dll"
+windows.debug.x86_32        = "res://bin/libgodot_opcua.windows.template_debug.x86_32.dll"
+windows.release.x86_32      = "res://bin/libgodot_opcua.windows.template_release.x86_32.dll"
+
+; ── Android ───────────────────────────────────────────────────────────────────
+android.debug.arm64-v8a     = "res://bin/libgodot_opcua.android.template_debug.arm64.so"
+android.release.arm64-v8a   = "res://bin/libgodot_opcua.android.template_release.arm64.so"
+android.debug.x86_64        = "res://bin/libgodot_opcua.android.template_debug.x86_64.so"
+android.release.x86_64      = "res://bin/libgodot_opcua.android.template_release.x86_64.so"
+
+; ── macOS (uncomment and build with platform=macos when needed) ───────────────
+;macos.debug                 = "res://bin/libgodot_opcua.macos.template_debug.universal.framework"
+;macos.release               = "res://bin/libgodot_opcua.macos.template_release.universal.framework"
