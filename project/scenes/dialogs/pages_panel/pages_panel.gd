@@ -1,4 +1,3 @@
-# scenes/page_manager/page_data_handler.gd
 class_name PageDataHandler
 extends Node
 
@@ -28,11 +27,10 @@ enum MenuAction {
 # State
 # ─────────────────────────────────────────────
 
-## The visible root tree item — represents the project itself.
-var _tree_root  : TreeItem  = null
-var _page_icon  : Texture2D = null
-var _item_map   : Dictionary = {}
-var _is_syncing_selection: bool = false
+var _tree_root             : TreeItem  = null
+var _page_icon             : Texture2D = null
+var _item_map              : Dictionary = {}
+var _is_syncing_selection  : bool = false
 var _last_confirmed_page_id: String = ""
 
 # ─────────────────────────────────────────────
@@ -67,29 +65,20 @@ func _setup_tree() -> void:
 
 
 func _connect_signals() -> void:
-    # ── Buttons ───────────────────────────────────────────────────────────────
     btn_add_page.pressed.connect(_on_add_page_pressed)
     btn_delete.pressed.connect(_on_delete_pressed)
 
-    # ── Context menu ──────────────────────────────────────────────────────────
     context_menu.id_pressed.connect(_on_context_menu_id_pressed)
 
-    # ── Tree ──────────────────────────────────────────────────────────────────
-    # item_selected is intentionally not connected — programmatic selection
-    # via _item_map must not trigger a page change request.
-    # Page changes are driven exclusively by mouse clicks via item_mouse_selected.
     page_tree.item_mouse_selected.connect(_on_item_mouse_selected)
     page_tree.item_edited.connect(_on_item_edited)
 
-    # ── EventBus ──────────────────────────────────────────────────────────────
     EventBus.project_opened.connect(_on_project_opened)
     EventBus.project_closed.connect(_on_project_closed)
     EventBus.page_created.connect(_on_page_created)
     EventBus.page_deleted.connect(_on_page_deleted)
     EventBus.page_renamed.connect(_on_page_renamed)
     EventBus.page_hierarchy_changed.connect(_on_page_hierarchy_changed)
-
-    # Consumed to confirm and sync tree selection after canvas approves the change.
     EventBus.page_changed.connect(_on_page_changed)
 
 # ─────────────────────────────────────────────
@@ -104,62 +93,62 @@ func _rebuild_tree() -> void:
     _tree_root.set_text(0, _get_project_name())
     _tree_root.set_selectable(0, true)
 
-    if AppState.current_project == null:
+    if not AppState.has_active_project():
         return
 
-    for page: PageData in AppState.current_project.pages:
-        _build_item(_tree_root, page)
+    for item: Variant in AppState.current_project.pages.values():
+        var page := item as ReactivePage
+        if page != null:
+            _build_item(_tree_root, page)
 
     _tree_root.set_collapsed(false)
 
 
-func _build_item(parent: TreeItem, page: PageData) -> TreeItem:
+func _build_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
     var item := _create_item(parent, page)
-    for child: PageData in page.children:
-        _build_item(item, child)
+    for child_item: Variant in page.children.values():
+        var child := child_item as ReactivePage
+        if child != null:
+            _build_item(item, child)
     return item
 
 
-func _create_item(parent: TreeItem, page: PageData) -> TreeItem:
+func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
     var item := page_tree.create_item(parent)
-    item.set_text(0, page.page_name)
+    item.set_text(0, page.page_name.value)
     item.set_metadata(0, page)
     item.set_editable(0, false)
 
     if _page_icon != null:
         item.set_icon(0, _page_icon)
 
-    _item_map[page.page_id] = item
+    _item_map[page.page_id.value] = item
     return item
 
 
 func _get_project_name() -> String:
-    if AppState.current_project == null:
+    if not AppState.has_active_project():
         return DEFAULT_ROOT_NAME
-    return AppState.current_project.project_name \
-           if not AppState.current_project.project_name.is_empty() \
-           else DEFAULT_ROOT_NAME
+    var name := AppState.current_project.project_name.value
+    return name if not name.is_empty() else DEFAULT_ROOT_NAME
 
 # ─────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────
 
-## Adds a new page as a child of the currently selected item.
-## Falls back to the project root if nothing is selected.
 func add_page(page_name: String = DEFAULT_PAGE_NAME) -> void:
     if not _assert_active_project():
         return
 
-    var new_page  := PageData.create(page_name)
-    var selected  := page_tree.get_selected()
+    var new_page     := ReactivePage.new(PageData.create(page_name))
+    var selected     := page_tree.get_selected()
 
     if selected == null or selected == _tree_root:
-        # Add as top-level page
         AppState.current_project.add_page(new_page)
     else:
-        # Add as child of selected page
-        var parent_data: PageData = selected.get_metadata(0)
-        parent_data.add_child_page(new_page)
+        var parent_page := selected.get_metadata(0) as ReactivePage
+        if parent_page != null:
+            parent_page.add_child_page(new_page)
 
 
 func delete_selected_page() -> void:
@@ -170,18 +159,20 @@ func delete_selected_page() -> void:
     if selected == null or selected == _tree_root:
         return
 
-    var page_data: PageData = selected.get_metadata(0)
+    var page := selected.get_metadata(0) as ReactivePage
+    if page == null:
+        return
 
-    if AppState.current_project.pages.size() == 1 \
+    if AppState.current_project.pages.values().size() == 1 \
             and selected.get_parent() == _tree_root:
         push_warning("PageDataHandler: Cannot delete the last remaining page.")
         return
 
-    if AppState.current_page != null \
-            and AppState.current_page.page_id == page_data.page_id:
-        AppState.current_page = null
+    if AppState.has_active_page() \
+            and AppState.current_page.page_id.value == page.page_id.value:
+        AppState.current_page = ReactivePage.new()
 
-    AppState.current_project.remove_page(page_data.page_id)
+    AppState.current_project.remove_page(page.page_id.value)
 
 
 func rename_selected_page() -> void:
@@ -212,13 +203,13 @@ func _on_delete_pressed() -> void:
 # ─────────────────────────────────────────────
 
 func _show_context_menu() -> void:
-    var selected  := page_tree.get_selected()
-    var has_page  := selected != null and selected != _tree_root
+    var selected := page_tree.get_selected()
+    var has_page := selected != null and selected != _tree_root
 
     context_menu.clear()
-    context_menu.add_item("Add Page", MenuAction.ADD_PAGE)
+    context_menu.add_item("Add Page",  MenuAction.ADD_PAGE)
     context_menu.add_separator()
-    context_menu.add_item("Delete",   MenuAction.DELETE_PAGE)
+    context_menu.add_item("Delete",    MenuAction.DELETE_PAGE)
     context_menu.set_item_disabled(
         context_menu.get_item_index(MenuAction.DELETE_PAGE),
         not has_page
@@ -247,30 +238,31 @@ func _on_item_mouse_selected(position: Vector2, mouse_button_index: int) -> void
             if item == null or item == _tree_root:
                 return
 
-            var page_data: PageData = item.get_metadata(0)
-            if AppState.current_page != null \
-                    and AppState.current_page.page_id == page_data.page_id:
+            var page := item.get_metadata(0) as ReactivePage
+            if page == null:
                 return
 
-            # Immediately restore visual selection to current confirmed page
-            # The tree will only move if the canvas confirms the change
+            if AppState.has_active_page() \
+                    and AppState.current_page.page_id.value == page.page_id.value:
+                return
+
             _is_syncing_selection = true
             if _last_confirmed_page_id != "" \
                     and _item_map.has(_last_confirmed_page_id):
                 _item_map[_last_confirmed_page_id].select(0)
             _is_syncing_selection = false
 
-            IntentBus.page_change_requested.emit(page_data)
+            IntentBus.page_change_requested.emit(page.to_data())
 
         MOUSE_BUTTON_RIGHT:
             _show_context_menu()
 
-## Updates tree selection only after the canvas has confirmed the page change.
+
 func _on_page_changed(page: PageData) -> void:
     if page == null:
         return
     _last_confirmed_page_id = page.page_id
-    AppState.current_page   = page
+    AppState.current_page.from_data(page)
     _update_button_states()
 
     if not _item_map.has(page.page_id):
@@ -280,24 +272,28 @@ func _on_page_changed(page: PageData) -> void:
     _item_map[page.page_id].select(0)
     _is_syncing_selection = false
 
+
 func _on_item_edited() -> void:
     var item := page_tree.get_selected()
     if item == null or item == _tree_root:
         return
 
-    var page_data : PageData = item.get_metadata(0)
-    var new_name  : String   = item.get_text(0).strip_edges()
+    var page     := item.get_metadata(0) as ReactivePage
+    if page == null:
+        return
+
+    var new_name := item.get_text(0).strip_edges()
 
     if new_name.is_empty():
-        item.set_text(0, page_data.page_name)
+        item.set_text(0, page.page_name.value)
         return
 
-    if new_name == page_data.page_name:
+    if new_name == page.page_name.value:
         return
 
-    page_data.page_name = new_name
+    page.page_name.value = new_name
     item.set_editable(0, false)
-    EventBus.page_renamed.emit(page_data.page_id, new_name)
+    EventBus.page_renamed.emit(page.page_id.value, new_name)
 
 
 func _update_button_states() -> void:
@@ -314,65 +310,75 @@ func _get_drag_data(_position: Vector2) -> Variant:
     if selected == null or selected == _tree_root:
         return null
 
-    var page_data: PageData = selected.get_metadata(0)
+    var page := selected.get_metadata(0) as ReactivePage
+    if page == null:
+        return null
 
-    var preview      := Label.new()
-    preview.text      = page_data.page_name
+    var preview  := Label.new()
+    preview.text  = page.page_name.value
     page_tree.set_drag_preview(preview)
 
-    return { "page": page_data }
+    return { "page": page }
 
 
 func _can_drop_data(position: Vector2, data: Variant) -> bool:
     if not data is Dictionary or not data.has("page"):
         return false
 
-    var dragged : PageData = data["page"]
-    var target  := page_tree.get_item_at_position(position)
+    var dragged := data["page"] as ReactivePage
+    if dragged == null:
+        return false
 
+    var target := page_tree.get_item_at_position(position)
     if target == null:
         return false
 
-    # Allow drop onto root — becomes a top-level page
     if target == _tree_root:
         return true
 
-    var target_data: PageData = target.get_metadata(0)
-
-    if target_data.page_id == dragged.page_id:
+    var target_page := target.get_metadata(0) as ReactivePage
+    if target_page == null:
         return false
 
-    return not _is_descendant_of(target_data.page_id, dragged)
+    if target_page.page_id.value == dragged.page_id.value:
+        return false
+
+    return not _is_descendant_of(target_page.page_id.value, dragged)
 
 
 func _drop_data(position: Vector2, data: Variant) -> void:
-    var dragged     : PageData = data["page"]
-    var target_item := page_tree.get_item_at_position(position)
+    var dragged := data["page"] as ReactivePage
+    if dragged == null:
+        return
 
+    var target_item := page_tree.get_item_at_position(position)
     if target_item == null:
         return
 
     var drop_mode := page_tree.get_drop_section_at_position(position)
 
-    # Remove from current position before reinserting
-    AppState.current_project.remove_page(dragged.page_id)
+    AppState.current_project.remove_page(dragged.page_id.value)
 
     if target_item == _tree_root:
         AppState.current_project.add_page(dragged)
     else:
-        var target_data: PageData = target_item.get_metadata(0)
-        match drop_mode:
-            -1: _insert_relative(dragged, target_data, 0)
-            0:  target_data.children.insert(0, dragged)
-            1:  _insert_relative(dragged, target_data, 1)
+        var target_page := target_item.get_metadata(0) as ReactivePage
+        if target_page == null:
+            return
+        if drop_mode == -1:
+            _insert_relative(dragged, target_page, 0)
+        elif drop_mode == 0:
+            target_page.children.insert(0, dragged)
+        elif drop_mode == 1:
+            _insert_relative(dragged, target_page, 1)
 
     EventBus.page_hierarchy_changed.emit()
 
 # ─────────────────────────────────────────────
-# Event Bus Handlers
+# EventBus Handlers
 # ─────────────────────────────────────────────
 
-func _on_project_opened(_project_data: ProjectData) -> void:
+func _on_project_opened(_project: ProjectData) -> void:
     _rebuild_tree()
     _select_first_page()
 
@@ -386,9 +392,12 @@ func _on_project_closed() -> void:
     _update_button_states()
 
 
-func _on_page_created(page_data: PageData) -> void:
-    var parent_item := _find_parent_item(page_data)
-    var item        := _create_item(parent_item, page_data)
+func _on_page_created(page: PageData) -> void:
+    var reactive_page := _find_reactive_page(page.page_id)
+    if reactive_page == null:
+        return
+    var parent_item := _find_parent_item(reactive_page)
+    var item        := _create_item(parent_item, reactive_page)
     item.select(0)
     _update_button_states()
 
@@ -416,74 +425,91 @@ func _on_page_hierarchy_changed() -> void:
 # Helpers
 # ─────────────────────────────────────────────
 
-func _insert_relative(page: PageData, target: PageData, offset: int) -> void:
-    var top_level : Array[PageData] = AppState.current_project.pages
-    var index     : int             = top_level.find(target)
+func _insert_relative(page: ReactivePage, target: ReactivePage, offset: int) -> void:
+    var top_level: Array = AppState.current_project.pages.values()
 
-    if index != -1:
-        top_level.insert(index + offset, page)
-        EventBus.page_created.emit(page)
-        return
-
-    for entry: PageData in _iter_all_pages(AppState.current_project.pages):
-        var child_index: int = entry.children.find(target)
-        if child_index != -1:
-            entry.children.insert(child_index + offset, page)
-            EventBus.page_created.emit(page)
+    for i: int in top_level.size():
+        var entry := top_level[i] as ReactivePage
+        if entry != null and entry.page_id.value == target.page_id.value:
+            AppState.current_project.pages.insert(i + offset, page)
+            EventBus.page_created.emit(page.to_data())
             return
+
+    for item: Variant in _iter_all_pages(AppState.current_project.pages):
+        var entry := item as ReactivePage
+        if entry == null:
+            continue
+        var children: Array = entry.children.values()
+        for i: int in children.size():
+            var child := children[i] as ReactivePage
+            if child != null and child.page_id.value == target.page_id.value:
+                entry.children.insert(i + offset, page)
+                EventBus.page_created.emit(page.to_data())
+                return
 
 
 func _remove_item_recursive(item: TreeItem) -> void:
     for child in item.get_children():
         _remove_item_recursive(child)
-    var page_data: PageData = item.get_metadata(0)
-    _item_map.erase(page_data.page_id)
+    var page := item.get_metadata(0) as ReactivePage
+    if page != null:
+        _item_map.erase(page.page_id.value)
     item.free()
 
 
-func _find_parent_item(page: PageData) -> TreeItem:
+func _find_parent_item(page: ReactivePage) -> TreeItem:
     for page_id: String in _item_map:
-        var candidate: PageData = _item_map[page_id].get_metadata(0)
-        if candidate.get_child_page(page.page_id) != null:
+        var candidate := _item_map[page_id].get_metadata(0) as ReactivePage
+        if candidate != null and candidate.get_child_page(page.page_id.value) != null:
             return _item_map[page_id]
     return _tree_root
 
 
-func _is_descendant_of(candidate_id: String, root: PageData) -> bool:
-    for child: PageData in root.children:
-        if child.page_id == candidate_id:
+func _find_reactive_page(page_id: String) -> ReactivePage:
+    return AppState.current_project.find_page(page_id)
+
+
+func _is_descendant_of(candidate_id: String, root: ReactivePage) -> bool:
+    for item: Variant in root.children.values():
+        var child := item as ReactivePage
+        if child == null:
+            continue
+        if child.page_id.value == candidate_id:
             return true
         if _is_descendant_of(candidate_id, child):
             return true
     return false
 
 
-func _iter_all_pages(pages: Array[PageData]) -> Array[PageData]:
-    var result : Array[PageData] = []
-    var queue  : Array[PageData] = pages.duplicate()
+func _iter_all_pages(pages: ReactiveArray) -> Array:
+    var result : Array = []
+    var queue  : Array = pages.values().duplicate()
     while not queue.is_empty():
-        var page: PageData = queue.pop_front()
+        var page := queue.pop_front() as ReactivePage
+        if page == null:
+            continue
         result.append(page)
-        queue.append_array(page.children)
+        queue.append_array(page.children.values())
     return result
 
 
 func _select_first_page() -> void:
-    if AppState.current_project == null:
+    if not AppState.has_active_project():
         return
-    if AppState.current_project.pages.is_empty():
+    var all := AppState.current_project.pages.values()
+    if all.is_empty():
         return
-    var first_page : PageData = AppState.current_project.pages[0]
-    var first_id   : String   = first_page.page_id
-    select_page(first_id)
+    var first := all[0] as ReactivePage
+    if first != null:
+        select_page(first.page_id.value)
 
 
 func _get_selected_page_id() -> String:
     var selected := page_tree.get_selected()
     if selected == null or selected == _tree_root:
         return ""
-    var page_data: PageData = selected.get_metadata(0)
-    return page_data.page_id
+    var page := selected.get_metadata(0) as ReactivePage
+    return page.page_id.value if page != null else ""
 
 
 func _assert_active_project() -> bool:
