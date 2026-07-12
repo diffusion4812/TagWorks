@@ -11,12 +11,9 @@ var _selected_target: Node = null
 var _context_target:  Node = null
 var _context_menu:    PopupMenu
 var is_edit_mode:     bool = false
-var _unsaved_dialog: ConfirmationDialog
-var _page_change_confirmed: bool = false
-var _page_change_done:      bool = false
 
 ## True when the canvas has unsaved changes since the last save or page load.
-var is_dirty: bool = false
+var is_dirty: ReactiveBool = ReactiveBool.new(false, null, "is_dirty")
 
 ## Minimum overlap area in pixels² required to trigger proximity reparenting.
 const REPARENT_OVERLAP_THRESHOLD := 400.0
@@ -35,13 +32,11 @@ func _ready() -> void:
     edit_widget_button.pressed.connect(_on_edit_widget_pressed)
     _set_toolbar_visible(is_edit_mode)
     _build_context_menu()
-    _build_unsaved_dialog()
 
     # ── IntentBus ─────────────────────────────────────────────────────────────
     IntentBus.add_widget_requested.connect(_on_add_widget_requested)
     IntentBus.deselect_widget_requested.connect(_on_deselect_widget_requested)
     IntentBus.delete_widget_requested.connect(_on_delete_widget_requested)
-    IntentBus.page_change_requested.connect(_on_page_change_requested)
 
     # ── EventBus ──────────────────────────────────────────────────────────────
     EventBus.edit_mode_changed.connect(_on_edit_mode_changed)
@@ -56,14 +51,6 @@ func _build_context_menu() -> void:
     _context_menu.name = "WidgetCanvasContextMenu"
     add_child(_context_menu)
     _context_menu.id_pressed.connect(_on_context_menu_id_pressed)
-
-func _build_unsaved_dialog() -> void:
-    _unsaved_dialog                    = ConfirmationDialog.new()
-    _unsaved_dialog.title              = "Unsaved Changes"
-    _unsaved_dialog.dialog_text        = "This page has unsaved changes that will be lost."
-    _unsaved_dialog.ok_button_text     = "Discard Changes"
-    _unsaved_dialog.cancel_button_text = "Go Back"
-    add_child(_unsaved_dialog)
 
 func _show_context_menu_for(target: Node) -> void:
     _context_menu.clear()
@@ -100,33 +87,6 @@ func _on_context_menu_id_pressed(id: int) -> void:
                 IntentBus.delete_widget_requested.emit(
                     (_context_target as BaseWidget).widget_id
                 )
-
-func _on_page_change_requested(page: PageData) -> void:
-    if is_dirty:
-        _page_change_confirmed = false
-        _page_change_done      = false
-
-        _unsaved_dialog.confirmed.connect(func() -> void:
-            _page_change_confirmed = true
-            _page_change_done      = true
-        , CONNECT_ONE_SHOT)
-
-        _unsaved_dialog.canceled.connect(func() -> void:
-            _page_change_done = true
-        , CONNECT_ONE_SHOT)
-
-        _unsaved_dialog.popup_centered()
-
-        while not _page_change_done:
-            await get_tree().process_frame
-
-        if not _page_change_confirmed:
-            return
-
-    clear_all_widgets()
-    _load_canvas_state(page.canvas)
-    _clear_dirty()
-    EventBus.page_changed.emit(page)
 
 func _delete_target(target: Node) -> void:
     if target == null:
@@ -379,13 +339,11 @@ func _on_edit_widget_pressed() -> void:
 
 func _mark_dirty() -> void:
     if not is_dirty:
-        is_dirty = true
-        EventBus.canvas_dirty_changed.emit(true)
+        is_dirty.value = true
 
 func _clear_dirty() -> void:
     if is_dirty:
-        is_dirty = false
-        EventBus.canvas_dirty_changed.emit(false)
+        is_dirty.value = false
 
 # ── Node Access ───────────────────────────────────────────────────────────────
 
@@ -410,7 +368,6 @@ func _collect_nodes_recursive(root: Control, result: Array[Node]) -> void:
 func clear_all_widgets() -> void:
     _selected_target = null
     _context_target  = null
-    IntentBus.deselect_widget_requested.emit()
     for child in get_children():
         if child is BaseWidget:
             child.queue_free()

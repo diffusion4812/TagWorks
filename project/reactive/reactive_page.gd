@@ -1,28 +1,31 @@
 # reactive/reactive_page.gd
 class_name ReactivePage
-extends ReactiveObject
+extends Reactive
 
 # ── Fields ────────────────────────────────────────────────────────────────────
 
 var page_id    : ReactiveString
 var page_name  : ReactiveString
 var is_default : ReactiveBool
-var canvas     : ReactiveDict
+var canvas     : ReactiveDictionary
 var children   : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
 func _init(data: PageData = null, initial_owner: Reactive = null, label: String = "ReactivePage") -> void:
-    super._init(null, initial_owner, label)
+    super._init(initial_owner, label)
 
     page_id    = ReactiveString.new("",    self, "page_id")
     page_name  = ReactiveString.new("",    self, "page_name")
     is_default = ReactiveBool.new(false,   self, "is_default")
-    canvas     = ReactiveDict.new({},      self, "canvas")
+    canvas     = ReactiveDictionary.new({},      self, "canvas")
     children   = ReactiveArray.new([],     self, "children")
 
     if data != null:
         from_data(data)
+
+func _describe_value() -> String:
+    return '"%s"' % page_name.value
 
 # ── Sync from PageData ────────────────────────────────────────────────────────
 
@@ -35,8 +38,6 @@ func from_data(data: PageData) -> void:
     children.clear()
     for child: PageData in data.children:
         children.append(ReactivePage.new(child, self))
-
-    value = data
 
 # ── Sync back to PageData ─────────────────────────────────────────────────────
 

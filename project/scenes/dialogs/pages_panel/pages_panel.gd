@@ -1,3 +1,4 @@
+# scenes/canvas/canvas.gd
 class_name PageDataHandler
 extends Node
 
@@ -27,11 +28,9 @@ enum MenuAction {
 # State
 # ─────────────────────────────────────────────
 
-var _tree_root             : TreeItem  = null
-var _page_icon             : Texture2D = null
-var _item_map              : Dictionary = {}
-var _is_syncing_selection  : bool = false
-var _last_confirmed_page_id: String = ""
+var _tree_root : TreeItem  = null
+var _page_icon : Texture2D = null
+var _item_map  : Dictionary = {}
 
 # ─────────────────────────────────────────────
 # Lifecycle
@@ -79,7 +78,8 @@ func _connect_signals() -> void:
     EventBus.page_deleted.connect(_on_page_deleted)
     EventBus.page_renamed.connect(_on_page_renamed)
     EventBus.page_hierarchy_changed.connect(_on_page_hierarchy_changed)
-    EventBus.page_changed.connect(_on_page_changed)
+
+    AppState.focused_page.changed.connect(_on_focus_changed)
 
 # ─────────────────────────────────────────────
 # Tree Building
@@ -140,8 +140,8 @@ func add_page(page_name: String = DEFAULT_PAGE_NAME) -> void:
     if not _assert_active_project():
         return
 
-    var new_page     := ReactivePage.new(PageData.create(page_name))
-    var selected     := page_tree.get_selected()
+    var new_page := ReactivePage.new(PageData.create(page_name))
+    var selected := page_tree.get_selected()
 
     if selected == null or selected == _tree_root:
         AppState.current_project.add_page(new_page)
@@ -184,8 +184,12 @@ func rename_selected_page() -> void:
 
 
 func select_page(page_id: String) -> void:
-    if _item_map.has(page_id):
-        _item_map[page_id].select(0)
+    if not _item_map.has(page_id):
+        return
+    _item_map[page_id].select(0)
+    var page := _item_map[page_id].get_metadata(0) as ReactivePage
+    if page != null:
+        AppState.focused_page.value = page
 
 # ─────────────────────────────────────────────
 # Button Handlers
@@ -207,9 +211,9 @@ func _show_context_menu() -> void:
     var has_page := selected != null and selected != _tree_root
 
     context_menu.clear()
-    context_menu.add_item("Add Page",  MenuAction.ADD_PAGE)
+    context_menu.add_item("Add Page", MenuAction.ADD_PAGE)
     context_menu.add_separator()
-    context_menu.add_item("Delete",    MenuAction.DELETE_PAGE)
+    context_menu.add_item("Delete",   MenuAction.DELETE_PAGE)
     context_menu.set_item_disabled(
         context_menu.get_item_index(MenuAction.DELETE_PAGE),
         not has_page
@@ -228,12 +232,9 @@ func _on_context_menu_id_pressed(id: int) -> void:
 # Tree Interaction
 # ─────────────────────────────────────────────
 
-func _on_item_mouse_selected(position: Vector2, mouse_button_index: int) -> void:
+func _on_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> void:
     match mouse_button_index:
         MOUSE_BUTTON_LEFT:
-            if _is_syncing_selection:
-                return
-
             var item := page_tree.get_selected()
             if item == null or item == _tree_root:
                 return
@@ -242,35 +243,28 @@ func _on_item_mouse_selected(position: Vector2, mouse_button_index: int) -> void
             if page == null:
                 return
 
-            if AppState.has_active_page() \
-                    and AppState.current_page.page_id.value == page.page_id.value:
+            if AppState.focused_page != null \
+                    and AppState.focused_page.value.page_id.value == page.page_id.value:
                 return
 
-            _is_syncing_selection = true
-            if _last_confirmed_page_id != "" \
-                    and _item_map.has(_last_confirmed_page_id):
-                _item_map[_last_confirmed_page_id].select(0)
-            _is_syncing_selection = false
-
-            IntentBus.page_change_requested.emit(page.to_data())
+            AppState.focused_page.value = page
 
         MOUSE_BUTTON_RIGHT:
             _show_context_menu()
 
 
-func _on_page_changed(page: PageData) -> void:
-    if page == null:
+## Called when selected_page.changed fires — meaning the selection was accepted.
+## Syncs the visual tree highlight to match the confirmed selection.
+func _on_focus_changed(page: ReactivePage) -> void:
+    if page == null or page.page_id.value.is_empty():
         return
-    _last_confirmed_page_id = page.page_id
-    AppState.current_page.from_data(page)
+
     _update_button_states()
 
-    if not _item_map.has(page.page_id):
+    if not _item_map.has(page.page_id.value):
         return
 
-    _is_syncing_selection = true
-    _item_map[page.page_id].select(0)
-    _is_syncing_selection = false
+    _item_map[page.page_id.value].select(0)
 
 
 func _on_item_edited() -> void:
@@ -278,7 +272,7 @@ func _on_item_edited() -> void:
     if item == null or item == _tree_root:
         return
 
-    var page     := item.get_metadata(0) as ReactivePage
+    var page := item.get_metadata(0) as ReactivePage
     if page == null:
         return
 
@@ -297,8 +291,8 @@ func _on_item_edited() -> void:
 
 
 func _update_button_states() -> void:
-    var selected := page_tree.get_selected()
-    var has_page := selected != null and selected != _tree_root
+    var selected    := page_tree.get_selected()
+    var has_page    := selected != null and selected != _tree_root
     btn_delete.disabled = not has_page
 
 # ─────────────────────────────────────────────
@@ -399,6 +393,7 @@ func _on_page_created(page: PageData) -> void:
     var parent_item := _find_parent_item(reactive_page)
     var item        := _create_item(parent_item, reactive_page)
     item.select(0)
+    AppState.focused_page.value = reactive_page
     _update_button_states()
 
 
@@ -501,7 +496,7 @@ func _select_first_page() -> void:
         return
     var first := all[0] as ReactivePage
     if first != null:
-        select_page(first.page_id.value)
+        AppState.focused_page.value = first
 
 
 func _get_selected_page_id() -> String:

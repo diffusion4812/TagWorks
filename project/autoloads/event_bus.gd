@@ -39,12 +39,6 @@ signal page_selected(page_data: PageData)
 ## such as after a drag-and-drop reorder.
 signal page_hierarchy_changed()
 
-# ── Canvas ────────────────────────────────────────────────────────────────────
-
-## Emitted when the canvas dirty state changes.
-## True indicates unsaved changes are present. False indicates a clean state.
-signal canvas_dirty_changed(dirty: bool)
-
 # ── Widgets ───────────────────────────────────────────────────────────────────
 
 ## Emitted when a new widget has been spawned onto the canvas.

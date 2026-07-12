@@ -6,8 +6,8 @@ extends ReactiveObject
 
 var project_name   : ReactiveString
 var file_path      : ReactiveString
-var opc_ua_servers : ReactiveDict
-var canvas         : ReactiveDict
+var opc_ua_servers : ReactiveDictionary
+var canvas         : ReactiveDictionary
 var pages          : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
@@ -17,8 +17,8 @@ func _init(data: ProjectData = null, initial_owner: Reactive = null) -> void:
 
     project_name   = ReactiveString.new("", self)
     file_path      = ReactiveString.new("", self)
-    opc_ua_servers = ReactiveDict.new({},   self)
-    canvas         = ReactiveDict.new({},   self)
+    opc_ua_servers = ReactiveDictionary.new({},   self)
+    canvas         = ReactiveDictionary.new({},   self)
     pages          = ReactiveArray.new([],  self)
 
     if data != null:
@@ -58,7 +58,6 @@ func to_data() -> ProjectData:
 func add_page(page: ReactivePage) -> void:
     page.owner = self
     pages.append(page)
-    EventBus.page_created.emit(page.to_data())
 
 
 func remove_page(target_id: String) -> bool:

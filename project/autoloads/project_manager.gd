@@ -42,14 +42,14 @@ func get_current_project_path() -> String:
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_new_project_requested() -> void:
-    var data             := ProjectData.new()
-    data.project_name    =  "New Project"
+    var data          := ProjectData.new()
+    data.project_name =  "New Project"
 
     var default_page := PageData.create("Page 1")
     data.add_page(default_page)
 
+    # Hydrate project first — this emits project_opened
     AppState.current_project.from_data(data)
-    AppState.current_page.from_data(default_page)
 
 
 func _on_save_project_requested() -> void:

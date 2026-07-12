@@ -21,7 +21,7 @@ var children    : ReactiveArray
 
 # ── Properties & Binding ──────────────────────────────────────────────────────
 
-var properties  : ReactiveDict
+var properties  : ReactiveDictionary
 var node_id     : ReactiveString
 var server_id   : ReactiveString
 
@@ -37,10 +37,10 @@ func _init(data: WidgetData = null, initial_owner: Reactive = null) -> void:
     size        = ReactiveVector2.new(Vector2(100, 100), self)
     z_index     = ReactiveInt.new(0,                     self)
     parent_id   = ReactiveString.new("",                 self)
-    properties  = ReactiveDict.new({},                   self)
+    properties  = ReactiveDictionary.new({},             self)
     node_id     = ReactiveString.new("",                 self)
     server_id   = ReactiveString.new("",                 self)
-    children    = ReactiveArray.new(self)
+    children    = ReactiveArray.new([],                  self)
 
     if data != null:
         from_data(data)

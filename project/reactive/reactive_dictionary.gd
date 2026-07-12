@@ -1,4 +1,4 @@
-class_name ReactiveDict
+class_name ReactiveDictionary
 extends Reactive
 
 var value: Dictionary:
