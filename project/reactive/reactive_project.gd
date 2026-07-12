@@ -19,7 +19,7 @@ func _init(data: ProjectData = null, initial_owner: Reactive = null) -> void:
     file_path      = ReactiveString.new("", self)
     opc_ua_servers = ReactiveDict.new({},   self)
     canvas         = ReactiveDict.new({},   self)
-    pages          = ReactiveArray.new(self)
+    pages          = ReactiveArray.new([],  self)
 
     if data != null:
         from_data(data)

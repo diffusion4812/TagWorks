@@ -4,8 +4,6 @@ extends Node
 const SAVE_DIR     := "user://projects/"
 const FILE_VERSION := 2
 
-## Maps widget class names to their packed scene paths.
-## This is the single source of truth for scene resolution during load.
 const NODE_REGISTRY: Dictionary = {
     "ButtonWidget":       "res://widgets/button_widget/button_widget.tscn",
     "LabelWidget":        "res://widgets/label_widget/label_widget.tscn",
@@ -19,7 +17,6 @@ const NODE_REGISTRY: Dictionary = {
     "WidgetCanvas":       "res://scenes/canvas/canvas.tscn",
 }
 
-## Shared registry — OpcUaManager holds a reference to this same object.
 var opc_ua_registry := OpcUaConfigRegistry.new()
 
 var _current_project_path: String = ""
@@ -45,14 +42,14 @@ func get_current_project_path() -> String:
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_new_project_requested() -> void:
-    var project          := ProjectData.new()
-    project.project_name =  "New Project"
+    var data             := ProjectData.new()
+    data.project_name    =  "New Project"
 
     var default_page := PageData.create("Page 1")
-    project.add_page(default_page)
+    data.add_page(default_page)
 
-    AppState.current_project = project
-    AppState.current_page    = default_page
+    AppState.current_project.from_data(data)
+    AppState.current_page.from_data(default_page)
 
 
 func _on_save_project_requested() -> void:
@@ -79,7 +76,8 @@ func _on_close_project_requested() -> void:
 func _save(path: String) -> void:
     _ensure_save_dir()
 
-    var data := ProjectData.new()
+    # Extract raw ProjectData from the reactive wrapper for serialisation
+    var data := AppState.current_project.to_data()
     data.opc_ua_servers = opc_ua_registry.serialize()
 
     var canvas := _find_canvas()
@@ -132,12 +130,16 @@ func _load(path: String) -> void:
     opc_ua_registry.deserialize(data.opc_ua_servers)
 
     _current_project_path = path
-    AppState.current_project = data
+
+    # Hydrate the reactive wrappers from the loaded raw data
+    AppState.current_project.from_data(data)
+
+    var default_page := data.get_default_page()
+    if default_page != null:
+        AppState.current_page.from_data(default_page)
 
 # ── Restore ───────────────────────────────────────────────────────────────────
 
-## Recursively restores a BaseWidget and all its children from serialised data.
-## Container widgets (is_container = true) recurse into their own children array.
 func _restore_node(parent: Control, data: Dictionary) -> void:
     for child_data: Dictionary in data.get("children", []):
         var type: String = child_data.get("type", "")
@@ -166,9 +168,9 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
         elif parent is BaseWidget and (parent as BaseWidget).is_container:
             (parent as BaseWidget)._elevate_child(widget)
 
-        var canvas := _find_canvas_for(widget)
-        if canvas != null:
-            canvas._subscribe_widget(widget)
+        var found_canvas := _find_canvas_for(widget)
+        if found_canvas != null:
+            found_canvas._subscribe_widget(widget)
 
         widget.deserialize(child_data)
 
@@ -179,12 +181,10 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
 
 # ── Canvas Resolution ─────────────────────────────────────────────────────────
 
-## Locates the active WidgetCanvas in the scene tree.
 func _find_canvas() -> WidgetCanvas:
     return get_tree().root.find_child("Canvas", true, false) as WidgetCanvas
 
 
-## Walks up the scene tree to locate the nearest WidgetCanvas ancestor.
 func _find_canvas_for(node: Node) -> WidgetCanvas:
     var current := node.get_parent()
     while current != null:
