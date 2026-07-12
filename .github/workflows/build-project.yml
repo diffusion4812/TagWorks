@@ -85,13 +85,13 @@ jobs:
           }
 
           Write-Host "=== GDExtension Files ==="
-          Get-ChildItem -Recurse ${{ github.workspace }}/bin/
+          Get-ChildItem -Recurse ${{ github.workspace }}/project/bin/
 
           Write-Host "=== export_presets.cfg ==="
-          Get-Content ${{ github.workspace }}/export_presets.cfg
+          Get-Content ${{ github.workspace }}/project/export_presets.cfg
 
           Write-Host "=== godot_opcua.gdextension ==="
-          Get-Content ${{ github.workspace }}/bin/godot_opcua.gdextension
+          Get-Content ${{ github.workspace }}/project/bin/godot_opcua.gdextension
 
       # ── Export Project ────────────────────────────────────────────────────────
 
