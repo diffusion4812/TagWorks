@@ -101,7 +101,6 @@ jobs:
           $env:GODOT_DEBUG_GDEXTENSION = "1"
           ./godot/godot.windows.editor.x86_64.exe `
             --headless `
-            --verbose `
             --path ${{ github.workspace }}/project `
             --export-debug "win64" `
             ${{ github.workspace }}/build/tagview.exe 2>&1 | Tee-Object -FilePath "${{ github.workspace }}/godot_log.txt"
@@ -127,21 +126,90 @@ jobs:
             exit 1
           }
 
-      - name: Compress Executable with UPX
-        # continue-on-error lets the workflow keep moving if UPX fails on this binary
-        continue-on-error: true
-        id: upx_compress
+      - name: Compress Executable and Merge Assets (With Deep Diagnostics)
         run: |
-          upx --best --lzma ${{ github.workspace }}/build/tagview.exe
+          $buildDir = "${{ github.workspace }}/build"
+          $targetExe = "$buildDir/tagview.exe"
+          $sourcePck = "$buildDir/tagview.pck"
 
-      - name: Merge PCK Assets Manually
-        # Only try to merge if UPX completed successfully
-        if: steps.upx_compress.outcome == 'success'
-        run: |
-          cmd.exe /c "copy /b ${{ github.workspace }}\build\tagview.exe + ${{ github.workspace }}\build\tagview.pck ${{ github.workspace }}\build\tagview_merged.exe"
-          Remove-Item ${{ github.workspace }}/build/tagview.pck
-          Remove-Item ${{ github.workspace }}/build/tagview.exe
-          Move-Item -Path ${{ github.workspace }}/build/tagview_merged.exe -Destination ${{ github.workspace }}/build/tagview.exe
+          Write-Host "=== DIAGNOSTIC START: Pre-Flight Check ==="
+          Write-Host "Build Directory: $buildDir"
+          
+          # Check Exe Size
+          if (Test-Path $targetExe) {
+              $exeSize = (Get-Item $targetExe).Length
+              Write-Host "SUCCESS: found tagview.exe ($exeSize bytes)"
+          } else {
+              Write-Error "CRITICAL: tagview.exe is MISSING from the build directory!"
+              exit 1
+          }
+
+          # Check Pck Size
+          if (Test-Path $sourcePck) {
+              $pckSize = (Get-Item $sourcePck).Length
+              Write-Host "SUCCESS: found tagview.pck ($pckSize bytes)"
+          } else {
+              Write-Error "CRITICAL: tagview.pck is MISSING! Did you set embed_pck=false in your export config?"
+              exit 1
+          }
+
+          Write-Host "`n=== DIAGNOSTIC: Executing UPX Compression ==="
+          try {
+              # Capture raw standard and error output from UPX
+              $upxOut = upx --best --lzma "$targetExe" 2>&1
+              Write-Host "UPX Output Log:`n$upxOut"
+              
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "UPX failed with non-zero exit code: $LASTEXITCODE"
+              } else {
+                  $compressedSize = (Get-Item $targetExe).Length
+                  Write-Host "SUCCESS: UPX completed. New size: $compressedSize bytes (Saved $($exeSize - $compressedSize) bytes)"
+              }
+          } catch {
+              Write-Error "CRITICAL: Exception thrown during UPX execution: $_"
+          }
+
+          Write-Host "`n=== DIAGNOSTIC: System Stream Stitching ==="
+          try {
+              Write-Host "Opening file streams..."
+              # Open with explicit block sharing configurations to detect file locks
+              $outputStream = [System.IO.File]::Open($targetExe, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+              Write-Host "Output stream opened successfully."
+              
+              $inputStream = [System.IO.File]::Open($sourcePck, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+              Write-Host "Input stream opened successfully."
+              
+              Write-Host "Streaming bytes from .pck to .exe..."
+              $inputStream.CopyTo($outputStream)
+              Write-Host "Stream transmission completed successfully."
+
+              # Close handles explicitly
+              $inputStream.Close()
+              $outputStream.Close()
+              Write-Host "Stream handles flushed and closed cleanly."
+              
+              $finalSize = (Get-Item $targetExe).Length
+              Write-Host "SUCCESS: Final welded binary size: $finalSize bytes"
+          } catch {
+              Write-Error "CRITICAL: Stream assembly failed!"
+              Write-Error "Exception Message: $_"
+              Write-Error "Stack Trace: $($_.ScriptStackTrace)"
+              
+              # Ensure streams close if an error happened mid-transfer
+              if ($null -ne $inputStream) { $inputStream.Close() }
+              if ($null -ne $outputStream) { $outputStream.Close() }
+          }
+
+          Write-Host "`n=== DIAGNOSTIC: File Footprint Cleanup ==="
+          try {
+              Remove-Item $sourcePck -Force -ErrorAction Stop
+              Write-Host "SUCCESS: Loose .pck file purged from runner."
+          } catch {
+              Write-Warning "WARNING: Could not delete loose .pck file. It might be locked by another process: $_"
+          }
+          
+          Write-Host "=== DIAGNOSTIC END ==="
+
 
       - name: Handle UPX Fallback
         # If UPX failed, keep the standard side-by-side files so the build doesn't break
