@@ -12,14 +12,14 @@ var children   : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
-func _init(data: PageData = null, initial_owner: Reactive = null) -> void:
-    super._init(null, initial_owner)
+func _init(data: PageData = null, initial_owner: Reactive = null, label: String = "ReactivePage") -> void:
+    super._init(null, initial_owner, label)
 
-    page_id    = ReactiveString.new("",    self)
-    page_name  = ReactiveString.new("",    self)
-    is_default = ReactiveBool.new(false,   self)
-    canvas     = ReactiveDict.new({},      self)
-    children   = ReactiveArray.new(self)
+    page_id    = ReactiveString.new("",    self, "page_id")
+    page_name  = ReactiveString.new("",    self, "page_name")
+    is_default = ReactiveBool.new(false,   self, "is_default")
+    canvas     = ReactiveDict.new({},      self, "canvas")
+    children   = ReactiveArray.new([],     self, "children")
 
     if data != null:
         from_data(data)
