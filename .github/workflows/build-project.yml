@@ -103,7 +103,7 @@ jobs:
             --headless `
             --verbose `
             --debug-stringnames `
-            --path ${{ github.workspace }} `
+            --path ${{ github.workspace }}/project `
             --export-debug "win64" `
             ${{ github.workspace }}/build/tagview.exe 2>&1 | Tee-Object -FilePath "${{ github.workspace }}/godot_log.txt"
 
