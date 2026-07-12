@@ -21,7 +21,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
-          submodules: recursive
+          submodules: false       # ← Do not auto-checkout submodules
+                                  #   we handle this manually after cache check
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,23 +32,62 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
-      - name: Cache GDExtension Build
+      # ── Cache godot-cpp Submodule ─────────────────────────────────────────────
+
+      - name: Cache godot-cpp Submodule
+        id: cache-godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: extension/godot-cpp
+          key: godot-cpp-${{ hashFiles('.gitmodules') }}
+          restore-keys: |
+            godot-cpp-
+
+      - name: Checkout godot-cpp Submodule
+        if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
+        run: git submodule update --init --recursive
+
+      # ── Cache GDExtension Build Objects ──────────────────────────────────────
+
+      - name: Cache GDExtension Build Objects
+        id: cache-gdextension
         uses: actions/cache@v4
         with:
           path: |
             extension/godot_opcua/.sconsign.dblite
+            extension/godot-cpp/.sconsign.dblite
+            extension/godot-cpp/bin/
             project/bin/
-          key: gdextension-${{ runner.os }}-${{ hashFiles('extension/godot_opcua/**/*.cpp', 'extension/godot_opcua/**/*.h') }}
+          key: gdextension-${{ runner.os }}-${{ hashFiles('extension/godot_opcua/**/*.cpp', 'extension/godot_opcua/**/*.h', 'extension/godot-cpp/**/*.cpp', 'extension/godot-cpp/**/*.h') }}
           restore-keys: |
             gdextension-${{ runner.os }}-
 
+      # ── Build GDExtension ─────────────────────────────────────────────────────
+
       - name: Build GDExtension
+        if: steps.cache-gdextension.outputs.cache-hit != 'true'
         working-directory: ./extension/godot_opcua
+        env: 
+          PYTHONUTF8: "1"
         run: |
           scons `
             platform=windows `
             target=template_debug `
             arch=x86_64
+
+      # ── Verify Build Output ───────────────────────────────────────────────────
+
+      - name: Verify Build Output
+        run: |
+          Write-Host "=== project/bin/ contents ==="
+          if (Test-Path "${{ github.workspace }}/project/bin") {
+            Get-ChildItem -Recurse "${{ github.workspace }}/project/bin"
+          } else {
+            Write-Host "ERROR: project/bin/ not found!"
+            exit 1
+          }
+
+      # ── Upload Artifact ───────────────────────────────────────────────────────
 
       - name: Upload GDExtension Artifact
         uses: actions/upload-artifact@v4
