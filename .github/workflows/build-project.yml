@@ -118,29 +118,39 @@ jobs:
       - name: Install UPX
         run: choco install upx -y
 
-      - name: Compress Executable
+      - name: Verify Godot Export Exists
         run: |
-          # 1. Compress the raw engine template binary runner
+          if (Test-Path "${{ github.workspace }}/build/tagview.exe") {
+            Write-Host "Success: tagview.exe found! Proceeding..."
+          } else {
+            Write-Error "ERROR: Godot failed to generate tagview.exe in the build directory!"
+            exit 1
+          }
+
+      - name: Compress Executable with UPX
+        # continue-on-error lets the workflow keep moving if UPX fails on this binary
+        continue-on-error: true
+        id: upx_compress
+        run: |
           upx --best --lzma ${{ github.workspace }}/build/tagview.exe
-          
-          # 2. Append the loose game pack onto the compressed binary manually
+
+      - name: Merge PCK Assets Manually
+        # Only try to merge if UPX completed successfully
+        if: steps.upx_compress.outcome == 'success'
+        run: |
           cmd.exe /c "copy /b ${{ github.workspace }}\build\tagview.exe + ${{ github.workspace }}\build\tagview.pck ${{ github.workspace }}\build\tagview_merged.exe"
-          
-          # 3. Clean up the loose assets and swap the merged file back to the original name
           Remove-Item ${{ github.workspace }}/build/tagview.pck
           Remove-Item ${{ github.workspace }}/build/tagview.exe
           Move-Item -Path ${{ github.workspace }}/build/tagview_merged.exe -Destination ${{ github.workspace }}/build/tagview.exe
 
-      - name: List Build Directory
-        run: Get-ChildItem -Recurse ${{ github.workspace }}/build
+      - name: Handle UPX Fallback
+        # If UPX failed, keep the standard side-by-side files so the build doesn't break
+        if: steps.upx_compress.outcome != 'success'
+        run: |
+          Write-Host "WARNING: UPX packing failed. Shipping runner with side-by-side .pck file instead."
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Client - win64
-          path: ${{ github.workspace }}/build/
-
-      - name: List Build Directory
+      - name: List Build Directory Contents
+        if: always()
         run: Get-ChildItem -Recurse ${{ github.workspace }}/build
 
       - name: Upload Artifact
