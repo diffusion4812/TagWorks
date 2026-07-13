@@ -2,20 +2,11 @@
 class_name SelectableControl
 extends Control
 
-signal selected(target: SelectableControl)
-signal deselected()
+signal selected(control: SelectableControl)
 signal drag_moved(widget: SelectableControl)
 signal drag_ended(widget: SelectableControl)
 
 const GRID_SIZE := 10
-
-var is_edit_mode: bool = false:
-    set(value):
-        if value == is_edit_mode:
-            return
-        is_edit_mode = value
-        _on_edit_mode_changed(value)
-        _propagate_edit_mode(value)
 
 var _is_selected:      bool                  = false
 var _handle_container: ResizeHandleContainer = null
@@ -73,7 +64,7 @@ func _get_position_bounds() -> Rect2:
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _gui_input(event: InputEvent) -> void:
-    if not is_edit_mode:
+    if not AppState.is_edit_mode.value:
         return
 
     if event is InputEventMouseButton or event is InputEventScreenTouch:
@@ -114,7 +105,6 @@ func deselect() -> void:
     _is_selected = false
     _apply_selected_style(false)
     _hide_handles()
-    deselected.emit()
 
 
 func _apply_selected_style(active: bool) -> void:

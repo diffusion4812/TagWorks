@@ -7,7 +7,7 @@ extends Reactive
 var page_id    : ReactiveString
 var page_name  : ReactiveString
 var is_default : ReactiveBool
-var canvas     : ReactiveDictionary
+var canvas     : ReactiveCanvas
 var children   : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ func _init(data: PageData = null, initial_owner: Reactive = null, label: String 
     page_id    = ReactiveString.new("",    self, "page_id")
     page_name  = ReactiveString.new("",    self, "page_name")
     is_default = ReactiveBool.new(false,   self, "is_default")
-    canvas     = ReactiveDictionary.new({},      self, "canvas")
+    canvas     = ReactiveCanvas.new({},    self, "canvas")
     children   = ReactiveArray.new([],     self, "children")
 
     if data != null:
@@ -33,7 +33,7 @@ func from_data(data: PageData) -> void:
     page_id.value    = data.page_id
     page_name.value  = data.page_name
     is_default.value = data.is_default
-    canvas.value     = data.canvas.duplicate()
+    canvas.from_data(data.canvas.duplicate())
 
     children.clear()
     for child: PageData in data.children:
@@ -46,7 +46,7 @@ func to_data() -> PageData:
     data.page_id    = page_id.value
     data.page_name  = page_name.value
     data.is_default = is_default.value
-    data.canvas     = canvas.value.duplicate()
+    data.canvas     = canvas.to_data()
 
     data.children.clear()
     for item: Variant in children.values():

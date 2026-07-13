@@ -6,19 +6,30 @@ const CANVAS_SCENE: PackedScene = preload(
     "res://scenes/canvas/canvas.tscn"
 )
 
-# ── State ─────────────────────────────────────────────────────────────────────
-
-## Maps page_id (String) → WidgetCanvas node.
 var page_tabs: ReactiveDictionary = ReactiveDictionary.new({}, null, "page_tabs")
 
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
-
 func _ready() -> void:
-    EventBus.project_opened.connect(_on_project_opened)
-    EventBus.project_closed.connect(_on_project_closed)
     AppState.focused_page.reactive_changed.connect(_on_focused_page_changed)
+    AppState.current_project.pages.reactive_changed.connect(_on_pages_changed)
+    tab_changed.connect(
+        func(_tab: int) -> void:
+            var page_id := _get_current_page_id()
+            if page_id.is_empty():
+                return
+            var page: ReactivePage = AppState.current_project.find_page_id(page_id)
+            if page != null:
+                AppState.active_page.value = page
+    )
 
-# ── Page Change Handler ───────────────────────────────────────────────────────
+    get_tab_bar().tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ACTIVE_ONLY
+    get_tab_bar().close_with_middle_mouse = true
+
+# ── Pages Change Handler ──────────────────────────────────────────────────────
+
+func _on_pages_changed(_reactive) -> void:
+    _rebuild_page_tree()
+
+# ── Page Focus Handler ────────────────────────────────────────────────────────
 
 func _on_focused_page_changed(reactive: ReactiveVariant) -> void:
     var page := reactive.value as ReactivePage
@@ -32,21 +43,58 @@ func _on_focused_page_changed(reactive: ReactiveVariant) -> void:
 
     AppState.active_page.value = page
 
+# ── Tree Rebuild ──────────────────────────────────────────────────────────────
+
+func _rebuild_page_tree() -> void:
+    var current_pages: Array = AppState.current_project.pages.value
+
+    # Collect the set of page IDs currently active.
+    var current_ids := {}
+    for page: ReactivePage in current_pages:
+        current_ids[page.page_id.value] = page
+
+    # Remove tabs for pages that no longer exist.
+    for page_id: String in page_tabs.value.keys():
+        if not current_ids.has(page_id):
+            var container: Container = page_tabs.value[page_id]
+            if is_instance_valid(container):
+                container.queue_free()
+            page_tabs.value.erase(page_id)
+
+    # Add tabs for pages that are new.
+    for page_id: String in current_ids:
+        if not page_tabs.value.has(page_id):
+            var page: ReactivePage = current_ids[page_id]
+            _create_tab_for_page(page.to_data())
+
+    if page_tabs.value.is_empty():
+        hide()
+    else:
+        show()
+
 # ── Internal Helpers ──────────────────────────────────────────────────────────
+
+func _get_current_page_id() -> String:
+    var container := get_child(current_tab)
+    for page_id: String in page_tabs.value:
+        if page_tabs.value[page_id] == container:
+            return page_id
+    return ""
+
 
 func _create_tab_for_page(page_data: PageData) -> void:
     var scroll := ScrollContainer.new()
-    scroll.name                    = "Scroll_%s" % page_data.page_id
-    scroll.size_flags_horizontal   = Control.SIZE_EXPAND_FILL
-    scroll.size_flags_vertical     = Control.SIZE_EXPAND_FILL
-    scroll.horizontal_scroll_mode  = ScrollContainer.SCROLL_MODE_AUTO
-    scroll.vertical_scroll_mode    = ScrollContainer.SCROLL_MODE_AUTO
+    scroll.name                   = "Scroll_%s" % page_data.page_id
+    scroll.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
+    scroll.size_flags_vertical    = Control.SIZE_EXPAND_FILL
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    scroll.vertical_scroll_mode   = ScrollContainer.SCROLL_MODE_AUTO
 
     var canvas: WidgetCanvas = CANVAS_SCENE.instantiate()
-    canvas.name                    = "Canvas_%s" % page_data.page_id
-    canvas.custom_minimum_size     = Vector2(1920, 1080)
-    canvas.size_flags_horizontal   = Control.SIZE_SHRINK_BEGIN
-    canvas.size_flags_vertical     = Control.SIZE_SHRINK_BEGIN
+    canvas.name                   = "Canvas_%s" % page_data.page_id
+    canvas.custom_minimum_size    = Vector2(1920, 1080)
+    canvas.size_flags_horizontal  = Control.SIZE_SHRINK_BEGIN
+    canvas.size_flags_vertical    = Control.SIZE_SHRINK_BEGIN
 
     page_tabs.value[page_data.page_id] = scroll
 
@@ -56,11 +104,7 @@ func _create_tab_for_page(page_data: PageData) -> void:
     var tab_index: int = get_tab_count() - 1
     set_tab_title(tab_index, page_data.page_name)
 
-    canvas.is_dirty.changed.connect(func(dirty: bool) -> void:
-        _on_canvas_dirty_changed(canvas, dirty)
-    )
-
-    canvas.load_page(page_data)
+    canvas.load_page(ReactivePage.new(page_data))
 
     current_tab = tab_index
     show()
@@ -77,41 +121,12 @@ func _switch_to_tab(page_id: String) -> void:
 
 # ── Dirty Indicator ───────────────────────────────────────────────────────────
 
-## Updates the tab title for the given canvas to reflect its dirty state.
-## The canvas reference is bound at connection time so no source inspection
-## is required — each lambda closure owns exactly one canvas.
 func _on_canvas_dirty_changed(canvas: WidgetCanvas, dirty: bool) -> void:
     if not is_instance_valid(canvas):
         return
 
-    var tab_index: int    = canvas.get_index()
-    var title: String     = get_tab_title(tab_index)
+    var tab_index: int = canvas.get_index()
+    var title: String  = get_tab_title(tab_index)
 
-    # Strip any existing indicator before reapplying to avoid accumulation.
     title = title.trim_suffix(" *")
-
     set_tab_title(tab_index, title + (" *" if dirty else ""))
-
-# ── Project Lifecycle ─────────────────────────────────────────────────────────
-
-func _on_project_opened(project_data: ProjectData) -> void:
-    _clear_all_tabs()
-
-    var initial_page: PageData = project_data.get_default_page()
-    if initial_page != null:
-        _create_tab_for_page(initial_page)
-
-
-func _on_project_closed() -> void:
-    _clear_all_tabs()
-    hide()
-
-
-## Disconnects all dirty callables, frees all canvas children, and resets
-## internal state. Safe to call across project open/close cycles.
-func _clear_all_tabs() -> void:
-    for container: Container in page_tabs.value.values():
-        if is_instance_valid(container):
-            container.queue_free()
-
-    page_tabs.value.clear()

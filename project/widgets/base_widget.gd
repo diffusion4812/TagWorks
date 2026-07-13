@@ -53,8 +53,21 @@ func _ready() -> void:
     if is_container:
         z_index = Z_INDEX_BASE
 
+    selected.connect(_on_selected)
+
     EventBus.widget_property_changed.connect(_on_widget_property_changed)
 
+func _enter_tree() -> void:
+    _root_canvas = _find_root_canvas()
+
+
+func _find_root_canvas() -> WidgetCanvas:
+    var node := get_parent()
+    while node != null:
+        if node is WidgetCanvas:
+            return node as WidgetCanvas
+        node = node.get_parent()
+    return null
 
 ## Initialises this widget from a WidgetData resource.
 ## Called by WidgetCanvas when spawning a new widget.
@@ -164,7 +177,7 @@ func _elevate_child(child: Control) -> void:
 # ─────────────────────────────────────────────
 
 func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
-    if not is_edit_mode:
+    if not AppState.is_edit_mode.value:
         return false
     if not is_container:
         return false
@@ -206,48 +219,10 @@ func _is_ancestor_of(node: Node) -> bool:
 # Edit Mode
 # ─────────────────────────────────────────────
 
-func _on_edit_mode_changed(enabled: bool) -> void:
-    if is_container:
-        mouse_filter = MOUSE_FILTER_PASS
-    else:
-        mouse_filter = MOUSE_FILTER_STOP if enabled else MOUSE_FILTER_PASS
-    _set_children_mouse_filter(enabled)
-    if not enabled and _is_selected:
-        deselect()
-
-
-func _set_children_mouse_filter(edit_mode: bool) -> void:
-    var filter    := MOUSE_FILTER_IGNORE if edit_mode else MOUSE_FILTER_STOP
-    var protected := get_protected_controls()
-
-    for child in find_children("*", "Control", true, false):
-        if child is ResizeHandleContainer or child is ResizeHandle:
-            continue
-        if child is WidgetCanvas:
-            continue
-        if _is_under_protected(child, protected):
-            continue
-        child.mouse_filter = filter
-
-
-## Returns true if the given node is, or is a descendant of, any protected control.
-func _is_under_protected(node: Node, protected: Array[Control]) -> bool:
-    var current := node
-    while current != null:
-        if current in protected:
-            return true
-        current = current.get_parent()
-    return false
-
-# ─────────────────────────────────────────────
-# Input
-# ─────────────────────────────────────────────
-
-func _gui_input(event: InputEvent) -> void:
-    if is_container and event is InputEventMouseButton \
-            and event.button_index == MOUSE_BUTTON_RIGHT:
+func _on_selected(_control: SelectableControl) -> void:
+    if _root_canvas == null:
         return
-    super._gui_input(event)
+    _root_canvas.selected_widget.value = self as BaseWidget
 
 # ─────────────────────────────────────────────
 # Selection

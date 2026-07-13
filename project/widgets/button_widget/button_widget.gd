@@ -28,6 +28,12 @@ func _ready() -> void:
     button.button_down.connect(_on_button_down)
     button.button_up.connect(_on_button_up)
 
+    AppState.is_edit_mode.reactive_changed.connect(
+        func(enabled) -> void:
+            button.disabled = enabled.value
+            button.mouse_filter = Control.MOUSE_FILTER_IGNORE if enabled.value else Control.MOUSE_FILTER_STOP
+    )
+
     _binding = OpcUaBinding.new()
     _binding.value_changed.connect(_on_value_changed)
 

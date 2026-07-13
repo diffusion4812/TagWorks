@@ -2,7 +2,6 @@
 extends Node
 
 # ── Child references ──────────────────────────────────────────────────────────
-
 @onready var file_menu:           PopupMenu             = %FileMenu
 @onready var edit_menu:           PopupMenu             = %EditMenu
 @onready var server_menu:         PopupMenu             = %ServerMenu
@@ -19,16 +18,11 @@ extends Node
 @onready var status_dialog:       OpcUaStatusDialog     = $Dialogs/OpcUaStatusDialog
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-
 ## Number of static items in the server menu that precede the dynamic
 ## server list. Used to avoid removing fixed entries during a rebuild.
 const SERVER_MENU_FIXED_ITEM_COUNT: int = 1
 
 # ── State ─────────────────────────────────────────────────────────────────────
-
-var _is_edit_mode:    bool       = false
-var _selected_widget: BaseWidget = null
-
 ## Tracks dynamically created server submenus keyed by server_id.
 ## Enables clean teardown and rebuild when the server list changes.
 var _server_submenus: Dictionary = {}
@@ -38,7 +32,6 @@ var _server_submenus: Dictionary = {}
 func _ready() -> void:
     _set_scaling()
     _connect_signals()
-    _set_edit_mode(false)
     status_bar.set_disconnected()
 
 
@@ -80,32 +73,11 @@ func _connect_signals() -> void:
     EventBus.project_opened.connect(_on_project_opened)
     EventBus.project_closed.connect(_on_project_closed)
     EventBus.project_saved.connect(_on_project_saved)
-    EventBus.project_error.connect(_on_project_error)
-
-    # ── EventBus — edit mode ──────────────────────────────────────────────────
-    EventBus.edit_mode_changed.connect(_on_edit_mode_changed)
-
-    # ── EventBus — widget selection ───────────────────────────────────────────
-    EventBus.widget_selected.connect(_on_widget_selected_event)
-    EventBus.widget_deselected.connect(_on_widget_deselected_event)
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
-## Internal method that applies edit mode state locally and emits the intent.
-## The authoritative state change is confirmed via EventBus.edit_mode_changed.
-func _set_edit_mode(enabled: bool) -> void:
-    IntentBus.set_edit_mode_requested.emit(enabled)
-
-
-## Responds to the confirmed edit mode state from the EventBus.
-func _on_edit_mode_changed(enabled: bool) -> void:
-    _is_edit_mode       = enabled
-    if not enabled:
-        IntentBus.deselect_widget_requested.emit()
-
-
 func _on_mode_toggled(is_edit: bool) -> void:
-    _set_edit_mode(is_edit)
+    AppState.is_edit_mode.value = is_edit
 
 # ── Menu Handlers ─────────────────────────────────────────────────────────────
 
@@ -240,7 +212,7 @@ func _on_file_dialog_selected(path: String) -> void:
 # ── EventBus — Project event handlers ────────────────────────────────────────
 
 func _on_project_opened(project_data: ProjectData) -> void:
-    _set_edit_mode(false)
+    AppState.is_edit_mode.value = false
     inspector_container.show()
 
 func _on_project_saved(path: String) -> void:
@@ -248,29 +220,12 @@ func _on_project_saved(path: String) -> void:
 
 
 func _on_project_closed() -> void:
-    _set_edit_mode(false)
+    AppState.is_edit_mode.value = false
     canvas_container.hide()
     inspector_container.hide()
     status_bar.show_message("Project closed.")
 
-
-func _on_project_error(message: String) -> void:
-    status_bar.show_message("Error: %s" % message)
-
-# ── Selection ─────────────────────────────────────────────────────────────────
-
-## Responds to the confirmed widget selection event from the EventBus.
-func _on_widget_selected_event(widget: BaseWidget) -> void:
-    _selected_widget = widget
-    property_panel.load_target(widget)
-
-
-## Responds to the confirmed widget deselection event from the EventBus.
-func _on_widget_deselected_event() -> void:
-    _selected_widget = null
-
 # ── OPC UA ────────────────────────────────────────────────────────────────────
-
 func _on_opcua_connected(server_id: String) -> void:
     var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
     var label := cfg.display_name if cfg else server_id

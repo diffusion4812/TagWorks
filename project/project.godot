@@ -45,6 +45,7 @@ window/handheld/orientation=1
 [file_customization]
 
 folder_colors={
+"res://reactive/": "orange",
 "res://widgets/components/": "teal"
 }
 

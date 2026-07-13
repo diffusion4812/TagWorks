@@ -64,19 +64,26 @@ func _setup_tree() -> void:
 
 
 func _connect_signals() -> void:
-    btn_add_page.pressed.connect(_on_add_page_pressed)
-    btn_delete.pressed.connect(_on_delete_pressed)
+    btn_add_page.pressed.connect(func() -> void:
+        IntentBus.add_page_requested.emit("")
+    )
+
+    btn_delete.pressed.connect(func() -> void:
+        var page := AppState.focused_page.value as ReactivePage
+        if page == null:
+            return
+        IntentBus.delete_page_requested.emit(page.page_id.value)
+    )
 
     context_menu.id_pressed.connect(_on_context_menu_id_pressed)
-
     page_tree.item_mouse_selected.connect(_on_item_mouse_selected)
     page_tree.item_edited.connect(_on_item_edited)
 
+    IntentBus.add_page_requested.connect(_on_add_page_requested)
+    IntentBus.delete_page_requested.connect(_on_delete_page_requested)
+
     EventBus.project_opened.connect(_on_project_opened)
     EventBus.project_closed.connect(_on_project_closed)
-    EventBus.page_created.connect(_on_page_created)
-    EventBus.page_deleted.connect(_on_page_deleted)
-    EventBus.page_renamed.connect(_on_page_renamed)
     EventBus.page_hierarchy_changed.connect(_on_page_hierarchy_changed)
 
     AppState.focused_page.changed.connect(_on_focus_changed)
@@ -192,15 +199,43 @@ func select_page(page_id: String) -> void:
         AppState.focused_page.value = page
 
 # ─────────────────────────────────────────────
-# Button Handlers
+# Intent Handlers
 # ─────────────────────────────────────────────
 
-func _on_add_page_pressed() -> void:
-    add_page()
+func _on_add_page_requested(page_name: String) -> void:
+    if not AppState.has_active_project():
+        return
+
+    var name = DEFAULT_PAGE_NAME
+    var offset = 1
+    if page_name == "":
+        if AppState.current_project.find_page_name(name):
+            while AppState.current_project.find_page_name(name):
+                name = DEFAULT_PAGE_NAME + " " + str(offset)
+                offset += 1
+
+    var new_page   := ReactivePage.new(PageData.create(name))
+    var focused    := AppState.focused_page.value as ReactivePage
+
+    if focused != null:
+        focused.add_child_page(new_page)
+    else:
+        AppState.current_project.add_page(new_page)
 
 
-func _on_delete_pressed() -> void:
-    delete_selected_page()
+func _on_delete_page_requested(page_id: String) -> void:
+    if not AppState.has_active_project():
+        return
+
+    if AppState.current_project.pages.values().size() == 1:
+        push_warning("PageDataHandler: Cannot delete the last remaining page.")
+        return
+
+    var focused := AppState.focused_page.value as ReactivePage
+    if focused != null and focused.page_id.value == page_id:
+        AppState.focused_page.value = null
+
+    AppState.current_project.remove_page(page_id)
 
 # ─────────────────────────────────────────────
 # Context Menu
@@ -316,6 +351,8 @@ func _get_drag_data(_position: Vector2) -> Variant:
 
 
 func _can_drop_data(position: Vector2, data: Variant) -> bool:
+    page_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
+
     if not data is Dictionary or not data.has("page"):
         return false
 
@@ -349,24 +386,23 @@ func _drop_data(position: Vector2, data: Variant) -> void:
     if target_item == null:
         return
 
-    var drop_mode := page_tree.get_drop_section_at_position(position)
-
-    AppState.current_project.remove_page(dragged.page_id.value)
-
     if target_item == _tree_root:
-        AppState.current_project.add_page(dragged)
-    else:
-        var target_page := target_item.get_metadata(0) as ReactivePage
-        if target_page == null:
-            return
-        if drop_mode == -1:
-            _insert_relative(dragged, target_page, 0)
-        elif drop_mode == 0:
-            target_page.children.insert(0, dragged)
-        elif drop_mode == 1:
-            _insert_relative(dragged, target_page, 1)
+        var page := AppState.current_project._detach_recursive(
+            dragged.page_id.value,
+            AppState.current_project.pages
+        )
+        if page != null:
+            page.owner = null
+            AppState.current_project.pages.append(page)
+            EventBus.page_hierarchy_changed.emit()
+        return
 
-    EventBus.page_hierarchy_changed.emit()
+    var target_page := target_item.get_metadata(0) as ReactivePage
+    if target_page == null:
+        return
+
+    var drop_mode := page_tree.get_drop_section_at_position(position)
+    AppState.current_project.move_page(dragged.page_id.value, target_page, drop_mode)
 
 # ─────────────────────────────────────────────
 # EventBus Handlers
@@ -384,31 +420,6 @@ func _on_project_closed() -> void:
     _tree_root.set_text(0, DEFAULT_ROOT_NAME)
     _tree_root.set_selectable(0, false)
     _update_button_states()
-
-
-func _on_page_created(page: PageData) -> void:
-    var reactive_page := _find_reactive_page(page.page_id)
-    if reactive_page == null:
-        return
-    var parent_item := _find_parent_item(reactive_page)
-    var item        := _create_item(parent_item, reactive_page)
-    item.select(0)
-    AppState.focused_page.value = reactive_page
-    _update_button_states()
-
-
-func _on_page_deleted(page_id: String) -> void:
-    if not _item_map.has(page_id):
-        return
-    _remove_item_recursive(_item_map[page_id])
-    _update_button_states()
-
-
-func _on_page_renamed(page_id: String, new_name: String) -> void:
-    if not _item_map.has(page_id):
-        return
-    _item_map[page_id].set_text(0, new_name)
-
 
 func _on_page_hierarchy_changed() -> void:
     var selected_id := _get_selected_page_id()

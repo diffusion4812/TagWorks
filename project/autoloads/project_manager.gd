@@ -27,7 +27,7 @@ func _ready() -> void:
     IntentBus.new_project_requested.connect(_on_new_project_requested)
     IntentBus.save_project_requested.connect(_on_save_project_requested)
     IntentBus.save_project_as_requested.connect(_on_save_project_as_requested)
-    IntentBus.load_project_requested.connect(_on_load_project_requested)
+    IntentBus.open_project_requested.connect(_on_open_project_requested)
     IntentBus.close_project_requested.connect(_on_close_project_requested)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ func _on_new_project_requested() -> void:
     var data          := ProjectData.new()
     data.project_name =  "New Project"
 
-    var default_page := PageData.create("Page 1")
+    var default_page := PageData.create("New Page")
     data.add_page(default_page)
 
     # Hydrate project first — this emits project_opened
@@ -63,7 +63,7 @@ func _on_save_project_as_requested(path: String) -> void:
     _save(path)
 
 
-func _on_load_project_requested(path: String) -> void:
+func _on_open_project_requested(path: String) -> void:
     _load(path)
 
 
