@@ -2,7 +2,7 @@
 class_name SelectableControl
 extends Control
 
-signal selected(control: SelectableControl)
+signal selection_requested(control: SelectableControl)
 signal drag_moved(widget: SelectableControl)
 signal drag_ended(widget: SelectableControl)
 
@@ -39,7 +39,7 @@ func _propagate_edit_mode(enabled: bool) -> void:
         return
     for child in drop_target.get_children():
         if child is SelectableControl:
-            (child as SelectableControl).is_edit_mode = enabled
+            (child as SelectableControl).edit_mode = enabled
 
 func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
@@ -64,7 +64,7 @@ func _get_position_bounds() -> Rect2:
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _gui_input(event: InputEvent) -> void:
-    if not AppState.is_edit_mode.value:
+    if not AppState.edit_mode.value:
         return
 
     if event is InputEventMouseButton or event is InputEventScreenTouch:
@@ -96,7 +96,7 @@ func select() -> void:
     _is_selected = true
     _apply_selected_style(true)
     _show_handles()
-    selected.emit(self)
+    selection_requested.emit(self)
 
 
 func deselect() -> void:

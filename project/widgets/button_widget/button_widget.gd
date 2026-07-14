@@ -28,11 +28,8 @@ func _ready() -> void:
     button.button_down.connect(_on_button_down)
     button.button_up.connect(_on_button_up)
 
-    AppState.is_edit_mode.reactive_changed.connect(
-        func(enabled) -> void:
-            button.disabled = enabled.value
-            button.mouse_filter = Control.MOUSE_FILTER_IGNORE if enabled.value else Control.MOUSE_FILTER_STOP
-    )
+    AppState.edit_mode.reactive_changed.connect(_on_edit_mode_changed)
+    _on_edit_mode_changed(AppState.edit_mode)
 
     _binding = OpcUaBinding.new()
     _binding.value_changed.connect(_on_value_changed)
@@ -63,9 +60,9 @@ func _on_button_up() -> void:
 func _on_value_changed(value: Variant) -> void:
     update_display(value)
 
-func _on_edit_mode_changed(enabled: bool) -> void:
-    super._on_edit_mode_changed(enabled)
-    button.disabled = enabled
+func _on_edit_mode_changed(enabled) -> void:
+    button.disabled     = enabled.value
+    button.mouse_filter = Control.MOUSE_FILTER_IGNORE if enabled.value else Control.MOUSE_FILTER_STOP
 
 # ─────────────────────────────────────────────
 # Class

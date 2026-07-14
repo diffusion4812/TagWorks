@@ -26,7 +26,6 @@ driver/driver="Dummy"
 
 SignalLogger="*uid://bdvrrb4qxle6u"
 IntentBus="*uid://cjix3rt8scmxg"
-EventBus="*uid://c0rw3s2qtyp0b"
 AppState="*uid://bbum4fh6utg2j"
 AppConfig="*uid://j7umd53r33nx"
 OpcUaManager="*uid://8phiu00ahgg7"

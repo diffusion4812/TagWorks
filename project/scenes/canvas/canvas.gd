@@ -2,12 +2,9 @@
 class_name WidgetCanvas
 extends Control
 
-@onready var widget_palette:     WidgetPalette = get_tree().root.find_child("WidgetPalette", true, false)
-@onready var property_panel:     PropertyPanel = get_tree().root.find_child("PropertyPanel", true, false)
-
-var _context_target: Node      = null
-var _context_menu:   PopupMenu = null
-var _page_id:        String    = ""
+var _context_target : Node      = null
+var _context_menu   : PopupMenu = null
+var _page_id        : String    = ""
 
 # ── Context Menu Item IDs ─────────────────────────────────────────────────────
 
@@ -18,13 +15,14 @@ const MENU_DELETE          := 2
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+    add_to_group("widget_host")
     mouse_filter = Control.MOUSE_FILTER_STOP
     _build_context_menu()
 
     IntentBus.add_widget_requested.connect(_on_add_widget_requested)
     IntentBus.delete_widget_requested.connect(_on_delete_widget_requested)
 
-    AppState.is_edit_mode.reactive_changed.connect(_on_edit_mode_changed)
+    AppState.edit_mode.reactive_changed.connect(_on_edit_mode_changed)
 
 # ── Guards ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +32,7 @@ func _is_active_canvas() -> bool:
 
 
 func _get_reactive_page() -> ReactivePage:
-    return AppState.current_project.find_page_id(_page_id)
+    return AppState.current_project.value.find_page_id(_page_id)
 
 # ── Dirty State ───────────────────────────────────────────────────────────────
 
@@ -65,12 +63,15 @@ func _show_context_menu_for(target: Node) -> void:
         _context_menu.add_item("Add Child Widget", MENU_ADD_CHILD)
         _context_menu.add_separator()
         _context_menu.add_item("Edit Properties",  MENU_EDIT_PROPERTIES)
-        if target != self:
-            _context_menu.add_item("Delete",       MENU_DELETE)
+        _context_menu.add_item("Delete",           MENU_DELETE)
 
     elif target is BaseWidget:
         _context_menu.add_item("Edit Properties",  MENU_EDIT_PROPERTIES)
         _context_menu.add_item("Delete",           MENU_DELETE)
+
+    else:
+        # Right-clicked the canvas background — only offer add via palette
+        _context_menu.add_item("Add Widget",       MENU_ADD_CHILD)
 
     _context_menu.popup(Rect2i(DisplayServer.mouse_get_position(), Vector2i.ZERO))
 
@@ -78,25 +79,22 @@ func _show_context_menu_for(target: Node) -> void:
 func _on_context_menu_id_pressed(id: int) -> void:
     match id:
         MENU_ADD_CHILD:
-            if _context_target != null:
-                _select_target(_context_target)
-            widget_palette.show()
+            _select_target(_context_target)
+            IntentBus.show_widget_palette_requested.emit()
 
         MENU_EDIT_PROPERTIES:
-            if _context_target != null:
-                _select_target(_context_target)
-            property_panel.show()
+            _select_target(_context_target)
 
         MENU_DELETE:
             if _context_target is BaseWidget:
                 IntentBus.delete_widget_requested.emit(
-                    (_context_target as BaseWidget).widget_id
+                    (_context_target as BaseWidget).data.widget_id.value
                 )
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _gui_input(event: InputEvent) -> void:
-    if not AppState.is_edit_mode.value:
+    if not AppState.edit_mode.value:
         return
 
     if event is InputEventMouseButton and event.pressed:
@@ -112,7 +110,7 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _on_child_gui_input(event: InputEvent, target: Node) -> void:
-    if not AppState.is_edit_mode.value:
+    if not AppState.edit_mode.value:
         return
     if event is InputEventMouseButton \
             and event.button_index == MOUSE_BUTTON_RIGHT \
@@ -124,32 +122,34 @@ func _on_child_gui_input(event: InputEvent, target: Node) -> void:
 # ── Selection ─────────────────────────────────────────────────────────────────
 
 func _deselect_current() -> void:
-    var current := AppState.current_project.canvas.selected_widget.value as BaseWidget
+    var current := AppState.selected_widget.value as BaseWidget
     if current == null:
         return
     current.deselect()
-    AppState.current_project.canvas.selected_widget.value = null
+    AppState.selected_widget.value = null
 
 
 func _select_target(target: Node) -> void:
-    if AppState.current_project.canvas.selected_widget.value as BaseWidget == target:
+    if target == null or not target is BaseWidget:
         return
 
-    _deselect_current()
+    var widget := target as BaseWidget
 
-    if target is BaseWidget:
-        var widget := target as BaseWidget
-        widget.select()
-        AppState.selected_widget.value = widget
+    if AppState.selected_widget.value == widget:
+        return
+
+    _deselect_current()          # ← deselects previous widget
+    widget.select()              # ← canvas instructs new widget to select itself
+    AppState.selected_widget.value = widget  # ← state updated
 
 
-func _on_widget_selected(widget: SelectableControl) -> void:
+func _on_widget_selection_requested(widget: SelectableControl) -> void:
     _select_target(widget)
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
-func _on_edit_mode_changed(_reactive: ReactiveVariant) -> void:
-    if not AppState.is_edit_mode.value:
+func _on_edit_mode_changed(enabled) -> void:
+    if not enabled.value:
         _deselect_current()
 
 # ── Widget Spawning ───────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ func spawn_widget(scene: PackedScene) -> void:
 
     await get_tree().process_frame
 
-    widget.position     = parent.size / 2.0 - widget.size / 2.0
+    widget.position = parent.size / 2.0 - widget.size / 2.0
     _mark_dirty()
 
 # ── Parent Resolution ─────────────────────────────────────────────────────────
@@ -207,10 +207,8 @@ func _find_deepest_drop_target(root: Control, drop_position: Vector2) -> Control
 # ── Signal Subscription ───────────────────────────────────────────────────────
 
 func _subscribe_widget(widget: BaseWidget) -> void:
-    widget._root_canvas = self
-
-    if not widget.selected.is_connected(_on_widget_selected):
-        widget.selected.connect(_on_widget_selected)
+    if not widget.selection_requested.is_connected(_on_widget_selection_requested):
+        widget.selection_requested.connect(_on_widget_selection_requested)
     if not widget.gui_input.is_connected(_on_child_gui_input.bind(widget)):
         widget.gui_input.connect(_on_child_gui_input.bind(widget))
 
@@ -254,48 +252,19 @@ func clear_all_widgets() -> void:
 
 # ── Page Loading ──────────────────────────────────────────────────────────────
 
+## Assigns this canvas to a page and restores its widget subscriptions.
+## Widget scene instantiation is handled by ProjectManager._restore_canvas().
+## This method is called after ProjectManager has already populated the
+## scene tree — it wires up signals and records the page association.
 func load_page(page: ReactivePage) -> void:
     _page_id = page.page_id.value
-    clear_all_widgets()
-    _load_canvas_state(page.canvas.to_data())
-    _clear_dirty()
-
-
-func _load_canvas_state(canvas_state: Dictionary) -> void:
-    if canvas_state.is_empty():
-        return
-
-    var children: Array = canvas_state.get("children", canvas_state.get("widgets", []))
-
-    for child_data: Dictionary in children:
-        var scene := load(child_data.get("scene", "")) as PackedScene
-        if scene == null:
-            push_error("WidgetCanvas: Failed to load scene: %s" % child_data.get("scene", ""))
-            continue
-
-        var instance := scene.instantiate()
-        if not instance is BaseWidget:
-            push_error("WidgetCanvas: Not a BaseWidget: %s" % child_data.get("scene", ""))
-            instance.queue_free()
-            continue
-
-        add_child(instance)
-        (instance as BaseWidget).deserialize(child_data)
-
     _subscribe_all_recursive(self)
-
-# ── Serialisation ─────────────────────────────────────────────────────────────
-
-func serialize() -> Dictionary:
-    var serialised_children: Array = []
-    for child in get_children():
-        if child is BaseWidget:
-            serialised_children.append((child as BaseWidget).serialize())
-    return { "children": serialised_children }
+    _clear_dirty()
 
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_add_widget_requested(scene: PackedScene) -> void:
+    _deselect_current()
     if not _is_active_canvas():
         return
     spawn_widget(scene)
@@ -305,14 +274,15 @@ func _on_delete_widget_requested(widget_id: String) -> void:
     if not _is_active_canvas():
         return
     for node in get_all_nodes_recursive():
-        if node is BaseWidget and (node as BaseWidget).widget_id == widget_id:
-            _delete_widget(node)
+        if node is BaseWidget and (node as BaseWidget).data != null \
+                and (node as BaseWidget).data.widget_id.value == widget_id:
+            _delete_widget(node as BaseWidget)
             return
     push_warning("WidgetCanvas: widget_id '%s' not found for deletion." % widget_id)
 
 
 func _delete_widget(target: BaseWidget) -> void:
-    if AppState.current_project.canvas.selected_widget.value as BaseWidget == target:
+    if AppState.selected_widget.value == target:
         _deselect_current()
     _context_target = null
     target.queue_free()

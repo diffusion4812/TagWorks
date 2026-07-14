@@ -27,66 +27,97 @@ var server_id   : ReactiveString
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
-func _init(data: WidgetData = null, initial_owner: Reactive = null) -> void:
+func _init(initial_owner: Reactive = null) -> void:
     super._init(null, initial_owner)
 
-    widget_id   = ReactiveString.new("",                 self)
-    widget_type = ReactiveString.new("",                 self)
-    widget_name = ReactiveString.new("",                 self)
-    position    = ReactiveVector2.new(Vector2.ZERO,      self)
-    size        = ReactiveVector2.new(Vector2(100, 100), self)
-    z_index     = ReactiveInt.new(0,                     self)
-    parent_id   = ReactiveString.new("",                 self)
-    properties  = ReactiveDictionary.new({},             self)
-    node_id     = ReactiveString.new("",                 self)
-    server_id   = ReactiveString.new("",                 self)
-    children    = ReactiveArray.new([],                  self)
+    widget_id   = ReactiveString.new("",                 self, "widget_id")
+    widget_type = ReactiveString.new("",                 self, "widget_type")
+    widget_name = ReactiveString.new("",                 self, "widget_name")
+    position    = ReactiveVector2.new(Vector2.ZERO,      self, "position")
+    size        = ReactiveVector2.new(Vector2(100, 100), self, "size")
+    z_index     = ReactiveInt.new(0,                     self, "z_index")
+    parent_id   = ReactiveString.new("",                 self, "parent_id")
+    properties  = ReactiveDictionary.new({},             self, "properties")
+    node_id     = ReactiveString.new("",                 self, "node_id")
+    server_id   = ReactiveString.new("",                 self, "server_id")
+    children    = ReactiveArray.new([],                  self, "children")
 
-    if data != null:
-        from_data(data)
+# ── Factory ───────────────────────────────────────────────────────────────────
 
-# ── Sync from WidgetData ──────────────────────────────────────────────────────
+## Creates a new ReactiveWidget with a generated ID and the given type.
+static func create(type: String, name: String = "") -> ReactiveWidget:
+    var w            := ReactiveWidget.new()
+    w.widget_id.value   = _generate_id()
+    w.widget_type.value = type
+    w.widget_name.value = name if name != "" else type
+    return w
 
-func from_data(data: WidgetData) -> void:
-    widget_id.value   = data.widget_id
-    widget_type.value = data.widget_type
-    widget_name.value = data.widget_name
-    position.value    = data.position
-    size.value        = data.size
-    z_index.value     = data.z_index
-    parent_id.value   = data.parent_id
-    properties.value  = data.properties.duplicate()
-    node_id.value     = data.node_id
-    server_id.value   = data.server_id
 
-    children.clear()
-    for child: WidgetData in data.children:
-        children.append(ReactiveWidget.new(child, self))
+## Deserialises a ReactiveWidget from a Dictionary.
+## Returns null if the payload is invalid.
+static func from_dict(payload: Dictionary) -> ReactiveWidget:
+    if not _validate(payload):
+        return null
+    var w := ReactiveWidget.new()
+    w._deserialize(payload)
+    return w
 
-    value = data
+# ── Serialise ─────────────────────────────────────────────────────────────────
 
-# ── Sync back to WidgetData ───────────────────────────────────────────────────
-
-func to_data() -> WidgetData:
-    var data         := WidgetData.new()
-    data.widget_id   = widget_id.value
-    data.widget_type = widget_type.value
-    data.widget_name = widget_name.value
-    data.position    = position.value
-    data.size        = size.value
-    data.z_index     = z_index.value
-    data.parent_id   = parent_id.value
-    data.properties  = properties.value.duplicate()
-    data.node_id     = node_id.value
-    data.server_id   = server_id.value
-
-    data.children.clear()
+func serialize() -> Dictionary:
+    var serialised_children: Array = []
     for item: Variant in children.values():
         var child := item as ReactiveWidget
         if child != null:
-            data.children.append(child.to_data())
+            serialised_children.append(child.serialize())
 
-    return data
+    return {
+        "widget_id":   widget_id.value,
+        "widget_type": widget_type.value,
+        "widget_name": widget_name.value,
+        "position":    { "x": position.value.x, "y": position.value.y },
+        "size":        { "x": size.value.x,      "y": size.value.y     },
+        "z_index":     z_index.value,
+        "parent_id":   parent_id.value,
+        "node_id":     node_id.value,
+        "server_id":   server_id.value,
+        "properties":  properties.value.duplicate(),
+        "children":    serialised_children,
+    }
+
+# ── Deserialise ───────────────────────────────────────────────────────────────
+
+func _deserialize(payload: Dictionary) -> void:
+    widget_id.value   = payload.get("widget_id",   _generate_id())
+    widget_type.value = payload.get("widget_type", "")
+    widget_name.value = payload.get("widget_name", widget_type.value)
+    z_index.value     = payload.get("z_index",     0)
+    parent_id.value   = payload.get("parent_id",   "")
+    node_id.value     = payload.get("node_id",     "")
+    server_id.value   = payload.get("server_id",   "")
+    properties.value  = payload.get("properties",  {})
+
+    var pos: Dictionary = payload.get("position", {})
+    var sz:  Dictionary = payload.get("size",     {})
+    position.value = Vector2(pos.get("x", 0.0),   pos.get("y", 0.0))
+    size.value     = Vector2(sz.get("x",  100.0), sz.get("y", 100.0))
+
+    children.clear()
+    for child_dict: Dictionary in payload.get("children", []):
+        var child := ReactiveWidget.from_dict(child_dict)
+        if child != null:
+            child.owner = self
+            children.append(child)
+
+
+static func _validate(payload: Dictionary) -> bool:
+    if payload.is_empty():
+        push_warning("ReactiveWidget: Empty payload passed to from_dict().")
+        return false
+    if not payload.has("widget_type"):
+        push_warning("ReactiveWidget: Missing required field 'widget_type'.")
+        return false
+    return true
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,3 +127,10 @@ func is_bound() -> bool:
 
 func is_container() -> bool:
     return not children.values().is_empty()
+
+
+static func _generate_id() -> String:
+    return "%s-%s" % [
+        Time.get_unix_time_from_system(),
+        randi() % 0xFFFF
+    ]

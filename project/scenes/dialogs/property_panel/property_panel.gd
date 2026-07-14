@@ -4,7 +4,6 @@ extends PanelContainer
 
 var _current_target: BaseWidget = null
 
-# Set externally by InspectorManager or the scene that owns these nodes
 var node_browser:  BrowseNodes = null
 var script_editor: Node        = null
 
@@ -19,9 +18,7 @@ func _ready() -> void:
     apply_btn.pressed.connect(_on_apply_btn_pressed)
     close_btn.pressed.connect(_on_close_btn_pressed)
 
-    EventBus.widget_selected.connect(_on_widget_selected)
-    EventBus.widget_deselected.connect(_on_widget_deselected)
-    EventBus.widget_property_changed.connect(_on_widget_property_changed)
+    AppState.selected_widget.changed.connect(_on_selected_widget_changed)
 
 
 func _on_apply_btn_pressed() -> void:
@@ -29,37 +26,21 @@ func _on_apply_btn_pressed() -> void:
 
 
 func _on_close_btn_pressed() -> void:
-    # Emit deselect intent so the manager can handle docked vs. floating
-    # behaviour rather than hiding directly.
     IntentBus.deselect_widget_requested.emit()
 
-# ── EventBus handlers ─────────────────────────────────────────────────────────
+# ── AppState Handlers ─────────────────────────────────────────────────────────
 
-## Responds to a confirmed widget selection and loads the widget into the panel.
-func _on_widget_selected(widget: BaseWidget) -> void:
-    _load_target(widget)
-
-
-## Responds to a confirmed widget deselection and clears the panel.
-func _on_widget_deselected() -> void:
-    clear()
-
-
-## Responds to a confirmed property change and forwards it to the widget's
-## WidgetProperties instance so live state remains consistent.
-func _on_widget_property_changed(widget_id: String, property: String, value: Variant) -> void:
-    if _current_target == null:
-        return
-    if _current_target.widget_id != widget_id:
-        return
-
-    var props := _get_target_properties(_current_target)
-    if props != null:
-        props.on_property_changed(property, value)
+## Responds to changes on AppState.selected_widget.
+## Null indicates deselection; any BaseWidget value triggers a panel load.
+func _on_selected_widget_changed() -> void:
+    var widget: BaseWidget = AppState.selected_widget.value
+    if widget == null:
+        clear()
+    else:
+        _load_target(widget)
 
 # ── Load target into panel ────────────────────────────────────────────────────
 
-## Loads a BaseWidget into the panel. Called internally via EventBus.
 func _load_target(target: BaseWidget) -> void:
     _current_target = target
 
@@ -83,26 +64,27 @@ func _reapply_current_target() -> void:
     if props != null:
         props.reapply()
 
-# ── Widget loading ────────────────────────────────────────────────────────────
+# ── Widget Loading ────────────────────────────────────────────────────────────
 
 func _load_widget(widget: BaseWidget) -> void:
     panel_title.text = widget.get_widget_class()
     widget.build_properties(WidgetPropertyBuilder.new(self))
 
-# ── Property emission ─────────────────────────────────────────────────────────
+# ── Property Emission ─────────────────────────────────────────────────────────
 
-## Called by WidgetPropertyBuilder when the user edits a property in the UI.
-## Emits a change intent rather than applying the value directly.
+## Called by WidgetPropertyBuilder when the user edits a property.
+## Emits a change intent — BaseWidget receives it, mutates ReactiveWidget,
+## and the reactive changed signal propagates to any listeners automatically.
 func emit_property_changed(property: String, value: Variant) -> void:
-    if _current_target == null:
+    if _current_target == null or _current_target.data == null:
         return
     IntentBus.change_widget_property_requested.emit(
-        _current_target.widget_id,
+        _current_target.data.widget_id.value,
         property,
         value
     )
 
-# ── Helpers called by WidgetPropertyBuilder ───────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 func _get_target_properties(target: Node) -> WidgetProperties:
     if target == null:

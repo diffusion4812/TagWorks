@@ -1,7 +1,7 @@
 extends Node
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
-signal add_page_requested(page_name: String)
+signal create_page_requested(page_name: String)
 signal delete_page_requested(page_id: String)
 signal rename_page_requested(page_id: String, new_name: String)
 
@@ -9,6 +9,7 @@ signal rename_page_requested(page_id: String, new_name: String)
 signal add_widget_requested(scene: PackedScene)
 signal delete_widget_requested(widget_id: String)
 signal rename_widget_requested(widget_id: String, new_name: String)
+signal change_widget_property_requested(widget_id: String, property: String, value: Variant)
 
 # ── Project ───────────────────────────────────────────────────────────────────
 signal new_project_requested()

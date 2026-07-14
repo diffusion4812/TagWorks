@@ -2,15 +2,13 @@ class_name ReactiveCanvas
 extends Reactive
 
 var widgets  : ReactiveArray      # serialised widget layout
-var selected_widget : ReactiveWidget
 var is_dirty : ReactiveBool       # unsaved changes
 
 func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveCanvas") -> void:
-    super._init(initial_owner)
+    super._init(initial_owner, label)
 
-    widgets  = ReactiveArray.new([], self)
-    selected_widget = ReactiveWidget.new(null, self)
-    is_dirty = ReactiveBool.new(false, self)
+    widgets  = ReactiveArray.new([], self, "widgets")
+    is_dirty = ReactiveBool.new(false, self, "is_dirty")
 
     if not data.is_empty():
         from_data(data)

@@ -2,6 +2,7 @@
 extends Node
 
 # ── Child references ──────────────────────────────────────────────────────────
+
 @onready var file_menu:           PopupMenu             = %FileMenu
 @onready var edit_menu:           PopupMenu             = %EditMenu
 @onready var server_menu:         PopupMenu             = %ServerMenu
@@ -12,17 +13,18 @@ extends Node
 @onready var inspector_container: VSplitContainer       = %InspectorContainer
 @onready var widget_palette:      WidgetPalette         = $SafeAreaContainer/RootLayout/WorkArea/InspectorContainer/WidgetPalette
 @onready var property_panel:      PropertyPanel         = $SafeAreaContainer/RootLayout/WorkArea/InspectorContainer/PropertyPanel
-@onready var status_bar:          AppStatusBar          = $SafeAreaContainer/RootLayout/StatusBar
 @onready var connection_dialog:   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
 @onready var file_dialog:         FileDialog            = $Dialogs/FileDialog
 @onready var status_dialog:       OpcUaStatusDialog     = $Dialogs/OpcUaStatusDialog
 
 # ── Constants ─────────────────────────────────────────────────────────────────
+
 ## Number of static items in the server menu that precede the dynamic
 ## server list. Used to avoid removing fixed entries during a rebuild.
 const SERVER_MENU_FIXED_ITEM_COUNT: int = 1
 
 # ── State ─────────────────────────────────────────────────────────────────────
+
 ## Tracks dynamically created server submenus keyed by server_id.
 ## Enables clean teardown and rebuild when the server list changes.
 var _server_submenus: Dictionary = {}
@@ -32,7 +34,6 @@ var _server_submenus: Dictionary = {}
 func _ready() -> void:
     _set_scaling()
     _connect_signals()
-    status_bar.set_disconnected()
 
 
 ## Scales the UI relative to the screen DPI so the layout is consistent
@@ -52,16 +53,10 @@ func _connect_signals() -> void:
     edit_mode_toggle.toggled.connect(_on_mode_toggled)
 
     # ── Server registry ───────────────────────────────────────────────────────
-    # Full rebuild only when the server list changes structurally.
     ProjectManager.opc_ua_registry.configs_changed.connect(_rebuild_server_menu)
     _rebuild_server_menu()
 
     # ── OPC UA connection state ───────────────────────────────────────────────
-    OpcUaManager.connected.connect(_on_opcua_connected)
-    OpcUaManager.connection_lost.connect(_on_opcua_connection_lost)
-    OpcUaManager.connection_failed.connect(_on_opcua_connection_failed)
-
-    # Lightweight server menu refresh on any connection state change.
     OpcUaManager.connected.connect(_on_connection_state_changed.unbind(1))
     OpcUaManager.connection_lost.connect(_on_connection_state_changed.unbind(1))
     OpcUaManager.connection_failed.connect(_on_connection_state_changed.unbind(1))
@@ -69,15 +64,13 @@ func _connect_signals() -> void:
     # ── File dialog ───────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
-    # ── EventBus — project lifecycle ──────────────────────────────────────────
-    EventBus.project_opened.connect(_on_project_opened)
-    EventBus.project_closed.connect(_on_project_closed)
-    EventBus.project_saved.connect(_on_project_saved)
+    # ── AppState — project lifecycle ──────────────────────────────────────────
+    AppState.current_project.changed.connect(_on_current_project_changed)
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
 func _on_mode_toggled(is_edit: bool) -> void:
-    AppState.is_edit_mode.value = is_edit
+    AppState.edit_mode.value = is_edit
 
 # ── Menu Handlers ─────────────────────────────────────────────────────────────
 
@@ -103,8 +96,6 @@ func _on_server_menu_pressed(id: int) -> void:
 ## Tears down all dynamic server menu entries and rebuilds them from
 ## the current registry state. Called when the server list changes structurally.
 func _rebuild_server_menu() -> void:
-    # Use free() rather than queue_free() so submenus are fully removed
-    # before new ones are added in the same frame.
     for submenu: PopupMenu in _server_submenus.values():
         if is_instance_valid(submenu):
             submenu.free()
@@ -166,8 +157,8 @@ func _on_server_status_timeout() -> void:
         if submenu == null:
             continue
 
-        submenu.set_item_disabled(0, connected)     # Connect
-        submenu.set_item_disabled(1, not connected) # Disconnect
+        submenu.set_item_disabled(0, connected)
+        submenu.set_item_disabled(1, not connected)
 
 
 func _on_connection_state_changed() -> void:
@@ -175,8 +166,7 @@ func _on_connection_state_changed() -> void:
 
 # ── Project Management ────────────────────────────────────────────────────────
 
-## Emits a save intent. If no project is active, falls back to the save dialog
-## so the user can choose a path first.
+## Emits a save intent. If no project is active, falls back to the save dialog.
 func _request_save() -> void:
     if ProjectManager.has_active_project():
         IntentBus.save_project_requested.emit()
@@ -205,50 +195,25 @@ func _open_load_dialog() -> void:
 func _on_file_dialog_selected(path: String) -> void:
     match file_dialog.file_mode:
         FileDialog.FILE_MODE_SAVE_FILE:
-            IntentBus.save_project_as_requested.emit()
+            IntentBus.save_project_as_requested.emit(path)
         FileDialog.FILE_MODE_OPEN_FILE:
-            IntentBus.load_project_requested.emit(path)
+            IntentBus.open_project_requested.emit(path)
 
-# ── EventBus — Project event handlers ────────────────────────────────────────
+# ── AppState — Project Handlers ───────────────────────────────────────────────
 
-func _on_project_opened(project_data: ProjectData) -> void:
-    AppState.is_edit_mode.value = false
-    inspector_container.show()
+## Fires whenever AppState.current_project changes.
+## An empty name and path indicates a closed or unloaded project.
+func _on_current_project_changed() -> void:
+    var project: ReactiveProject = AppState.current_project.value
+    var is_open := not project.file_path.value.is_empty() \
+                or not project.project_name.value.is_empty()
 
-func _on_project_saved(path: String) -> void:
-    status_bar.show_message("Project saved: %s" % path.get_file())
+    AppState.edit_mode.value = false
+    edit_mode_toggle.set_pressed_no_signal(false)
 
-
-func _on_project_closed() -> void:
-    AppState.is_edit_mode.value = false
-    canvas_container.hide()
-    inspector_container.hide()
-    status_bar.show_message("Project closed.")
-
-# ── OPC UA ────────────────────────────────────────────────────────────────────
-func _on_opcua_connected(server_id: String) -> void:
-    var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
-    var label := cfg.display_name if cfg else server_id
-    status_bar.set_connected("%s — connected" % label)
-
-
-func _on_opcua_connection_lost(server_id: String) -> void:
-    var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
-    var label := cfg.display_name if cfg else server_id
-    status_bar.show_message("%s — connection lost." % label)
-    _update_status_bar_connectivity()
-
-
-func _on_opcua_connection_failed(server_id: String) -> void:
-    var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
-    var label := cfg.display_name if cfg else server_id
-    status_bar.show_message("%s — connection failed." % label)
-    _update_status_bar_connectivity()
-
-
-## Sets the status bar to disconnected only when no servers remain connected.
-func _update_status_bar_connectivity() -> void:
-    for cfg: OpcUaServerConfig in ProjectManager.opc_ua_registry.get_all_configs():
-        if OpcUaManager.is_server_connected(cfg.id):
-            return
-    status_bar.set_disconnected()
+    if is_open:
+        inspector_container.show()
+        canvas_container.show()
+    else:
+        canvas_container.hide()
+        inspector_container.hide()

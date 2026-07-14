@@ -6,7 +6,7 @@ var value: bool:
         if value == v:
             return
         value = v
-        _log("CHANGED", str(v))
+        _log("CHANGED", _describe_value())
         reactive_changed.emit(self)
 
 func _init(initial_value: bool = false, initial_owner: Reactive = null, label: String = "") -> void:

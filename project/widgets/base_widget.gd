@@ -16,31 +16,21 @@ const Z_INDEX_BASE := 0
 @export var is_container: bool = false
 
 # ─────────────────────────────────────────────
-# Widget Data
+# Reactive Data
 # ─────────────────────────────────────────────
 
-## The serialisable data resource associated with this widget instance.
-## Initialised on spawn via init() or populated during deserialize().
-var data: WidgetData = null
+## The reactive data object backing this widget instance.
+var data: ReactiveWidget = null
 
 # ─────────────────────────────────────────────
 # Container Properties
-# Only meaningful when is_container = true
 # ─────────────────────────────────────────────
 
 var container_name: String = "Container":
     set(value):
         container_name = value
         if data != null:
-            data.properties["container_name"] = value
-
-# ─────────────────────────────────────────────
-# Canvas Reference
-# Injected by WidgetCanvas._subscribe_widget()
-# ─────────────────────────────────────────────
-
-## Reference to the root WidgetCanvas that owns this widget.
-var _root_canvas: WidgetCanvas = null
+            data.properties.value["container_name"] = value
 
 # ─────────────────────────────────────────────
 # Lifecycle
@@ -53,51 +43,35 @@ func _ready() -> void:
     if is_container:
         z_index = Z_INDEX_BASE
 
-    selected.connect(_on_selected)
-
-    EventBus.widget_property_changed.connect(_on_widget_property_changed)
-
-func _enter_tree() -> void:
-    _root_canvas = _find_root_canvas()
+    # React to property change intents targeting this widget
+    IntentBus.change_widget_property_requested.connect(_on_change_widget_property_requested)
 
 
-func _find_root_canvas() -> WidgetCanvas:
-    var node := get_parent()
-    while node != null:
-        if node is WidgetCanvas:
-            return node as WidgetCanvas
-        node = node.get_parent()
-    return null
-
-## Initialises this widget from a WidgetData resource.
-## Called by WidgetCanvas when spawning a new widget.
-func init(widget_data: WidgetData) -> void:
-    data          = widget_data
-    widget_label  = data.widget_name
-    position      = data.position
-    size          = data.size
-    z_index       = data.z_index
+## Initialises this widget from a ReactiveWidget data object.
+func init(widget_data: ReactiveWidget) -> void:
+    data         = widget_data
+    widget_label = data.widget_name.value
+    position     = data.position.value
+    size         = data.size.value
+    z_index      = data.z_index.value
 
     if is_container:
-        container_name = data.properties.get("container_name", "Container")
+        container_name = data.properties.value.get("container_name", "Container")
 
-    _apply_properties(data.properties)
+    _apply_properties(data.properties.value)
 
 # ─────────────────────────────────────────────
 # Virtuals
 # ─────────────────────────────────────────────
 
-## Override in subclasses to return a unique type identifier.
 func get_widget_class() -> String:
     return "BaseWidget"
 
 
-## Called by child widgets to update their visual display.
 func update_display(_value: Variant) -> void:
     pass
 
 
-## Override to expose widget-specific properties in the property panel.
 func build_properties(builder: WidgetPropertyBuilder) -> void:
     builder.add_float_field("position/x", "Pos X", position.x)
     builder.add_float_field("position/y", "Pos Y", position.y)
@@ -108,20 +82,14 @@ func build_properties(builder: WidgetPropertyBuilder) -> void:
         builder.add_string_field("container_name", "Name", container_name)
 
 
-## Override to provide the Control that accepts dropped children.
-## Returns self for containers, null for leaf widgets.
 func get_drop_target() -> Control:
     return self if is_container else null
 
 
-## Override in container subclasses to protect internal structural controls
-## and their entire subtrees from the mouse filter sweep.
 func get_protected_controls() -> Array[Control]:
     return []
 
 
-## Override in subclasses to apply widget-specific properties from a Dictionary.
-## Called during init() and when a property change is received from the EventBus.
 func _apply_properties(props: Dictionary) -> void:
     pass
 
@@ -129,100 +97,47 @@ func _apply_properties(props: Dictionary) -> void:
 # Property Changes
 # ─────────────────────────────────────────────
 
-## Receives property change events from the EventBus.
-## Ignores events not targeting this widget instance.
-func _on_widget_property_changed(widget_id: String, property: String, value: Variant) -> void:
-    if data == null or data.widget_id != widget_id:
+## Receives property change intents from IntentBus.
+## Ignores intents not targeting this widget instance.
+func _on_change_widget_property_requested(widget_id: String, property: String, value: Variant) -> void:
+    if data == null or data.widget_id.value != widget_id:
         return
-    apply_property(property, value)
+    _apply_property(property, value)
 
 
-## Applies a single property change to both the data resource and the widget display.
-func apply_property(property: String, value: Variant) -> void:
+## Applies a single property change to the reactive data object and
+## updates the live scene display. The mutation on data propagates
+## automatically via the reactive changed signal.
+func _apply_property(property: String, value: Variant) -> void:
     if data == null:
         return
 
-    # Handle reserved layout properties explicitly
     match property:
         "position/x":
-            position.x    = value
-            data.position = position
+            position.x          = value
+            data.position.value = position
         "position/y":
-            position.y    = value
-            data.position = position
+            position.y          = value
+            data.position.value = position
         "size/x":
-            size.x    = value
-            data.size = size
+            size.x          = value
+            data.size.value = size
         "size/y":
-            size.y    = value
-            data.size = size
+            size.y          = value
+            data.size.value = size
         "container_name":
             container_name = value
         _:
-            # All other properties are delegated to the subclass
-            data.properties[property] = value
+            data.properties.value[property] = value
             _apply_properties({ property: value })
 
 # ─────────────────────────────────────────────
 # Container Behaviour
 # ─────────────────────────────────────────────
 
-## Elevates a newly added child above this container's z-index.
 func _elevate_child(child: Control) -> void:
     if is_container:
         child.z_index = z_index + 1
-
-# ─────────────────────────────────────────────
-# Drag and Drop
-# ─────────────────────────────────────────────
-
-func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
-    if not AppState.is_edit_mode.value:
-        return false
-    if not is_container:
-        return false
-    if not data is Dictionary or not data.has("widget"):
-        return false
-
-    var widget := data["widget"] as BaseWidget
-    if widget == null or widget == self:
-        return false
-
-    return not _is_ancestor_of(widget)
-
-
-func _drop_data(at_position: Vector2, data: Variant) -> void:
-    var widget := data["widget"] as BaseWidget
-    if widget == null:
-        return
-    if not is_instance_valid(_root_canvas):
-        push_warning("BaseWidget: _root_canvas is not set on '%s', cannot reparent." % name)
-        return
-
-    var drop_target := get_drop_target()
-    if drop_target == null:
-        return
-
-    _root_canvas._reparent_widget(widget, drop_target, at_position)
-
-
-## Returns true if this node is an ancestor of the given node.
-func _is_ancestor_of(node: Node) -> bool:
-    var current := node.get_parent()
-    while current != null:
-        if current == self:
-            return true
-        current = current.get_parent()
-    return false
-
-# ─────────────────────────────────────────────
-# Edit Mode
-# ─────────────────────────────────────────────
-
-func _on_selected(_control: SelectableControl) -> void:
-    if _root_canvas == null:
-        return
-    _root_canvas.selected_widget.value = self as BaseWidget
 
 # ─────────────────────────────────────────────
 # Selection
@@ -235,51 +150,50 @@ func _apply_selected_style(active: bool) -> void:
 # Serialisation
 # ─────────────────────────────────────────────
 
-## Syncs the current scene state back into the WidgetData resource
-## and returns the serialised Dictionary.
 func serialize() -> Dictionary:
     if data == null:
-        data = WidgetData.create(get_widget_class(), widget_label)
+        data = ReactiveWidget.create(get_widget_class(), widget_label)
 
-    data.widget_type  = get_widget_class()
-    data.widget_name  = widget_label
-    data.position     = position
-    data.size         = size
-    data.z_index      = z_index
+    data.widget_type.value = get_widget_class()
+    data.widget_name.value = widget_label
+    data.position.value    = position
+    data.size.value        = size
+    data.z_index.value     = z_index
 
     if is_container:
-        data.properties["container_name"] = container_name
-        data.children                     = _serialize_children(self)
+        data.properties.value["container_name"] = container_name
+        data.children.clear()
+        for child_data: ReactiveWidget in _serialize_children(self):
+            data.children.append(child_data)
 
     return data.serialize()
 
 
-func _serialize_children(root: Control) -> Array[WidgetData]:
-    var result: Array[WidgetData] = []
+func _serialize_children(root: Control) -> Array[ReactiveWidget]:
+    var result: Array[ReactiveWidget] = []
     for child in root.get_children():
         if child is BaseWidget:
             var child_widget := child as BaseWidget
-            child_widget.serialize()          # Sync child data first
+            child_widget.serialize()
             if child_widget.data != null:
                 result.append(child_widget.data)
     return result
 
 
-## Restores widget state from a serialised Dictionary via WidgetData.
 func deserialize(payload: Dictionary) -> void:
     super.deserialize(payload)
 
-    data = WidgetData.from_dict(payload)
+    data = ReactiveWidget.from_dict(payload)
     if data == null:
-        push_warning("BaseWidget: Failed to deserialize WidgetData for '%s'." % name)
+        push_warning("BaseWidget: Failed to deserialize ReactiveWidget for '%s'." % name)
         return
 
-    widget_label = data.widget_name
-    position     = data.position
-    size         = data.size
-    z_index      = data.z_index
+    widget_label = data.widget_name.value
+    position     = data.position.value
+    size         = data.size.value
+    z_index      = data.z_index.value
 
     if is_container:
-        container_name = data.properties.get("container_name", "Container")
+        container_name = data.properties.value.get("container_name", "Container")
 
-    _apply_properties(data.properties)
+    _apply_properties(data.properties.value)

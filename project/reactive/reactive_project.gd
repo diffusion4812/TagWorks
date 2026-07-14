@@ -2,63 +2,96 @@
 class_name ReactiveProject
 extends ReactiveObject
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+const FILE_VERSION := 2
+
 # ── Fields ────────────────────────────────────────────────────────────────────
 
 var project_name   : ReactiveString
 var file_path      : ReactiveString
-var opc_ua_servers : ReactiveDictionary
+var opc_ua_servers : ReactiveArray
 var canvas         : ReactiveCanvas
 var pages          : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
-func _init(data: ProjectData = null, initial_owner: Reactive = null) -> void:
-    super._init(null, initial_owner)
+func _init(initial_owner: Reactive = null, label: String = "") -> void:
+    super._init(null, initial_owner, label)
 
-    project_name   = ReactiveString.new("",      self)
-    file_path      = ReactiveString.new("",      self)
-    opc_ua_servers = ReactiveDictionary.new({},  self)
-    canvas         = ReactiveCanvas.new({},      self)
-    pages          = ReactiveArray.new([],       self)
+    project_name   = ReactiveString.new("",     self, "project_name")
+    file_path      = ReactiveString.new("",     self, "file_path")
+    opc_ua_servers = ReactiveArray.new([],      self, "opc_ua_servers")
+    canvas         = ReactiveCanvas.new({},     self, "canvas")
+    pages          = ReactiveArray.new([],      self, "pages")
 
-    if data != null:
-        from_data(data)
+func _describe_value() -> String:
+    if project_name == null:
+        return ""
+    return project_name.value
 
-# ── Sync from ProjectData ─────────────────────────────────────────────────────
+# ── Factory ───────────────────────────────────────────────────────────────────
 
-func from_data(data: ProjectData) -> void:
-    project_name.value   = data.project_name
-    file_path.value      = data.file_path
-    canvas.from_data(data.canvas)
+## Returns a new, empty ReactiveProject.
+static func create_empty() -> ReactiveProject:
+    return ReactiveProject.new()
 
-    pages.clear()
-    for page: PageData in data.pages:
-        pages.append(ReactivePage.new(page, self))
 
-    value = data
+## Deserialises a ReactiveProject from a Dictionary.
+## Returns null if the payload is invalid.
+static func from_dict(payload: Dictionary) -> ReactiveProject:
+    if not _validate(payload):
+        return null
+    var p := ReactiveProject.new()
+    p._deserialize(payload)
+    return p
 
-# ── Sync back to ProjectData ──────────────────────────────────────────────────
+# ── Serialise ─────────────────────────────────────────────────────────────────
 
-func to_data() -> ProjectData:
-    var data            := ProjectData.new()
-    data.project_name   = project_name.value
-    data.file_path      = file_path.value
-    data.canvas         = canvas.to_data()
-
-    data.pages.clear()
+func serialize() -> Dictionary:
+    var serialised_pages: Array = []
     for item: Variant in pages.values():
         var page := item as ReactivePage
         if page != null:
-            data.pages.append(page.to_data())
+            serialised_pages.append(page.serialize())
 
-    return data
+    return {
+        "version":        FILE_VERSION,
+        "project_name":   project_name.value,
+        "opc_ua_servers": opc_ua_servers.value.duplicate(),
+        "canvas":         canvas.to_data(),
+        "pages":          serialised_pages,
+    }
+
+# ── Deserialise ───────────────────────────────────────────────────────────────
+
+func _deserialize(payload: Dictionary) -> void:
+    project_name.value   = payload.get("project_name",   "")
+    opc_ua_servers.value = payload.get("opc_ua_servers", {})
+    canvas.from_dict(payload.get("canvas", {}))
+
+    pages.clear()
+    for page_dict: Dictionary in payload.get("pages", []):
+        var page := ReactivePage.from_dict(page_dict, self)
+        if page != null:
+            pages.append(page)
+
+
+static func _validate(payload: Dictionary) -> bool:
+    if payload.is_empty():
+        push_warning("ReactiveProject: Empty payload.")
+        return false
+    var v: int = payload.get("version", 0)
+    if v != FILE_VERSION:
+        push_warning("ReactiveProject: Unsupported file version %d." % v)
+        return false
+    return true
 
 # ── Page Management ───────────────────────────────────────────────────────────
 
 func add_page(page: ReactivePage) -> void:
     page.owner = self
     pages.append(page)
-
 
 func remove_page(target_id: String) -> bool:
     return _remove_recursive(target_id, pages)
@@ -72,30 +105,23 @@ func _remove_recursive(target_id: String, array: ReactiveArray) -> bool:
             continue
         if page.page_id.value == target_id:
             array.remove_at(i)
-            EventBus.page_deleted.emit(target_id)
             return true
         if _remove_recursive(target_id, page.children):
             return true
     return false
 
 
-## Moves a page to a new position in the hierarchy.
-## drop_mode matches Godot's Tree drop section constants:
-##  -1 = insert above target
-##   0 = insert as first child of target
-##   1 = insert below target
 func move_page(page_id: String, target: ReactivePage, drop_mode: int) -> bool:
     if drop_mode == 2 or drop_mode == -100:
-        push_warning("ReactiveProject: Cannot move page with an invalid drop mode '%s'." % drop_mode)
+        push_warning("ReactiveProject: Invalid drop mode '%s'." % drop_mode)
         return false
-    # Prevent dropping a page onto itself or its own descendant
     if page_id == target.page_id.value or _is_ancestor(page_id, target):
-        push_warning("ReactiveProject: Cannot move page '%s' into itself or a descendant." % page_id)
+        push_warning("ReactiveProject: Cannot move '%s' into itself or a descendant." % page_id)
         return false
 
     var page := _detach_recursive(page_id, pages)
     if page == null:
-        push_warning("ReactiveProject: Could not detach page '%s' for move." % page_id)
+        push_warning("ReactiveProject: Could not detach page '%s'." % page_id)
         return false
 
     match drop_mode:
@@ -107,7 +133,6 @@ func move_page(page_id: String, target: ReactivePage, drop_mode: int) -> bool:
         1:
             _insert_sibling(page, target, 1)
 
-    EventBus.page_hierarchy_changed.emit()
     return true
 
 
@@ -127,6 +152,7 @@ func _find_recursive_id(target_id: String, array: ReactiveArray) -> ReactivePage
             return found
     return null
 
+
 func find_page_name(target_name: String) -> ReactivePage:
     return _find_recursive_name(target_name, pages)
 
@@ -142,6 +168,7 @@ func _find_recursive_name(target_name: String, array: ReactiveArray) -> Reactive
         if found != null:
             return found
     return null
+
 
 func get_default_page() -> ReactivePage:
     var marked: ReactivePage = _find_default_recursive(pages)
@@ -165,7 +192,10 @@ func _find_default_recursive(array: ReactiveArray) -> ReactivePage:
 
 
 func set_default_page(target_id: String) -> bool:
-    return _set_default_recursive(target_id, pages)
+    var found := _set_default_recursive(target_id, pages)
+    if not found:
+        push_warning("ReactiveProject: set_default_page() — page_id '%s' not found." % target_id)
+    return found
 
 
 func _set_default_recursive(target_id: String, array: ReactiveArray) -> bool:
@@ -183,8 +213,6 @@ func _set_default_recursive(target_id: String, array: ReactiveArray) -> bool:
 
 # ── Move Helpers ──────────────────────────────────────────────────────────────
 
-## Removes and returns a page from anywhere in the hierarchy without emitting
-## page_deleted — the page is being relocated, not destroyed.
 func _detach_recursive(target_id: String, array: ReactiveArray) -> ReactivePage:
     var items: Array = array.values()
     for i: int in items.size():
@@ -200,8 +228,6 @@ func _detach_recursive(target_id: String, array: ReactiveArray) -> ReactivePage:
     return null
 
 
-## Inserts page immediately before (offset 0) or after (offset 1) the target
-## within the target's parent array.
 func _insert_sibling(page: ReactivePage, target: ReactivePage, offset: int) -> void:
     var parent_array := _find_parent_array(target.page_id.value, pages)
     if parent_array == null:
@@ -217,7 +243,6 @@ func _insert_sibling(page: ReactivePage, target: ReactivePage, offset: int) -> v
             return
 
 
-## Returns the ReactiveArray that directly contains the page with target_id.
 func _find_parent_array(target_id: String, array: ReactiveArray) -> ReactiveArray:
     for item: Variant in array.values():
         var page := item as ReactivePage
@@ -231,7 +256,6 @@ func _find_parent_array(target_id: String, array: ReactiveArray) -> ReactiveArra
     return null
 
 
-## Returns the ReactivePage that directly owns target_id, or null if top-level.
 func _find_parent_page(target_id: String) -> ReactivePage:
     return _find_parent_page_recursive(target_id, pages, null)
 
@@ -253,7 +277,6 @@ func _find_parent_page_recursive(
     return null
 
 
-## Returns true if ancestor_id is a direct or indirect parent of target.
 func _is_ancestor(ancestor_id: String, target: ReactivePage) -> bool:
     return _is_ancestor_recursive(ancestor_id, target.children)
 

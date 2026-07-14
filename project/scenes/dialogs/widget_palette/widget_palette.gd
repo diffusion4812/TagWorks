@@ -7,7 +7,6 @@ const WIDGET_TYPES: Array[Dictionary] = [
     { "label": "🏷️ Label",         "scene": preload("res://widgets/label_widget/label_widget.tscn")                    },
     { "label": "🔢 Numeric Field", "scene": preload("res://widgets/numeric_field_widget/numeric_field_widget.tscn")    },
     { "label": "📈 Live Plot",     "scene": preload("res://widgets/live_plot_widget/live_plot_widget.tscn")            },
-    { "label": "🗂️ Tab Container", "scene": preload("res://widgets/tab_widget/tab_widget.tscn")                        },
 ]
 
 @onready var palette_list: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/PaletteList

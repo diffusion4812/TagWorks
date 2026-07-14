@@ -27,7 +27,6 @@ func _ready() -> void:
     if LOG_TO_FILE:
         _log_file = FileAccess.open(LOG_FILE_PATH, FileAccess.WRITE)
 
-    _connect_bus(EventBus,  "EventBus")
     _connect_bus(IntentBus, "IntentBus")
 
     _write("SignalLogger initialised. Monitoring EventBus and IntentBus.")
@@ -98,7 +97,6 @@ func _connect_bus(bus: Node, bus_name: String) -> void:
 # ── Late Connection Polling ───────────────────────────────────────────────────
 
 func _poll_late_connections() -> void:
-    _scan_for_late_connections(EventBus,  "EventBus")
     _scan_for_late_connections(IntentBus, "IntentBus")
 
 
@@ -258,8 +256,6 @@ func _describe_callable(c: Callable) -> String:
 
 
 func _get_bus_name(bus: Node) -> String:
-    if bus == EventBus:
-        return "EventBus"
     if bus == IntentBus:
         return "IntentBus"
     return bus.name

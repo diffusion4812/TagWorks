@@ -12,7 +12,7 @@ var children   : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
-func _init(data: PageData = null, initial_owner: Reactive = null, label: String = "ReactivePage") -> void:
+func _init(initial_owner: Reactive = null, label: String = "ReactivePage") -> void:
     super._init(initial_owner, label)
 
     page_id    = ReactiveString.new("",    self, "page_id")
@@ -21,47 +21,75 @@ func _init(data: PageData = null, initial_owner: Reactive = null, label: String 
     canvas     = ReactiveCanvas.new({},    self, "canvas")
     children   = ReactiveArray.new([],     self, "children")
 
-    if data != null:
-        from_data(data)
 
 func _describe_value() -> String:
     return '"%s"' % page_name.value
 
-# ── Sync from PageData ────────────────────────────────────────────────────────
+# ── Factory ───────────────────────────────────────────────────────────────────
 
-func from_data(data: PageData) -> void:
-    page_id.value    = data.page_id
-    page_name.value  = data.page_name
-    is_default.value = data.is_default
-    canvas.from_data(data.canvas.duplicate())
+## Creates a new ReactivePage with a generated ID and the given name.
+static func create(name: String = "New Page", initial_owner: Reactive = null, label: String = "ReactivePage") -> ReactivePage:
+    var p            := ReactivePage.new(initial_owner, label)
+    p.page_id.value  = _generate_id()
+    p.page_name.value = name
+    return p
 
-    children.clear()
-    for child: PageData in data.children:
-        children.append(ReactivePage.new(child, self))
 
-# ── Sync back to PageData ─────────────────────────────────────────────────────
+## Deserialises a ReactivePage from a Dictionary.
+## Returns null if the payload is invalid.
+static func from_dict(payload: Dictionary, initial_owner: Reactive = null) -> ReactivePage:
+    if not _validate(payload):
+        return null
+    var p := ReactivePage.new(initial_owner)
+    p._deserialize(payload)
+    return p
 
-func to_data() -> PageData:
-    var data        := PageData.new()
-    data.page_id    = page_id.value
-    data.page_name  = page_name.value
-    data.is_default = is_default.value
-    data.canvas     = canvas.to_data()
+# ── Serialise ─────────────────────────────────────────────────────────────────
 
-    data.children.clear()
+func serialize() -> Dictionary:
+    var serialised_children: Array = []
     for item: Variant in children.values():
         var child := item as ReactivePage
         if child != null:
-            data.children.append(child.to_data())
+            serialised_children.append(child.serialize())
 
-    return data
+    return {
+        "page_id":    page_id.value,
+        "page_name":  page_name.value,
+        "is_default": is_default.value,
+        "canvas":     canvas.to_data(),
+        "children":   serialised_children,
+    }
+
+# ── Deserialise ───────────────────────────────────────────────────────────────
+
+func _deserialize(payload: Dictionary) -> void:
+    page_id.value    = payload.get("page_id",    _generate_id())
+    page_name.value  = payload.get("page_name",  "New Page")
+    is_default.value = payload.get("is_default", false)
+    canvas.from_dict(payload.get("canvas", {}))
+
+    children.clear()
+    for child_dict: Dictionary in payload.get("children", []):
+        var child := ReactivePage.from_dict(child_dict, self)
+        if child != null:
+            children.append(child)
+
+
+static func _validate(payload: Dictionary) -> bool:
+    if payload.is_empty():
+        push_warning("ReactivePage: Empty payload passed to from_dict().")
+        return false
+    if not payload.has("page_id"):
+        push_warning("ReactivePage: Missing required field 'page_id'.")
+        return false
+    return true
 
 # ── Hierarchy ─────────────────────────────────────────────────────────────────
 
 func add_child_page(page: ReactivePage) -> void:
     page.owner = self
     children.append(page)
-    EventBus.page_created.emit(page.to_data())
 
 
 func remove_child_page(target_id: String) -> bool:
@@ -72,7 +100,6 @@ func remove_child_page(target_id: String) -> bool:
             continue
         if page.page_id.value == target_id:
             children.remove_at(i)
-            EventBus.page_deleted.emit(target_id)
             return true
     return false
 
@@ -87,3 +114,11 @@ func get_child_page(target_id: String) -> ReactivePage:
 
 func is_leaf() -> bool:
     return children.values().is_empty()
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+static func _generate_id() -> String:
+    return "%s-%s" % [
+        Time.get_unix_time_from_system(),
+        randi() % 0xFFFF
+    ]
