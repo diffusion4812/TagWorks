@@ -67,7 +67,7 @@ func _deserialize(payload: Dictionary) -> void:
     page_id.value    = payload.get("page_id",    _generate_id())
     page_name.value  = payload.get("page_name",  "New Page")
     is_default.value = payload.get("is_default", false)
-    canvas.from_dict(payload.get("canvas", {}))
+    canvas.from_data(payload.get("canvas", {}))
 
     children.clear()
     for child_dict: Dictionary in payload.get("children", []):

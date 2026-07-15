@@ -23,5 +23,8 @@ func from_data(data: Dictionary) -> void:
 func to_data() -> Dictionary:
     var result: Array = []
     for item: Variant in widgets.values():
-        result.append(item)
+        if item is ReactiveWidget:
+            result.append(item.to_data())
+        else:
+            push_warning("ReactiveCanvas: item in widgets is not a BaseWidget — skipping.")
     return { "widgets": result }

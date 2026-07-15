@@ -3,6 +3,7 @@ class_name ResizeHandleContainer
 extends Control
 
 signal drag_started()
+signal drag_finished()
 signal dragged(delta: Vector2, anchor: ResizeHandle.HandleAnchor)
 
 const HANDLE_SIZE := ResizeHandle.HANDLE_SIZE
@@ -20,6 +21,7 @@ func _spawn_handles() -> void:
         var handle := ResizeHandle.new()
         handle.anchor = anchor
         handle.drag_started.connect(func(): drag_started.emit())
+        handle.drag_finished.connect(func(): drag_finished.emit())
         handle.dragged.connect(func(delta, a): dragged.emit(delta, a))
         add_child(handle)
 

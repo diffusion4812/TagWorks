@@ -12,6 +12,13 @@ const MENU_ADD_CHILD       := 0
 const MENU_EDIT_PROPERTIES := 1
 const MENU_DELETE          := 2
 
+# ─────────────────────────────────────────────
+# Reactive Data
+# ─────────────────────────────────────────────
+
+## The reactive data object backing this widget instance.
+var data: ReactiveCanvas = null
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -163,12 +170,26 @@ func spawn_widget(scene: PackedScene) -> void:
         return
 
     var widget := instance as BaseWidget
+
+    # Resolve parent first so initial position and size can be set correctly
     var parent := _resolve_parent_for_placement(get_global_mouse_position())
     parent.add_child(widget)
 
     var parent_widget := parent as BaseWidget
     if parent_widget != null and parent_widget.is_container:
         parent_widget._elevate_child(widget)
+
+    # Build the backing ReactiveWidget now that get_widget_class() is available
+    var reactive_widget := ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
+    reactive_widget.position.value = parent.size / 2.0 - widget.size / 2.0
+    reactive_widget.size.value     = widget.size
+    reactive_widget.z_index.value  = widget.z_index
+
+    # Register in the reactive page canvas
+    data.widgets.append(reactive_widget)
+
+    # Initialise the scene node from its backing data
+    widget.init(reactive_widget)
 
     _subscribe_widget(widget)
 

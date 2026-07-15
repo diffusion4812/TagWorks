@@ -29,7 +29,7 @@ func register(
     entry.subscribe_mode    = mode
 
     # ALWAYS-mode tags are immediately active
-    var should_be_active := (mode == OpcUaSubscriptionMode.Mode.ALWAYS)
+    var should_be_active: bool = (mode == OpcUaSubscriptionMode.Mode.ALWAYS)
     if entry.is_active != should_be_active:
         entry.is_active = should_be_active
 
@@ -37,7 +37,7 @@ func register(
 
 
 func unregister(node_id: OpcUaNodeId) -> void:
-    var key := node_id.to_tag_name()
+    var key: String = node_id.to_tag_name()
     if _entries.erase(key):
         tag_unregistered.emit(key)
 
@@ -46,7 +46,7 @@ func unregister(node_id: OpcUaNodeId) -> void:
 ## Called by the widget when its visibility changes.
 ## Has no effect on ALWAYS-mode tags.
 func set_tag_visible(node_id: OpcUaNodeId, visible: bool) -> void:
-    var entry := _get_entry(node_id)
+    var entry: TagEntry = _get_entry(node_id)
     if entry == null:
         return
     if entry.subscribe_mode == OpcUaSubscriptionMode.Mode.ALWAYS:
@@ -60,7 +60,7 @@ func set_tag_visible(node_id: OpcUaNodeId, visible: bool) -> void:
 # ── Value access ──────────────────────────────────────────────────────────────
 
 func get_value(node_id: OpcUaNodeId) -> Variant:
-    var entry := _get_entry(node_id)
+    var entry: TagEntry = _get_entry(node_id)
     return entry.value if entry else null
 
 
@@ -74,7 +74,7 @@ func has_tag(node_id: OpcUaNodeId) -> bool:
 
 
 func mark_dirty(node_id: OpcUaNodeId) -> void:
-    var entry := _get_entry(node_id)
+    var entry: TagEntry = _get_entry(node_id)
     if entry:
         entry.is_dirty = true
 

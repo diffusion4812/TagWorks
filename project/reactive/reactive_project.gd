@@ -11,7 +11,6 @@ const FILE_VERSION := 2
 var project_name   : ReactiveString
 var file_path      : ReactiveString
 var opc_ua_servers : ReactiveArray
-var canvas         : ReactiveCanvas
 var pages          : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
@@ -22,7 +21,6 @@ func _init(initial_owner: Reactive = null, label: String = "") -> void:
     project_name   = ReactiveString.new("",     self, "project_name")
     file_path      = ReactiveString.new("",     self, "file_path")
     opc_ua_servers = ReactiveArray.new([],      self, "opc_ua_servers")
-    canvas         = ReactiveCanvas.new({},     self, "canvas")
     pages          = ReactiveArray.new([],      self, "pages")
 
 func _describe_value() -> String:
@@ -59,7 +57,6 @@ func serialize() -> Dictionary:
         "version":        FILE_VERSION,
         "project_name":   project_name.value,
         "opc_ua_servers": opc_ua_servers.value.duplicate(),
-        "canvas":         canvas.to_data(),
         "pages":          serialised_pages,
     }
 
@@ -68,7 +65,6 @@ func serialize() -> Dictionary:
 func _deserialize(payload: Dictionary) -> void:
     project_name.value   = payload.get("project_name",   "")
     opc_ua_servers.value = payload.get("opc_ua_servers", {})
-    canvas.from_dict(payload.get("canvas", {}))
 
     pages.clear()
     for page_dict: Dictionary in payload.get("pages", []):

@@ -69,14 +69,21 @@ func _connect_signals() -> void:
     )
 
     btn_delete.pressed.connect(func() -> void:
-        var page := AppState.focused_page.value as ReactivePage
+        var page: ReactivePage = AppState.focused_page.value as ReactivePage
         if page == null or page.page_id.value.is_empty():
             return
         IntentBus.delete_page_requested.emit(page.page_id.value)
     )
 
     context_menu.id_pressed.connect(_on_context_menu_id_pressed)
-    page_tree.item_mouse_selected.connect(_on_item_mouse_selected)
+    page_tree.item_mouse_selected.connect(
+        func(_mouse_position: Vector2, mouse_button_index: int) -> void:
+            _on_item_mouse_selected(mouse_button_index, false)
+    )
+    page_tree.item_activated.connect(
+        func() -> void:
+            _on_item_mouse_selected(MOUSE_BUTTON_LEFT, true)
+    )
     page_tree.item_edited.connect(_on_item_edited)
 
     IntentBus.create_page_requested.connect(_on_create_page_requested)
@@ -168,7 +175,7 @@ func _on_create_page_requested(page_name: String) -> void:
 
 
 func _on_delete_page_requested(page_id: String) -> void:
-    var project := AppState.current_project
+    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
     if project == null or project.project_name.value.is_empty():
         push_warning("PagePanel: No active project.")
         return
@@ -177,7 +184,7 @@ func _on_delete_page_requested(page_id: String) -> void:
         push_warning("PagePanel: Cannot delete the last remaining page.")
         return
 
-    var focused := AppState.focused_page.value as ReactivePage
+    var focused: ReactivePage = AppState.focused_page.value as ReactivePage
     if focused != null and focused.page_id.value == page_id:
         AppState.focused_page.value = null
 
@@ -224,7 +231,7 @@ func _on_context_menu_id_pressed(id: int) -> void:
 # Tree Interaction
 # ─────────────────────────────────────────────
 
-func _on_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> void:
+func _on_item_mouse_selected(mouse_button_index: int, double_clicked: bool) -> void:
     match mouse_button_index:
         MOUSE_BUTTON_LEFT:
             var item := page_tree.get_selected()
@@ -233,6 +240,10 @@ func _on_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> voi
 
             var page := item.get_metadata(0) as ReactivePage
             if page == null:
+                return
+
+            if double_clicked:
+                AppState.active_page.value = page
                 return
 
             if AppState.focused_page.value == page:
@@ -244,10 +255,14 @@ func _on_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> voi
             _show_context_menu()
 
 
-func _on_active_page_changed(_reactive) -> void:
+func _on_active_page_changed(active_page: ReactiveVariant) -> void:
     _update_button_states()
 
-    var page_id: String = AppState.active_page.value.page_id.value
+    if active_page.value == null:
+        return
+
+    var page_id: String = active_page.value.page_id.value if active_page.value.page_id else ""
+
     if page_id.is_empty() or not _item_map.has(page_id):
         return
 
@@ -255,15 +270,15 @@ func _on_active_page_changed(_reactive) -> void:
 
 
 func _on_item_edited() -> void:
-    var item := page_tree.get_selected()
+    var item: TreeItem = page_tree.get_selected()
     if item == null or item == _tree_root:
         return
 
-    var page := item.get_metadata(0) as ReactivePage
+    var page: ReactivePage = item.get_metadata(0) as ReactivePage
     if page == null:
         return
 
-    var new_name := item.get_text(0).strip_edges()
+    var new_name: String = item.get_text(0).strip_edges()
 
     if new_name.is_empty():
         item.set_text(0, page.page_name.value)
@@ -280,8 +295,8 @@ func _on_item_edited() -> void:
 
 
 func _update_button_states() -> void:
-    var selected    := page_tree.get_selected()
-    var has_page    := selected != null and selected != _tree_root
+    var selected: TreeItem = page_tree.get_selected()
+    var has_page: bool     = selected != null and selected != _tree_root
     btn_delete.disabled = not has_page
 
 # ─────────────────────────────────────────────
@@ -289,9 +304,9 @@ func _update_button_states() -> void:
 # ─────────────────────────────────────────────
 
 ## Fires when the active project is replaced or cleared.
-func _on_current_project_changed(_reactive) -> void:
-    var project := AppState.current_project.value as ReactiveProject
-    var is_open := project != null and not project.project_name.value.is_empty()
+func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
+    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
+    var is_open: bool = project != null and not project.project_name.value.is_empty()
 
     if is_open:
         if project.pages.reactive_changed.is_connected(_on_page_hierarchy_changed):

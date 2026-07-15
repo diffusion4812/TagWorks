@@ -48,13 +48,15 @@ func _ready() -> void:
     last_error      = ReactiveString.new("", null,    "app_state.last_error")
     last_saved_path = ReactiveString.new("", null,    "app_state.last_saved_path")
 
+    current_project.reactive_changed.connect(
+        func() -> void:
+            focused_page.value = null
+            active_page.value  = null
+            selected_widget.value = null
+            edit_mode.value = false
+    )
 
-## Resets all application state to its default empty values.
-func clear() -> void:
-    current_project       = ReactiveVariant.new()
-    focused_page.value    = null
-    active_page.value     = null
-    selected_widget.value = null
-    edit_mode.value       = false
-    last_error.value      = ""
-    last_saved_path.value = ""
+    active_page.reactive_changed.connect(
+        func() -> void:
+            edit_mode.value = false
+    )

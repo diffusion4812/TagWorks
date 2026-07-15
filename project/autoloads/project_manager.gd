@@ -30,11 +30,11 @@ func _ready() -> void:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 func has_active_project() -> bool:
-    return not AppState.current_project.file_path.value.is_empty()
+    return not AppState.current_project.value.file_path.value.is_empty()
 
 
 func get_current_project_path() -> String:
-    return AppState.current_project.file_path.value
+    return AppState.current_project.value.file_path.value
 
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
@@ -48,10 +48,10 @@ func _on_new_project_requested() -> void:
 
 
 func _on_save_project_requested() -> void:
-    if AppState.current_project.file_path.value.is_empty():
+    if AppState.current_project.value.file_path.value.is_empty():
         push_warning("ProjectManager: Save requested but no active project path.")
         return
-    _save(AppState.current_project.file_path.value)
+    _save(AppState.current_project.value.file_path.value)
 
 
 func _on_save_project_as_requested(path: String) -> void:
@@ -122,7 +122,7 @@ func _load(path: String) -> void:
     _restore_all_canvases(project.pages)
 
     # Push the fully hydrated project into AppState
-    AppState.current_project.from_dict_in_place(project.serialize())
+    AppState.current_project.value = project
 
     var default_page: ReactivePage = AppState.current_project.value.get_default_page()
     if default_page != null:

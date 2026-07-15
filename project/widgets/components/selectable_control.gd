@@ -5,6 +5,8 @@ extends Control
 signal selection_requested(control: SelectableControl)
 signal drag_moved(widget: SelectableControl)
 signal drag_ended(widget: SelectableControl)
+signal widget_moved(widget: SelectableControl)
+signal widget_resized(widget: SelectableControl)
 
 const GRID_SIZE := 10
 
@@ -71,20 +73,21 @@ func _gui_input(event: InputEvent) -> void:
         if event.pressed:
             _drag_offset  = get_local_mouse_position()
             _raw_position = position
+            _raw_size     = size
             select()
         else:
-            # Mouse released — end drag if one was in progress
             if _dragging:
                 drag_ended.emit(self)
+                widget_moved.emit(self)
         _dragging = event.pressed
         get_viewport().set_input_as_handled()
 
     if _dragging:
         if event is InputEventMouseMotion or event is InputEventScreenDrag:
-            var bounds              := _get_position_bounds()
-            var local_mouse: Vector2 = (get_parent() as Control).get_local_mouse_position()
-            _raw_position            = (local_mouse - _drag_offset).clamp(bounds.position, bounds.end)
-            position                 = _snap(_raw_position)
+            var bounds               := _get_position_bounds()
+            var local_mouse: Vector2  = (get_parent() as Control).get_local_mouse_position()
+            _raw_position             = (local_mouse - _drag_offset).clamp(bounds.position, bounds.end)
+            position                  = _snap(_raw_position)
             drag_moved.emit(self)
             get_viewport().set_input_as_handled()
 
@@ -117,6 +120,7 @@ func _show_handles() -> void:
         return
     _handle_container = ResizeHandleContainer.new()
     _handle_container.dragged.connect(_on_handle_dragged)
+    _handle_container.drag_finished.connect(_on_handle_drag_finished)
     add_child(_handle_container)
     _handle_container.refresh()
 
@@ -162,6 +166,9 @@ func _on_handle_dragged(delta: Vector2, anchor: ResizeHandle.HandleAnchor) -> vo
     position = _snap(_raw_position)
     _handle_container.refresh()
 
+func _on_handle_drag_finished() -> void:
+    widget_resized.emit(self)
+    
 # ── Serialization ─────────────────────────────────────────────────────────────
 
 func serialize() -> Dictionary:

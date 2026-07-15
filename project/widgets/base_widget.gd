@@ -60,6 +60,14 @@ func init(widget_data: ReactiveWidget) -> void:
 
     _apply_properties(data.properties.value)
 
+    # Keep ReactiveWidget in sync with scene node movement and resizing
+    widget_moved.connect(_on_widget_moved)
+    widget_resized.connect(_on_widget_resized)
+
+    # React to external reactive data changes
+    data.position.reactive_changed.connect(_on_reactive_position_changed)
+    data.size.reactive_changed.connect(_on_reactive_size_changed)
+
 # ─────────────────────────────────────────────
 # Virtuals
 # ─────────────────────────────────────────────
@@ -104,6 +112,21 @@ func _on_change_widget_property_requested(widget_id: String, property: String, v
         return
     _apply_property(property, value)
 
+func _on_widget_moved(_control: SelectableControl) -> void:
+    data.position.value = position
+
+
+func _on_widget_resized(_control: SelectableControl) -> void:
+    data.position.value = position
+    data.size.value     = size
+
+
+func _on_reactive_position_changed(_reactive) -> void:
+    position = data.position.value
+
+
+func _on_reactive_size_changed(_reactive) -> void:
+    size = data.size.value
 
 ## Applies a single property change to the reactive data object and
 ## updates the live scene display. The mutation on data propagates

@@ -14,7 +14,7 @@ signal change_widget_property_requested(widget_id: String, property: String, val
 # ── Project ───────────────────────────────────────────────────────────────────
 signal new_project_requested()
 signal save_project_requested()
-signal save_project_as_requested()
-signal open_project_requested()
+signal save_project_as_requested(path: String)
+signal open_project_requested(path: String)
 signal close_project_requested()
 signal rename_project_requested(new_name: String)

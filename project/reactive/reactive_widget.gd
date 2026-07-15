@@ -64,7 +64,7 @@ static func from_dict(payload: Dictionary) -> ReactiveWidget:
 
 # ── Serialise ─────────────────────────────────────────────────────────────────
 
-func serialize() -> Dictionary:
+func to_data() -> Dictionary:
     var serialised_children: Array = []
     for item: Variant in children.values():
         var child := item as ReactiveWidget
@@ -87,7 +87,7 @@ func serialize() -> Dictionary:
 
 # ── Deserialise ───────────────────────────────────────────────────────────────
 
-func _deserialize(payload: Dictionary) -> void:
+func from_data(payload: Dictionary) -> void:
     widget_id.value   = payload.get("widget_id",   _generate_id())
     widget_type.value = payload.get("widget_type", "")
     widget_name.value = payload.get("widget_name", widget_type.value)

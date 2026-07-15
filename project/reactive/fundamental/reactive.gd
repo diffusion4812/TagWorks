@@ -42,10 +42,10 @@ func manually_emit() -> void:
 func _log(event: String, value_str: String = "") -> void:
     if not DEBUG:
         return
-    var timestamp := "%010.4f" % (Time.get_ticks_msec() * 0.001)
-    var label     := _label if _label != "" else get_class()
-    var chain     := _build_owner_chain()
-    var msg       := "[%s] [REACTIVE] [%s] %s" % [timestamp, event, chain]
+    var timestamp: String = "%010.4f" % (Time.get_ticks_msec() * 0.001)
+    var label:     String = _label if _label != "" else get_class()
+    var chain:     String = _build_owner_chain()
+    var msg:       String = "[%s] [REACTIVE] [%s] %s" % [timestamp, event, chain]
     if value_str != "":
         msg += " → %s" % value_str
     print(msg)
@@ -58,7 +58,7 @@ func _build_owner_chain() -> String:
     var current: Reactive    = self
 
     while current != null:
-        var part := current._label if current._label != "" else current.get_class()
+        var part: String = current._label if current._label != "" else current.get_class()
         parts.push_front(part)
         current = current.owner
 

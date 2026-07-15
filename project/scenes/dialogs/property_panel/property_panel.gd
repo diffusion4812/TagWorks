@@ -111,12 +111,12 @@ func _open_browser_for_server(server_id: String, on_selected: Callable) -> void:
         node_browser.request_node_id(OpcUaManager, server_id, on_selected)
         return
 
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         OS.alert("Server configuration not found.", "Browse Unavailable")
         return
 
-    var temp_client := GodotOpcUa.new()
+    var temp_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
     if cfg.username.is_empty():
         ok = temp_client.connect_to_server(cfg.endpoint_url)
