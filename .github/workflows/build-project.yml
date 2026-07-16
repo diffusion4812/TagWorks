@@ -14,12 +14,12 @@ permissions:
   contents: read
 
 env:
-  GODOT_VERSION: "4.7-stable"
+  GODOT_VERSION: "4.7-stable"          # Tag format used in GitHub release URLs
+  GODOT_TEMPLATE_DIR: "4.7.stable"     # Folder format Godot expects locally
 
 jobs:
   build-project:
     runs-on: windows-latest
-    # Only run if both upstream workflows succeeded
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
@@ -39,24 +39,28 @@ jobs:
           path: ./godot/
           if_no_artifact_found: fail
 
-      # ── Download Export Template ──────────────────────────────────────────────
+      # ── Download Official Export Templates (.tpz) ─────────────────────────────
 
-      - name: Download Godot Template Artifact
-        uses: dawidd6/action-download-artifact@v7
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: build-godot.yml
-          name: godot-template-${{ env.GODOT_VERSION }}
-          path: ./godot-template/
-          if_no_artifact_found: fail
-
-      - name: Install Export Template
+      - name: Download Godot Export Templates (.tpz)
+        shell: pwsh
         run: |
-          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
-          New-Item -ItemType Directory -Force -Path $templateDir
-          Copy-Item `
-            "./godot-template/godot.windows.template_debug.x86_64.exe" `
-            "$templateDir/windows_debug_x86_64.exe"
+          $url = "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
+          Invoke-WebRequest -Uri $url -OutFile "templates.tpz"
+
+      - name: Upload TPZ as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-export-templates-${{ env.GODOT_VERSION }}
+          path: templates.tpz
+          retention-days: 7
+
+      - name: Install Export Templates
+        shell: pwsh
+        run: |
+          $templateDir = "$env:APPDATA/Godot/export_templates/${{ env.GODOT_TEMPLATE_DIR }}"
+          New-Item -ItemType Directory -Force -Path $templateDir | Out-Null
+          Expand-Archive -Path "templates.tpz" -DestinationPath "$env:TEMP/godot_templates" -Force
+          Copy-Item "$env:TEMP/godot_templates/templates/*" $templateDir -Recurse -Force
 
       # ── Download GDExtension ──────────────────────────────────────────────────
 
@@ -77,7 +81,7 @@ jobs:
           Get-ChildItem ./godot/
 
           Write-Host "=== Export Templates ==="
-          $templateDir = "$env:APPDATA/Godot/export_templates/4.6.3.stable"
+          $templateDir = "$env:APPDATA/Godot/export_templates/${{ env.GODOT_TEMPLATE_DIR }}"
           if (Test-Path $templateDir) {
             Get-ChildItem $templateDir
           } else {
@@ -120,7 +124,7 @@ jobs:
       - name: Compress Executable Only (Side-by-Side Configuration)
         run: |
           $buildDir = "${{ github.workspace }}/build"
-          
+
           if (Test-Path "$buildDir/tagview.exe") {
               Write-Host "Compressing engine runner..."
               upx --best --lzma "$buildDir/tagview.exe"
