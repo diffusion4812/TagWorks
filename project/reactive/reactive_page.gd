@@ -29,7 +29,7 @@ func _describe_value() -> String:
 
 ## Creates a new ReactivePage with a generated ID and the given name.
 static func create(name: String = "New Page", initial_owner: Reactive = null, label: String = "ReactivePage") -> ReactivePage:
-    var p            := ReactivePage.new(initial_owner, label)
+    var p: ReactivePage = ReactivePage.new(initial_owner, label)
     p.page_id.value  = _generate_id()
     p.page_name.value = name
     return p
@@ -40,7 +40,7 @@ static func create(name: String = "New Page", initial_owner: Reactive = null, la
 static func from_dict(payload: Dictionary, initial_owner: Reactive = null) -> ReactivePage:
     if not _validate(payload):
         return null
-    var p := ReactivePage.new(initial_owner)
+    var p: ReactivePage = ReactivePage.new(initial_owner)
     p._deserialize(payload)
     return p
 
@@ -49,7 +49,7 @@ static func from_dict(payload: Dictionary, initial_owner: Reactive = null) -> Re
 func serialize() -> Dictionary:
     var serialised_children: Array = []
     for item: Variant in children.values():
-        var child := item as ReactivePage
+        var child: ReactivePage = item as ReactivePage
         if child != null:
             serialised_children.append(child.serialize())
 
@@ -71,7 +71,7 @@ func _deserialize(payload: Dictionary) -> void:
 
     children.clear()
     for child_dict: Dictionary in payload.get("children", []):
-        var child := ReactivePage.from_dict(child_dict, self)
+        var child: ReactivePage = ReactivePage.from_dict(child_dict, self)
         if child != null:
             children.append(child)
 
@@ -95,7 +95,7 @@ func add_child_page(page: ReactivePage) -> void:
 func remove_child_page(target_id: String) -> bool:
     var items: Array = children.values()
     for i: int in items.size():
-        var page := items[i] as ReactivePage
+        var page: ReactivePage = items[i] as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
@@ -106,7 +106,7 @@ func remove_child_page(target_id: String) -> bool:
 
 func get_child_page(target_id: String) -> ReactivePage:
     for item: Variant in children.values():
-        var page := item as ReactivePage
+        var page: ReactivePage= item as ReactivePage
         if page != null and page.page_id.value == target_id:
             return page
     return null

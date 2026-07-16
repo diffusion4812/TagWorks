@@ -14,7 +14,7 @@ func emit(prop: String, value: Variant) -> void:
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 func _make_script_button(prop: String) -> Button:
-    var button := Button.new()
+    var button: Button = Button.new()
     button.text         = "{}"
     button.tooltip_text = "Open script editor"
     button.pressed.connect(func(): _panel._open_script_editor(prop))
@@ -23,16 +23,16 @@ func _make_script_button(prop: String) -> Button:
 # ── Field builders ────────────────────────────────────────────────────────────
 
 func add_float_field(prop: String, lbl: String, current: float) -> void:
-    var row   := HBoxContainer.new()
-    var label := Label.new()
-    var field := LineEdit.new()
+    var row   :HBoxContainer = HBoxContainer.new()
+    var label :Label = Label.new()
+    var field :LineEdit = LineEdit.new()
 
     label.text                  = lbl
     label.custom_minimum_size.x = 100
     field.text                  = str(current)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v): _panel.property_changed.emit(prop, float(v)))
+    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, float(v)))
 
     row.add_child(label)
     row.add_child(field)
@@ -41,16 +41,16 @@ func add_float_field(prop: String, lbl: String, current: float) -> void:
 
 
 func add_int_field(prop: String, lbl: String, current: int) -> void:
-    var row   := HBoxContainer.new()
-    var label := Label.new()
-    var field := LineEdit.new()
+    var row   :HBoxContainer = HBoxContainer.new()
+    var label :Label = Label.new()
+    var field :LineEdit = LineEdit.new()
 
     label.text                  = lbl
     label.custom_minimum_size.x = 100
     field.text                  = str(current)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v): _panel.property_changed.emit(prop, int(v)))
+    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, int(v)))
 
     row.add_child(label)
     row.add_child(field)
@@ -59,16 +59,16 @@ func add_int_field(prop: String, lbl: String, current: int) -> void:
 
 
 func add_string_field(prop: String, lbl: String, current: String) -> void:
-    var row   := HBoxContainer.new()
-    var label := Label.new()
-    var field := LineEdit.new()
+    var row   :HBoxContainer = HBoxContainer.new()
+    var label :Label = Label.new()
+    var field :LineEdit = LineEdit.new()
 
     label.text                  = lbl
     label.custom_minimum_size.x = 100
     field.text                  = current
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v): _panel.property_changed.emit(prop, v))
+    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
 
     row.add_child(label)
     row.add_child(field)
@@ -77,16 +77,16 @@ func add_string_field(prop: String, lbl: String, current: String) -> void:
 
 
 func add_bool_field(prop: String, lbl: String, current: bool) -> void:
-    var row      := HBoxContainer.new()
-    var label    := Label.new()
-    var checkbox := CheckBox.new()
+    var row      :HBoxContainer = HBoxContainer.new()
+    var label    :Label = Label.new()
+    var checkbox :CheckBox = CheckBox.new()
 
     label.text                     = lbl
     label.custom_minimum_size.x    = 100
     checkbox.button_pressed        = current
     checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    checkbox.toggled.connect(func(v): _panel.property_changed.emit(prop, v))
+    checkbox.toggled.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
 
     row.add_child(label)
     row.add_child(checkbox)
@@ -95,9 +95,9 @@ func add_bool_field(prop: String, lbl: String, current: bool) -> void:
 
 
 func add_color_field(prop: String, lbl: String, current: Color) -> void:
-    var row    := HBoxContainer.new()
-    var label  := Label.new()
-    var picker := ColorPickerButton.new()
+    var row    :HBoxContainer = HBoxContainer.new()
+    var label  :Label = Label.new()
+    var picker :ColorPickerButton = ColorPickerButton.new()
 
     label.text                   = lbl
     label.custom_minimum_size.x  = 100
@@ -105,7 +105,7 @@ func add_color_field(prop: String, lbl: String, current: Color) -> void:
     picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     picker.custom_minimum_size.y = 32
 
-    picker.color_changed.connect(func(v): _panel.property_changed.emit(prop, v))
+    picker.color_changed.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
 
     row.add_child(label)
     row.add_child(picker)
@@ -116,29 +116,29 @@ func add_color_field(prop: String, lbl: String, current: Color) -> void:
 func add_string_list_field(prop: String, lbl: String, current: Array[String]) -> void:
     var working_copy: Array[String] = current.duplicate()
 
-    var col       := VBoxContainer.new()
-    var header    := HBoxContainer.new()
-    var title_lbl := Label.new()
+    var col       :VBoxContainer = VBoxContainer.new()
+    var header    :HBoxContainer = HBoxContainer.new()
+    var title_lbl :Label = Label.new()
 
     title_lbl.text                  = lbl
     title_lbl.custom_minimum_size.x = 100
     header.add_child(title_lbl)
     col.add_child(header)
 
-    var scroll := ScrollContainer.new()
+    var scroll :ScrollContainer = ScrollContainer.new()
     scroll.size_flags_vertical    = Control.SIZE_EXPAND_FILL
     scroll.custom_minimum_size.y  = 120
     scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
-    var list_container := VBoxContainer.new()
+    var list_container :VBoxContainer = VBoxContainer.new()
     list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroll.add_child(list_container)
     col.add_child(scroll)
 
-    for i in working_copy.size():
+    for i: int in working_copy.size():
         _add_string_list_entry(prop, list_container, working_copy, i)
 
-    var add_btn := Button.new()
+    var add_btn :Button = Button.new()
     add_btn.text                  = "+ Add Tab"
     add_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     add_btn.pressed.connect(func() -> void:
@@ -156,9 +156,9 @@ func _add_string_list_entry(
     list:      Array[String],
     index:     int
 ) -> void:
-    var entry_row := HBoxContainer.new()
+    var entry_row :HBoxContainer = HBoxContainer.new()
 
-    var field := LineEdit.new()
+    var field :LineEdit = LineEdit.new()
     field.text                  = list[index]
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     field.text_submitted.connect(func(new_text: String) -> void:
@@ -167,7 +167,7 @@ func _add_string_list_entry(
     )
     entry_row.add_child(field)
 
-    var remove_btn := Button.new()
+    var remove_btn :Button = Button.new()
     remove_btn.text         = "✕"
     remove_btn.tooltip_text = "Remove this tab"
     remove_btn.pressed.connect(func() -> void:
@@ -186,14 +186,14 @@ func add_node_field(
     current_server: String = "",
     current_group:  String = ""
 ) -> void:
-    var col   := VBoxContainer.new()
-    var label := Label.new()
+    var col   :VBoxContainer = VBoxContainer.new()
+    var label :Label = Label.new()
     label.text = lbl
     col.add_child(label)
 
-    var server_row    := HBoxContainer.new()
-    var server_label  := Label.new()
-    var server_option := OptionButton.new()
+    var server_row    :HBoxContainer = HBoxContainer.new()
+    var server_label  :Label = Label.new()
+    var server_option :OptionButton = OptionButton.new()
 
     server_label.text                   = "Server"
     server_label.custom_minimum_size.x  = 60
@@ -201,7 +201,7 @@ func add_node_field(
 
     _populate_server_option(server_option)
 
-    var initial_server_id := current_server \
+    var initial_server_id :String = current_server \
         if current_server != "" \
         else _get_first_server_id()
     _select_option_by_meta(server_option, initial_server_id)
@@ -210,9 +210,9 @@ func add_node_field(
     server_row.add_child(server_option)
     col.add_child(server_row)
 
-    var group_row    := HBoxContainer.new()
-    var group_label  := Label.new()
-    var group_option := OptionButton.new()
+    var group_row    :HBoxContainer = HBoxContainer.new()
+    var group_label  :Label = Label.new()
+    var group_option :OptionButton = OptionButton.new()
 
     group_label.text                   = "Group"
     group_label.custom_minimum_size.x  = 60
@@ -220,7 +220,7 @@ func add_node_field(
 
     _populate_group_option(group_option, initial_server_id)
 
-    var initial_group_id := current_group \
+    var initial_group_id :String = current_group \
         if current_group != "" \
         else _get_first_group_id(initial_server_id)
     _select_option_by_meta(group_option, initial_group_id)
@@ -229,10 +229,10 @@ func add_node_field(
     group_row.add_child(group_option)
     col.add_child(group_row)
 
-    var tag_row    := HBoxContainer.new()
-    var tag_label  := Label.new()
-    var tag_edit   := LineEdit.new()
-    var browse_btn := Button.new()
+    var tag_row    :HBoxContainer = HBoxContainer.new()
+    var tag_label  :Label = Label.new()
+    var tag_edit   :LineEdit = LineEdit.new()
+    var browse_btn :Button = Button.new()
 
     tag_label.text                  = "Tag"
     tag_label.custom_minimum_size.x = 60
@@ -251,7 +251,7 @@ func add_node_field(
     server_option.item_selected.connect(func(_index: int) -> void:
         var sid: String = server_option.get_item_metadata(server_option.selected)
         _populate_group_option(group_option, sid)
-        var first_gid := _get_first_group_id(sid)
+        var first_gid: String = _get_first_group_id(sid)
         _select_option_by_meta(group_option, first_gid)
         _panel.property_changed.emit(prop + "/server_id", sid)
         _panel.property_changed.emit(prop + "/group_id",  first_gid)
@@ -289,7 +289,7 @@ func add_node_field(
 func _get_first_group_id(server_id: String) -> String:
     if server_id == "":
         return ""
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null or cfg.subscription_groups.is_empty():
         return ""
     return cfg.subscription_groups[0].id
@@ -299,7 +299,7 @@ func _get_first_group_id(server_id: String) -> String:
 func _populate_server_option(option: OptionButton) -> void:
     option.clear()
     for cfg: OpcUaServerConfig in ProjectManager.opc_ua_registry.get_all_configs():
-        var prefix := "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
+        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
         option.add_item(prefix + cfg.display_name)
         option.set_item_metadata(option.item_count - 1, cfg.id)
 
@@ -308,22 +308,22 @@ func _populate_group_option(option: OptionButton, server_id: String) -> void:
     option.clear()
     if server_id == "":
         return
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         return
     for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        var item_label := "%s  —  %.0f ms" % [group.display_name, group.pub_interval_ms]
+        var item_label: String = "%s  —  %.0f ms" % [group.display_name, group.pub_interval_ms]
         option.add_item(item_label)
         option.set_item_metadata(option.item_count - 1, group.id)
 
 
 func _select_option_by_meta(option: OptionButton, target_value: String) -> void:
-    for i in option.item_count:
+    for i: int in option.item_count:
         if option.get_item_metadata(i) == target_value:
             option.select(i)
             return
 
 
 func _get_first_server_id() -> String:
-    var configs := ProjectManager.opc_ua_registry.get_all_configs()
+    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
     return configs[0].id if not configs.is_empty() else ""

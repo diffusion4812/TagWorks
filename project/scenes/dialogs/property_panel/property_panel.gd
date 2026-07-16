@@ -44,7 +44,7 @@ func _on_selected_widget_changed() -> void:
 func _load_target(target: BaseWidget) -> void:
     _current_target = target
 
-    for child in extra_props.get_children():
+    for child: Node in extra_props.get_children():
         child.queue_free()
 
     _load_widget(target)
@@ -53,14 +53,14 @@ func _load_target(target: BaseWidget) -> void:
 func clear() -> void:
     _current_target  = null
     panel_title.text = ""
-    for child in extra_props.get_children():
+    for child: Node in extra_props.get_children():
         child.queue_free()
     hide()
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
 
 func _reapply_current_target() -> void:
-    var props := _get_target_properties(_current_target)
+    var props: WidgetProperties = _get_target_properties(_current_target)
     if props != null:
         props.reapply()
 

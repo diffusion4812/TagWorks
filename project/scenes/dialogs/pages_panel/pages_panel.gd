@@ -1,6 +1,6 @@
 # scenes/page_panel/page_panel.gd
 class_name PagePanel
-extends Node
+extends Control
 
 # ─────────────────────────────────────────────
 # Child References
@@ -15,9 +15,9 @@ extends Node
 # Constants
 # ─────────────────────────────────────────────
 
-const DEFAULT_PAGE_NAME := "New Page"
-const DEFAULT_ROOT_NAME := "Project"
-const PAGE_ICON_PATH    := "res://assets/icons/page_icon.svg"
+const DEFAULT_PAGE_NAME: String = "New Page"
+const DEFAULT_ROOT_NAME: String = "Project"
+const PAGE_ICON_PATH:    String = "res://assets/icons/page_icon.svg"
 
 enum MenuAction {
     ADD_PAGE,
@@ -112,7 +112,7 @@ func _rebuild_tree() -> void:
         return
 
     for item: Variant in project.pages.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page != null:
             _build_item(_tree_root, page)
 
@@ -120,16 +120,16 @@ func _rebuild_tree() -> void:
 
 
 func _build_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
-    var item := _create_item(parent, page)
+    var item: TreeItem = _create_item(parent, page)
     for child_item: Variant in page.children.values():
-        var child := child_item as ReactivePage
+        var child: ReactivePage = child_item as ReactivePage
         if child != null:
             _build_item(item, child)
     return item
 
 
 func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
-    var item := page_tree.create_item(parent)
+    var item: TreeItem = page_tree.create_item(parent)
     item.set_text(0, page.page_name.value)
     item.set_metadata(0, page)
     item.set_editable(0, false)
@@ -145,28 +145,28 @@ func _get_project_name() -> String:
     var project: ReactiveProject = AppState.current_project.value
     if project == null:
         return DEFAULT_ROOT_NAME
-    var name := project.project_name.value
-    return name if not name.is_empty() else DEFAULT_ROOT_NAME
+    var project_name: String = project.project_name.value
+    return project_name if not project_name.is_empty() else DEFAULT_ROOT_NAME
 
 # ─────────────────────────────────────────────
 # Intent Handlers
 # ─────────────────────────────────────────────
 
 func _on_create_page_requested(page_name: String) -> void:
-    var project := AppState.current_project.value as ReactiveProject
+    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
     if project == null or project.project_name.value.is_empty():
         push_warning("PagePanel: No active project.")
         return
 
     # Resolve a unique name
-    var resolved := page_name if not page_name.is_empty() else DEFAULT_PAGE_NAME
-    var offset   := 1
+    var resolved: String = page_name if not page_name.is_empty() else DEFAULT_PAGE_NAME
+    var offset: int = 1
     while project.find_page_name(resolved) != null:
         resolved = DEFAULT_PAGE_NAME + " " + str(offset)
         offset  += 1
 
-    var new_page := ReactivePage.create(resolved)
-    var focused  := AppState.focused_page.value as ReactivePage
+    var new_page: ReactivePage = ReactivePage.create(resolved)
+    var focused: ReactivePage = AppState.focused_page.value as ReactivePage
 
     if focused != null and not focused.page_id.value.is_empty():
         focused.add_child_page(new_page)
@@ -188,7 +188,7 @@ func _on_delete_page_requested(page_id: String) -> void:
     if focused != null and focused.page_id.value == page_id:
         AppState.focused_page.value = null
 
-    var active := AppState.active_page.value as ReactivePage
+    var active: ReactivePage = AppState.active_page.value as ReactivePage
     if active != null and active.page_id.value == page_id:
         AppState.active_page.value = null
 
@@ -199,8 +199,8 @@ func _on_delete_page_requested(page_id: String) -> void:
 # ─────────────────────────────────────────────
 
 func _show_context_menu() -> void:
-    var selected := page_tree.get_selected()
-    var has_page := selected != null and selected != _tree_root
+    var selected: TreeItem = page_tree.get_selected()
+    var has_page: bool = selected != null and selected != _tree_root
 
     context_menu.clear()
     context_menu.add_item("Add Page", MenuAction.ADD_PAGE)
@@ -220,10 +220,10 @@ func _on_context_menu_id_pressed(id: int) -> void:
         MenuAction.ADD_PAGE:
             IntentBus.create_page_requested.emit("")
         MenuAction.DELETE_PAGE:
-            var selected := page_tree.get_selected()
+            var selected: TreeItem = page_tree.get_selected()
             if selected == null or selected == _tree_root:
                 return
-            var page := selected.get_metadata(0) as ReactivePage
+            var page: ReactivePage = selected.get_metadata(0) as ReactivePage
             if page != null:
                 IntentBus.delete_page_requested.emit(page.page_id.value)
 
@@ -234,11 +234,11 @@ func _on_context_menu_id_pressed(id: int) -> void:
 func _on_item_mouse_selected(mouse_button_index: int, double_clicked: bool) -> void:
     match mouse_button_index:
         MOUSE_BUTTON_LEFT:
-            var item := page_tree.get_selected()
+            var item: TreeItem = page_tree.get_selected()
             if item == null or item == _tree_root:
                 return
 
-            var page := item.get_metadata(0) as ReactivePage
+            var page: ReactivePage = item.get_metadata(0) as ReactivePage
             if page == null:
                 return
 
@@ -314,19 +314,16 @@ func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
         project.pages.reactive_changed.connect(_on_page_hierarchy_changed)
 
         _rebuild_tree()
-        _select_first_page()
+        show()
+
     else:
+        hide()
         page_tree.clear()
         _item_map.clear()
-        _tree_root = page_tree.create_item()
-        _tree_root.set_text(0, DEFAULT_ROOT_NAME)
-        _tree_root.set_selectable(0, false)
-        _update_button_states()
-
 
 ## Fires when the page hierarchy is structurally modified.
-func _on_page_hierarchy_changed(_reactive) -> void:
-    var selected_id := _get_selected_page_id()
+func _on_page_hierarchy_changed(_pages: ReactiveArray) -> void:
+    var selected_id: String = _get_selected_page_id()
     _rebuild_tree()
     if not selected_id.is_empty():
         _select_page_by_id(selected_id)
@@ -336,15 +333,15 @@ func _on_page_hierarchy_changed(_reactive) -> void:
 # ─────────────────────────────────────────────
 
 func _get_drag_data(_position: Vector2) -> Variant:
-    var selected := page_tree.get_selected()
+    var selected: TreeItem = page_tree.get_selected()
     if selected == null or selected == _tree_root:
         return null
 
-    var page := selected.get_metadata(0) as ReactivePage
+    var page: ReactivePage = selected.get_metadata(0) as ReactivePage
     if page == null:
         return null
 
-    var preview  := Label.new()
+    var preview: Label = Label.new()
     preview.text  = page.page_name.value
     page_tree.set_drag_preview(preview)
 
@@ -357,18 +354,18 @@ func _can_drop_data(position: Vector2, data: Variant) -> bool:
     if not data is Dictionary or not data.has("page"):
         return false
 
-    var dragged := data["page"] as ReactivePage
+    var dragged: ReactivePage = data["page"] as ReactivePage
     if dragged == null:
         return false
 
-    var target := page_tree.get_item_at_position(position)
+    var target: TreeItem = page_tree.get_item_at_position(position)
     if target == null:
         return false
 
     if target == _tree_root:
         return true
 
-    var target_page := target.get_metadata(0) as ReactivePage
+    var target_page: ReactivePage = target.get_metadata(0) as ReactivePage
     if target_page == null:
         return false
 
@@ -379,11 +376,11 @@ func _can_drop_data(position: Vector2, data: Variant) -> bool:
 
 
 func _drop_data(position: Vector2, data: Variant) -> void:
-    var dragged := data["page"] as ReactivePage
+    var dragged: ReactivePage = data["page"] as ReactivePage
     if dragged == null:
         return
 
-    var target_item := page_tree.get_item_at_position(position)
+    var target_item: TreeItem = page_tree.get_item_at_position(position)
     if target_item == null:
         return
 
@@ -398,11 +395,11 @@ func _drop_data(position: Vector2, data: Variant) -> void:
             AppState.current_project.value.pages.append(page)
         return
 
-    var target_page := target_item.get_metadata(0) as ReactivePage
+    var target_page: ReactivePage = target_item.get_metadata(0) as ReactivePage
     if target_page == null:
         return
 
-    var drop_mode := page_tree.get_drop_section_at_position(position)
+    var drop_mode: int = page_tree.get_drop_section_at_position(position)
     AppState.current_project.value.move_page(dragged.page_id.value, target_page, drop_mode)
 
 # ─────────────────────────────────────────────
@@ -413,10 +410,10 @@ func _select_first_page() -> void:
     var project: ReactiveProject = AppState.current_project.value
     if project == null:
         return
-    var all := project.pages.values()
+    var all: Array = project.pages.values()
     if all.is_empty():
         return
-    var first := all[0] as ReactivePage
+    var first: ReactivePage = all[0] as ReactivePage
     if first == null:
         return
     AppState.focused_page.value = first
@@ -430,16 +427,16 @@ func _select_page_by_id(page_id: String) -> void:
 
 
 func _get_selected_page_id() -> String:
-    var selected := page_tree.get_selected()
+    var selected: TreeItem = page_tree.get_selected()
     if selected == null or selected == _tree_root:
         return ""
-    var page := selected.get_metadata(0) as ReactivePage
+    var page: ReactivePage = selected.get_metadata(0) as ReactivePage
     return page.page_id.value if page != null else ""
 
 
 func _is_descendant_of(candidate_id: String, root: ReactivePage) -> bool:
     for item: Variant in root.children.values():
-        var child := item as ReactivePage
+        var child: ReactivePage = item as ReactivePage
         if child == null:
             continue
         if child.page_id.value == candidate_id:

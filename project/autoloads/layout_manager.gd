@@ -12,13 +12,12 @@ func _ready() -> void:
 func save_layout(layout_name: String, widgets: Array) -> bool:
     var layout_data: Array = []
 
-    for widget in widgets:
-        if widget is BaseWidget:
-            layout_data.append(widget.serialize())
+    for widget: BaseWidget in widgets:
+        layout_data.append(widget.serialize())
 
     var json_string: String = JSON.stringify(layout_data, "\t")
     var path: String = SAVE_DIR + layout_name + ".json"
-    var file := FileAccess.open(path, FileAccess.WRITE)
+    var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 
     if file == null:
         push_error("LayoutManager: Failed to open file for writing: %s" % path)
@@ -36,7 +35,7 @@ func load_layout(layout_name: String, canvas: Control) -> bool:
         push_error("LayoutManager: Layout file not found: %s" % path)
         return false
 
-    var file := FileAccess.open(path, FileAccess.READ)
+    var file: FileAccess = FileAccess.open(path, FileAccess.READ)
 
     if file == null:
         push_error("LayoutManager: Failed to open file for reading: %s" % path)
@@ -45,7 +44,7 @@ func load_layout(layout_name: String, canvas: Control) -> bool:
     var json_string: String = file.get_as_text()
     file.close()
 
-    var json := JSON.new()
+    var json: JSON = JSON.new()
     var parse_result: Error = json.parse(json_string)
 
     if parse_result != OK:
@@ -57,7 +56,7 @@ func load_layout(layout_name: String, canvas: Control) -> bool:
 
     var layout_data: Array = json.get_data()
 
-    for widget_data in layout_data:
+    for widget_data: Dictionary in layout_data:
         _spawn_widget(widget_data, canvas)
 
     return true
@@ -65,7 +64,7 @@ func load_layout(layout_name: String, canvas: Control) -> bool:
 # ── List Available Layouts ───────────────────────────────────────────
 func get_layout_names() -> Array[String]:
     var names: Array[String] = []
-    var dir := DirAccess.open(SAVE_DIR)
+    var dir: DirAccess = DirAccess.open(SAVE_DIR)
 
     if dir == null:
         return names

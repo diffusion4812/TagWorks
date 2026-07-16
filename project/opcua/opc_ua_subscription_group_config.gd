@@ -15,7 +15,7 @@ func serialize() -> Dictionary:
 
 
 static func deserialize(data: Dictionary) -> OpcUaSubscriptionGroupConfig:
-    var cfg              := OpcUaSubscriptionGroupConfig.new()
+    var cfg: OpcUaSubscriptionGroupConfig = OpcUaSubscriptionGroupConfig.new()
     cfg.id               = data.get("id",              "")
     cfg.display_name     = data.get("display_name",    "")
     cfg.pub_interval_ms  = data.get("pub_interval_ms", 500.0)

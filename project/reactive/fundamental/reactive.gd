@@ -18,7 +18,7 @@ var owner: Reactive:
         if owner != null:
             reactive_changed.connect(owner._propagate)
 
-signal reactive_changed(reactive)
+signal reactive_changed(reactive: Variant)
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,6 @@ func _log(event: String, value_str: String = "") -> void:
     if not DEBUG:
         return
     var timestamp: String = "%010.4f" % (Time.get_ticks_msec() * 0.001)
-    var label:     String = _label if _label != "" else get_class()
     var chain:     String = _build_owner_chain()
     var msg:       String = "[%s] [REACTIVE] [%s] %s" % [timestamp, event, chain]
     if value_str != "":

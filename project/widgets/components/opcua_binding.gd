@@ -112,7 +112,7 @@ func deserialize(data: Dictionary) -> void:
     var p_read_only: bool   = data.get("read_only", false)
 
     var ns:      int    = data.get("ns",   0)
-    var raw_id          = data.get("id",   0)
+    var raw_id:  int    = data.get("id",   0)
     var id_type: String = data.get("type", "numeric")
 
     var p_node_id: OpcUaNodeId
@@ -155,12 +155,12 @@ func _register() -> void:
     if node_id == null or server_id == "" or group_id == "":
         return
 
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         push_warning("OpcUaBinding: server '%s' not found in registry." % server_id)
         return
 
-    var group := cfg.get_group(group_id)
+    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id)
     if group == null:
         push_warning(
             "OpcUaBinding: group '%s' not found on server '%s'." \
@@ -218,8 +218,8 @@ func _on_tag_value_changed(
     # The OpcUaTagRegistry only emits for active entries, but we additionally
     # guard here to ensure the widget update rate matches the group rate exactly.
     if _group_interval_ms >= 0.0:
-        var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
-        var group := cfg.get_group(group_id) if cfg else null
+        var cfg: OpcUaServerConfig              = ProjectManager.opc_ua_registry.get_config(server_id)
+        var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id) if cfg else null
         if group == null or group.pub_interval_ms != _group_interval_ms:
             return
 

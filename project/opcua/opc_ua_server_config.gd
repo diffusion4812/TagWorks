@@ -23,7 +23,7 @@ func add_group(group: OpcUaSubscriptionGroupConfig) -> void:
 
 func remove_group(group_id: String) -> void:
     subscription_groups = subscription_groups.filter(
-        func(g: OpcUaSubscriptionGroupConfig): return g.id != group_id
+        func(g: OpcUaSubscriptionGroupConfig) -> bool: return g.id != group_id
     )
 
 
@@ -48,13 +48,13 @@ func serialize() -> Dictionary:
         "reconnect_interval_sec": reconnect_interval_sec,
         "max_reconnect_attempts": max_reconnect_attempts,
         "subscription_groups":   subscription_groups.map(
-            func(g: OpcUaSubscriptionGroupConfig): return g.serialize()
+            func(g: OpcUaSubscriptionGroupConfig) -> Dictionary: return g.serialize()
         )
     }
 
 
 static func deserialize(data: Dictionary) -> OpcUaServerConfig:
-    var cfg                    := OpcUaServerConfig.new()
+    var cfg                    :OpcUaServerConfig = OpcUaServerConfig.new()
     cfg.id                     = data.get("id",                    "")
     cfg.display_name           = data.get("display_name",          "")
     cfg.endpoint_url           = data.get("endpoint_url",          "")
@@ -66,9 +66,8 @@ static func deserialize(data: Dictionary) -> OpcUaServerConfig:
     cfg.poll_interval_sec      = data.get("poll_interval_sec",     0.01)
     cfg.reconnect_interval_sec = data.get("reconnect_interval_sec", 3.0)
     cfg.max_reconnect_attempts = data.get("max_reconnect_attempts", 10)
-    for entry in data.get("subscription_groups", []):
-        if entry is Dictionary:
-            cfg.subscription_groups.append(
-                OpcUaSubscriptionGroupConfig.deserialize(entry)
-            )
+    for entry: Dictionary in data.get("subscription_groups", []):
+        cfg.subscription_groups.append(
+            OpcUaSubscriptionGroupConfig.deserialize(entry)
+        )
     return cfg

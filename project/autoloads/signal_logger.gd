@@ -14,7 +14,7 @@ var _log_file: FileAccess = null
 ## Structure: { "BusName.signal_name": { "emitted": int, "handlers": { "handler_desc": int } } }
 var _stats: Dictionary = {}
 
-var _poll_timer := Timer.new()
+var _poll_timer: Timer = Timer.new()
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ func _timestamp() -> String:
 # ── Bus Connection ────────────────────────────────────────────────────────────
 
 func _connect_bus(bus: Node, bus_name: String) -> void:
-    for sig in bus.get_signal_list():
+    for sig: Dictionary in bus.get_signal_list():
         var signal_name: String = sig["name"]
         var arg_count:   int    = sig["args"].size()
         var full_name:   String = "%s.%s" % [bus_name, signal_name]
@@ -88,10 +88,10 @@ func _connect_bus(bus: Node, bus_name: String) -> void:
 
             bus.disconnect(signal_name, original_callable)
 
-            var wrapped := _wrap_handler(original_callable, full_name, handler_desc, arg_count)
+            var wrapped: Callable = _wrap_handler(original_callable, full_name, handler_desc, arg_count)
             bus.connect(signal_name, wrapped)
 
-        var emit_logger := _make_emit_logger(bus_name, signal_name, arg_count)
+        var emit_logger: Callable = _make_emit_logger(bus_name, signal_name, arg_count)
         bus.connect(signal_name, emit_logger)
 
 # ── Late Connection Polling ───────────────────────────────────────────────────
@@ -103,7 +103,7 @@ func _poll_late_connections() -> void:
 ## Scans all tracked signals for newly added connections that have not yet
 ## been wrapped, and wraps them automatically.
 func _scan_for_late_connections(bus: Node, bus_name: String) -> void:
-    for sig in bus.get_signal_list():
+    for sig: Dictionary in bus.get_signal_list():
         var signal_name: String = sig["name"]
         var arg_count:   int    = sig["args"].size()
         var full_name:   String = "%s.%s" % [bus_name, signal_name]
@@ -125,7 +125,7 @@ func _scan_for_late_connections(bus: Node, bus_name: String) -> void:
             _write("[%s] [CONNECT] %s → %s (late)" % [_timestamp(), full_name, handler_desc])
 
             bus.disconnect(signal_name, callable)
-            var wrapped := _wrap_handler(callable, full_name, handler_desc, arg_count)
+            var wrapped: Callable = _wrap_handler(callable, full_name, handler_desc, arg_count)
             bus.connect(signal_name, wrapped)
 
 # ── Handler Wrapping ──────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ func _wrap_handler(
 
 ## Returns a callable that logs the emission of a signal.
 func _make_emit_logger(bus_name: String, signal_name: String, arg_count: int) -> Callable:
-    var full_name := "%s.%s" % [bus_name, signal_name]
+    var full_name: String = "%s.%s" % [bus_name, signal_name]
     match arg_count:
         0:
             return func() -> void:
@@ -211,8 +211,8 @@ func _log_emission(full_name: String, args: Array) -> void:
     if _stats.has(full_name):
         _stats[full_name]["emitted"] += 1
 
-    var arg_str   := ", ".join(args.map(func(a: Variant) -> String: return str(a)))
-    var entry     := "[%s] [EMIT]    %s(%s)" % [_timestamp(), full_name, arg_str]
+    var arg_str: String = ", ".join(args.map(func(a: Variant) -> String: return str(a)))
+    var entry:   String = "[%s] [EMIT]    %s(%s)" % [_timestamp(), full_name, arg_str]
     _write(entry)
 
 
@@ -243,8 +243,8 @@ func print_summary() -> void:
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 func _describe_callable(c: Callable) -> String:
-    var obj    := c.get_object()
-    var method := c.get_method()
+    var obj: Object = c.get_object()
+    var method: String = str(c.get_method())
 
     if obj == null:
         return "<lambda>" if method.is_empty() else method
@@ -262,7 +262,7 @@ func _get_bus_name(bus: Node) -> String:
 
 
 func _get_signal_arg_count(bus: Node, signal_name: String) -> int:
-    for sig in bus.get_signal_list():
+    for sig: Dictionary in bus.get_signal_list():
         if sig["name"] == signal_name:
             return sig["args"].size()
     return 0

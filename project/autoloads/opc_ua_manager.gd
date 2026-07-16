@@ -29,12 +29,12 @@ func add_server(config: OpcUaServerConfig) -> void:
         push_warning("OpcUaManager: server '%s' already added." % config.id)
         return
 
-    var conn := OpcUaServerConnection.new(config)
-    conn.connected.connect(func(id): connected.emit(id))
-    conn.connection_lost.connect(func(id): connection_lost.emit(id))
-    conn.connection_failed.connect(func(id): connection_failed.emit(id))
+    var conn: OpcUaServerConnection = OpcUaServerConnection.new(config)
+    conn.connected.connect(func(server_id: String) -> void: connected.emit(server_id))
+    conn.connection_lost.connect(func(server_id: String) -> void: connection_lost.emit(server_id))
+    conn.connection_failed.connect(func(server_id: String) -> void: connection_failed.emit(server_id))
     conn.tag_value_changed.connect(
-        func(id, node_id, value): tag_value_changed.emit(id, node_id, value)
+        func(server_id: String, node_id: OpcUaNodeId, value: Variant) -> void: tag_value_changed.emit(server_id, node_id, value)
     )
     _connections[config.id] = conn
 
@@ -53,12 +53,12 @@ func remove_server(server_id: String) -> void:
 
 
 func connect_server(server_id: String) -> bool:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn.connect_to_server() if conn else false
 
 
 func disconnect_server(server_id: String) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn:
         conn.disconnect_from_server()
 
@@ -75,7 +75,7 @@ func disconnect_all() -> void:
 ## new group subscription is created immediately, otherwise it will be
 ## created the next time the server connects.
 func add_group(server_id: String, group: OpcUaSubscriptionGroupConfig) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn == null:
         return
 
@@ -94,7 +94,7 @@ func add_group(server_id: String, group: OpcUaSubscriptionGroupConfig) -> void:
 ## Tags that were in this group are unregistered — widgets will stop updating
 ## until re-bound to a different group.
 func remove_group(server_id: String, group_id: String) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn:
         conn.remove_group(group_id)
 
@@ -102,7 +102,7 @@ func remove_group(server_id: String, group_id: String) -> void:
 ## Updates an existing group's configuration (e.g. display name or interval).
 ## If the interval changes the group subscription is rebuilt automatically.
 func update_group(server_id: String, group: OpcUaSubscriptionGroupConfig) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn == null:
         return
 
@@ -125,12 +125,12 @@ func register_tag(
     deadband:        float                      = 0.0,
     mode:            OpcUaSubscriptionMode.Mode = OpcUaSubscriptionMode.Mode.ALWAYS
 ) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn == null:
         return
 
-    var resolved_interval := _resolve_group_interval(server_id, pub_interval_ms)
-    var resolved_sampling  := sampling_ms if sampling_ms > 0.0 else resolved_interval
+    var resolved_interval: float = _resolve_group_interval(server_id, pub_interval_ms)
+    var resolved_sampling: float = sampling_ms if sampling_ms > 0.0 else resolved_interval
 
     conn.registry.register(
         node_id,
@@ -142,15 +142,15 @@ func register_tag(
 
     # Stamp the resolved group_id onto the entry so the status window
     # can associate tags with their owning group unambiguously
-    var resolved_group_id := _resolve_group_id(server_id, resolved_interval)
+    var resolved_group_id: String = _resolve_group_id(server_id, resolved_interval)
     if resolved_group_id != "":
-        var entry := conn.registry.get_entry(node_id)
+        var entry: OpcUaTagRegistry.TagEntry = conn.registry.get_entry(node_id)
         if entry != null:
             entry.group_id = resolved_group_id
 
 
 func _resolve_group_interval(server_id: String, pub_interval_ms: float) -> float:
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         return pub_interval_ms
 
@@ -166,11 +166,11 @@ func _resolve_group_interval(server_id: String, pub_interval_ms: float) -> float
         if is_equal_approx(group.pub_interval_ms, pub_interval_ms):
             return group.pub_interval_ms
 
-    var nearest_interval := cfg.subscription_groups[0].pub_interval_ms
-    var nearest_delta    := absf(nearest_interval - pub_interval_ms)
+    var nearest_interval: float = cfg.subscription_groups[0].pub_interval_ms
+    var nearest_delta: float = absf(nearest_interval - pub_interval_ms)
 
     for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        var delta := absf(group.pub_interval_ms - pub_interval_ms)
+        var delta: float = absf(group.pub_interval_ms - pub_interval_ms)
         if delta < nearest_delta:
             nearest_delta    = delta
             nearest_interval = group.pub_interval_ms
@@ -183,7 +183,7 @@ func _resolve_group_interval(server_id: String, pub_interval_ms: float) -> float
     return nearest_interval
 
 func _resolve_group_id(server_id: String, pub_interval_ms: float) -> String:
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         return ""
 
@@ -194,39 +194,39 @@ func _resolve_group_id(server_id: String, pub_interval_ms: float) -> String:
     return ""
 
 func unregister_tag(server_id: String, node_id: OpcUaNodeId) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn:
         conn.registry.unregister(node_id)
 
 
 func get_tag_value(server_id: String, node_id: OpcUaNodeId) -> Variant:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn.registry.get_value(node_id) if conn else null
 
 
 func is_tag_quality_good(server_id: String, node_id: OpcUaNodeId) -> bool:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn.registry.is_quality_good(node_id) if conn else false
 
 
 func write_tag(server_id: String, node_id: OpcUaNodeId, value: Variant) -> bool:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn.write_tag(node_id, value) if conn else false
 
 
 func set_tag_visible(server_id: String, node_id: OpcUaNodeId, visible: bool) -> void:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     if conn:
         conn.registry.set_tag_visible(node_id, visible)
 
 
 func is_server_connected(server_id: String) -> bool:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn.is_server_connected() if conn else false
 
 
 func get_raw_client(server_id: String) -> GodotOpcUa:
-    var conn := _get_connection(server_id)
+    var conn: OpcUaServerConnection = _get_connection(server_id)
     return conn._client if conn else null
 
 # ── ProjectManager integration ────────────────────────────────────────────────
@@ -235,7 +235,7 @@ func _on_configs_changed() -> void:
     var registry: OpcUaConfigRegistry = ProjectManager.opc_ua_registry
 
     # Remove servers no longer in the config
-    for server_id in _connections.keys():
+    for server_id: String in _connections.keys():
         if registry.get_config(server_id) == null:
             remove_server(server_id)
 
@@ -252,7 +252,7 @@ func _on_configs_changed() -> void:
 ## Removes groups that have been deleted from the config.
 ## Updates groups whose interval or display name has changed.
 func _sync_groups(cfg: OpcUaServerConfig) -> void:
-    var conn := _get_connection(cfg.id)
+    var conn: OpcUaServerConnection = _get_connection(cfg.id)
     if conn == null:
         return
 
@@ -262,7 +262,7 @@ func _sync_groups(cfg: OpcUaServerConfig) -> void:
         config_group_ids[group.id] = true
 
     # Remove groups no longer in config
-    for group_id in conn.get_group_ids():
+    for group_id: String in conn.get_group_ids():
         if not config_group_ids.has(group_id):
             conn.remove_group(group_id)
 

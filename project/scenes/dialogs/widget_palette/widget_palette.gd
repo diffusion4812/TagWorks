@@ -16,7 +16,7 @@ const WIDGET_TYPES: Array[Dictionary] = [
 
 func _ready() -> void:
     for widget_def: Dictionary in WIDGET_TYPES:
-        var btn := Button.new()
+        var btn: Button = Button.new()
         btn.text                  = widget_def["label"]
         btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         btn.pressed.connect(

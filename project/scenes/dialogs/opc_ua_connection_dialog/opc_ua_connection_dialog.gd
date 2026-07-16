@@ -47,8 +47,8 @@ var _selected_group_id:    String        = ""
 var _form_dirty:           bool          = false
 var _commit_pending:       bool          = false
 
-const STATUS_CONNECTED    := "● "
-const STATUS_DISCONNECTED := "○ "
+const STATUS_CONNECTED    :String = "● "
+const STATUS_DISCONNECTED :String = "○ "
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -111,12 +111,12 @@ func _connect_signals() -> void:
 
 func _populate_option_buttons() -> void:
     security_policy_option.clear()
-    for policy in ["None", "Basic128Rsa15", "Basic256", "Basic256Sha256"]:
+    for policy: String in ["None", "Basic128Rsa15", "Basic256", "Basic256Sha256"]:
         security_policy_option.add_item(policy)
 
     message_mode_option.clear()
-    for mode in ["None", "Sign", "SignAndEncrypt"]:
-        message_mode_option.add_item(mode)
+    for message_mode: String in ["None", "Sign", "SignAndEncrypt"]:
+        message_mode_option.add_item(message_mode)
 
 # ── Tree ──────────────────────────────────────────────────────────────────────
 
@@ -127,20 +127,20 @@ func _refresh_tree() -> void:
         return
 
     server_tree.clear()
-    var root := server_tree.create_item()
+    var root: TreeItem = server_tree.create_item()
     if root == null:
         return
 
     for cfg: OpcUaServerConfig in ProjectManager.opc_ua_registry.get_all_configs():
-        var server_item := server_tree.create_item(root)
-        var prefix      := STATUS_CONNECTED if OpcUaManager.is_server_connected(cfg.id) \
+        var server_item: TreeItem = server_tree.create_item(root)
+        var prefix     : String   = STATUS_CONNECTED if OpcUaManager.is_server_connected(cfg.id) \
                                             else STATUS_DISCONNECTED
         server_item.set_text(0, prefix + cfg.display_name)
         server_item.set_text(1, "")
         server_item.set_metadata(0, { "type": "server", "server_id": cfg.id })
 
         for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-            var group_item := server_tree.create_item(server_item)
+            var group_item: TreeItem = server_tree.create_item(server_item)
             group_item.set_text(0, "  " + group.display_name)
             group_item.set_text(1, "%d ms" % group.pub_interval_ms)
             group_item.set_metadata(0, {
@@ -154,18 +154,18 @@ func _refresh_tree() -> void:
 
 
 func _reselect_item() -> void:
-    var root := server_tree.get_root()
+    var root: TreeItem = server_tree.get_root()
     if root == null:
         return
 
-    var server_item := root.get_first_child()
+    var server_item: TreeItem = root.get_first_child()
     while server_item != null:
         var meta: Dictionary = server_item.get_metadata(0)
         if meta.get("server_id") == _selected_server_id:
             if _selection_type == SelectionType.SERVER:
                 server_item.select(0)
                 return
-            var group_item := server_item.get_first_child()
+            var group_item: TreeItem = server_item.get_first_child()
             while group_item != null:
                 var gmeta: Dictionary = group_item.get_metadata(0)
                 if gmeta.get("group_id") == _selected_group_id:
@@ -190,15 +190,15 @@ func _set_panel(type: SelectionType) -> void:
     add_group_button.disabled  = (_selected_server_id == "")
     remove_button.disabled     = (type == SelectionType.NONE)
 
-    var server_selected := (type == SelectionType.SERVER)
-    test_button.visible    = server_selected
-    browse_button.visible  = server_selected
-    status_button.visible  = server_selected
+    var server_selected: bool = (type == SelectionType.SERVER)
+    test_button.visible       = server_selected
+    browse_button.visible     = server_selected
+    status_button.visible     = server_selected
 
 # ── Form loading ──────────────────────────────────────────────────────────────
 
 func _load_server_form(server_id: String) -> void:
-    var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
     if cfg == null:
         return
 
@@ -219,8 +219,8 @@ func _load_server_form(server_id: String) -> void:
 
 
 func _load_group_form(server_id: String, group_id: String) -> void:
-    var cfg   := ProjectManager.opc_ua_registry.get_config(server_id)
-    var group := cfg.get_group(group_id) if cfg else null
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
+    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id) if cfg else null
     if group == null:
         return
 
@@ -248,7 +248,7 @@ func _commit_form() -> void:
 
 
 func _commit_server_form() -> void:
-    var cfg := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
     if cfg == null:
         return
 
@@ -266,8 +266,8 @@ func _commit_server_form() -> void:
 
 
 func _commit_group_form() -> void:
-    var cfg   := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
-    var group := cfg.get_group(_selected_group_id) if cfg else null
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(_selected_group_id) if cfg else null
     if group == null:
         return
 
@@ -279,7 +279,7 @@ func _commit_group_form() -> void:
 func _on_tree_item_selected() -> void:
     _commit_form()
 
-    var item := server_tree.get_selected()
+    var item: TreeItem = server_tree.get_selected()
     if item == null:
         return
 
@@ -305,7 +305,7 @@ func _on_tree_item_selected() -> void:
 func _on_add_server_pressed() -> void:
     _commit_form()
 
-    var cfg                    := OpcUaServerConfig.new()
+    var cfg: OpcUaServerConfig = OpcUaServerConfig.new()
     cfg.id                     = "server_%d" % Time.get_ticks_msec()
     cfg.display_name           = "New Server"
     cfg.endpoint_url           = "opc.tcp://127.0.0.1:4840"
@@ -325,11 +325,11 @@ func _on_add_group_pressed() -> void:
 
     _commit_form()
 
-    var cfg := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
     if cfg == null:
         return
 
-    var group             := OpcUaSubscriptionGroupConfig.new()
+    var group: OpcUaSubscriptionGroupConfig = OpcUaSubscriptionGroupConfig.new()
     group.id              = "group_%d" % Time.get_ticks_msec()
     group.display_name    = "New Group"
     group.pub_interval_ms = 500.0
@@ -353,7 +353,7 @@ func _on_remove_pressed() -> void:
             _selection_type     = SelectionType.NONE
 
         SelectionType.GROUP:
-            var cfg := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+            var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
             if cfg:
                 cfg.remove_group(_selected_group_id)
             _selected_group_id = ""
@@ -366,11 +366,11 @@ func _on_remove_pressed() -> void:
 
 func _on_test_pressed() -> void:
     _commit_form()
-    var cfg := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
     if cfg == null:
         return
 
-    var test_client := GodotOpcUa.new()
+    var test_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
     if cfg.username.is_empty():
         ok = test_client.connect_to_server(cfg.endpoint_url)
@@ -391,7 +391,7 @@ func _on_browse_pressed() -> void:
 
     _commit_form()
 
-    var cfg := ProjectManager.opc_ua_registry.get_config(_selected_server_id)
+    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(_selected_server_id)
     if cfg == null:
         return
 
@@ -403,7 +403,7 @@ func _on_browse_pressed() -> void:
         return
 
     # Open a temporary connection for browsing
-    var temp_client := GodotOpcUa.new()
+    var temp_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
     if cfg.username.is_empty():
         ok = temp_client.connect_to_server(cfg.endpoint_url)
@@ -449,11 +449,11 @@ func _deferred_commit() -> void:
 
 # ── OpcUaManager signals ──────────────────────────────────────────────────────
 
-func _on_server_connected(server_id: String) -> void:
+func _on_server_connected(_server_id: String) -> void:
     _refresh_tree()
 
 
-func _on_server_connection_lost(server_id: String) -> void:
+func _on_server_connection_lost(_server_id: String) -> void:
     _refresh_tree()
 
 
@@ -468,18 +468,18 @@ func _on_server_connection_failed(server_id: String) -> void:
 # ── Non-UI related ────────────────────────────────────────────────────────────
 
 func _on_server_status_timeout() -> void:
-    var root := server_tree.get_root()
+    var root: TreeItem = server_tree.get_root()
     if root == null:
         return
 
-    var server_item := root.get_first_child()
+    var server_item: TreeItem = root.get_first_child()
     while server_item != null:
         var meta: Dictionary = server_item.get_metadata(0)
         if meta.get("type") == "server":
             var server_id: String = meta.get("server_id", "")
-            var cfg := ProjectManager.opc_ua_registry.get_config(server_id)
+            var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
             if cfg != null:
-                var prefix := STATUS_CONNECTED if OpcUaManager.is_server_connected(server_id) \
+                var prefix: String = STATUS_CONNECTED if OpcUaManager.is_server_connected(server_id) \
                                                else STATUS_DISCONNECTED
                 server_item.set_text(0, prefix + cfg.display_name)
 
@@ -488,7 +488,7 @@ func _on_server_status_timeout() -> void:
 # ── Utility ───────────────────────────────────────────────────────────────────
 
 func _select_option(option: OptionButton, value: String) -> void:
-    for i in option.item_count:
+    for i: int in option.item_count:
         if option.get_item_text(i) == value:
             option.select(i)
             return

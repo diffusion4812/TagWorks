@@ -17,7 +17,7 @@ func register(
     deadband:        float                   = 0.0,
     mode:            OpcUaSubscriptionMode.Mode = OpcUaSubscriptionMode.Mode.ALWAYS
 ) -> void:
-    var key := node_id.to_tag_name()
+    var key: String = node_id.to_tag_name()
     if not _entries.has(key):
         _entries[key] = TagEntry.new(key)
 
@@ -52,7 +52,7 @@ func set_tag_visible(node_id: OpcUaNodeId, visible: bool) -> void:
     if entry.subscribe_mode == OpcUaSubscriptionMode.Mode.ALWAYS:
         return
 
-    var was_active := entry.is_active
+    var was_active: bool = entry.is_active
     entry.is_active = visible
     if entry.is_active != was_active:
         tag_activation_changed.emit(entry.tag_name, entry.is_active)
@@ -65,7 +65,7 @@ func get_value(node_id: OpcUaNodeId) -> Variant:
 
 
 func is_quality_good(node_id: OpcUaNodeId) -> bool:
-    var entry := _get_entry(node_id)
+    var entry: OpcUaTagRegistry.TagEntry = _get_entry(node_id)
     return entry.quality_good if entry else false
 
 

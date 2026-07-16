@@ -14,7 +14,7 @@ enum HandleAnchor {
     BOTTOM_RIGHT
 }
 
-const HANDLE_SIZE := 10.0
+const HANDLE_SIZE: float = 10.0
 
 signal drag_started()
 signal drag_finished()
@@ -22,8 +22,8 @@ signal dragged(delta: Vector2, anchor: HandleAnchor)
 
 @export var anchor: HandleAnchor = HandleAnchor.BOTTOM_RIGHT
 
-var _dragging       := false
-var _last_mouse_pos := Vector2.ZERO
+var _dragging       :bool    = false
+var _last_mouse_pos :Vector2 = Vector2.ZERO
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -54,8 +54,8 @@ func _gui_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()
 
     if _dragging and event is InputEventMouseMotion:
-        var current := get_global_mouse_position()
-        var delta   := current - _last_mouse_pos
+        var current :Vector2 = get_global_mouse_position()
+        var delta   :Vector2 = current - _last_mouse_pos
         _last_mouse_pos = current
         dragged.emit(delta, anchor)
         get_viewport().set_input_as_handled()

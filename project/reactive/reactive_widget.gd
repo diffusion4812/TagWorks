@@ -59,7 +59,7 @@ static func from_dict(payload: Dictionary) -> ReactiveWidget:
     if not _validate(payload):
         return null
     var w := ReactiveWidget.new()
-    w._deserialize(payload)
+    w.from_data(payload)
     return w
 
 # ── Serialise ─────────────────────────────────────────────────────────────────

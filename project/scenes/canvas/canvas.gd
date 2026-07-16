@@ -8,9 +8,9 @@ var _page_id        : String    = ""
 
 # ── Context Menu Item IDs ─────────────────────────────────────────────────────
 
-const MENU_ADD_CHILD       := 0
-const MENU_EDIT_PROPERTIES := 1
-const MENU_DELETE          := 2
+const MENU_ADD_CHILD       :int = 0
+const MENU_EDIT_PROPERTIES :int = 1
+const MENU_DELETE          :int = 2
 
 # ─────────────────────────────────────────────
 # Reactive Data
@@ -31,10 +31,49 @@ func _ready() -> void:
 
     AppState.edit_mode.reactive_changed.connect(_on_edit_mode_changed)
 
+    for widget: ReactiveWidget in data.widgets.value:
+        _restore_node(self, widget)
+
+## Instantiates and deserialises a single widget from a serialised Dictionary,
+## then recurses into container children.
+func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
+    var type: String = reactive_widget.widget_type.value
+
+    if not ProjectManager.NODE_REGISTRY.has(type):
+        push_error("ProjectManager: Unknown node type '%s'." % type)
+        return
+
+    var packed: PackedScene = load(ProjectManager.NODE_REGISTRY[type]) as PackedScene
+    if packed == null:
+        push_error("ProjectManager: Failed to load scene for '%s'." % type)
+        return
+
+    var instance: Node = packed.instantiate()
+    if not instance is BaseWidget:
+        push_error("ProjectManager: Scene is not a BaseWidget for type '%s'." % type)
+        instance.queue_free()
+        return
+
+    parent.add_child(instance)
+
+    var widget: BaseWidget = instance as BaseWidget
+
+    if parent is BaseWidget and (parent as BaseWidget).is_container:
+        (parent as BaseWidget)._elevate_child(widget)
+
+    widget.init(reactive_widget)
+
+    if widget.is_container:
+        var drop_target: Control = widget.get_drop_target()
+        if drop_target != null:
+            for child_data: Variant in reactive_widget.value.children:
+                if child_data is Dictionary:
+                    _restore_node(drop_target, child_data)
+
 # ── Guards ────────────────────────────────────────────────────────────────────
 
 func _is_active_canvas() -> bool:
-    var active := AppState.active_page.value as ReactivePage
+    var active: ReactivePage = AppState.active_page.value as ReactivePage
     return active != null and active.page_id.value == _page_id
 
 
@@ -43,14 +82,15 @@ func _get_reactive_page() -> ReactivePage:
 
 # ── Dirty State ───────────────────────────────────────────────────────────────
 
+# TODO: replace with reactive changed event
 func _mark_dirty() -> void:
-    var page := _get_reactive_page()
+    var page: ReactivePage = _get_reactive_page()
     if page != null:
         page.canvas.is_dirty.value = true
 
 
 func _clear_dirty() -> void:
-    var page := _get_reactive_page()
+    var page: ReactivePage = _get_reactive_page()
     if page != null:
         page.canvas.is_dirty.value = false
 
@@ -129,7 +169,7 @@ func _on_child_gui_input(event: InputEvent, target: Node) -> void:
 # ── Selection ─────────────────────────────────────────────────────────────────
 
 func _deselect_current() -> void:
-    var current := AppState.selected_widget.value as BaseWidget
+    var current: BaseWidget = AppState.selected_widget.value as BaseWidget
     if current == null:
         return
     current.deselect()
@@ -140,7 +180,7 @@ func _select_target(target: Node) -> void:
     if target == null or not target is BaseWidget:
         return
 
-    var widget := target as BaseWidget
+    var widget: BaseWidget = target as BaseWidget
 
     if AppState.selected_widget.value == widget:
         return
@@ -155,32 +195,32 @@ func _on_widget_selection_requested(widget: SelectableControl) -> void:
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
-func _on_edit_mode_changed(enabled) -> void:
-    if not enabled.value:
+func _on_edit_mode_changed(edit_mode: ReactiveBool) -> void:
+    if not edit_mode.value:
         _deselect_current()
 
 # ── Widget Spawning ───────────────────────────────────────────────────────────
 
 func spawn_widget(scene: PackedScene) -> void:
-    var instance := scene.instantiate()
+    var instance: Node = scene.instantiate()
 
     if not instance is BaseWidget:
         push_error("WidgetCanvas: Spawned scene is not a BaseWidget: %s" % scene.resource_path)
         instance.queue_free()
         return
 
-    var widget := instance as BaseWidget
+    var widget: BaseWidget = instance as BaseWidget
 
     # Resolve parent first so initial position and size can be set correctly
-    var parent := _resolve_parent_for_placement(get_global_mouse_position())
+    var parent: Control = _resolve_parent_for_placement(get_global_mouse_position())
     parent.add_child(widget)
 
-    var parent_widget := parent as BaseWidget
+    var parent_widget: BaseWidget = parent as BaseWidget
     if parent_widget != null and parent_widget.is_container:
         parent_widget._elevate_child(widget)
 
     # Build the backing ReactiveWidget now that get_widget_class() is available
-    var reactive_widget := ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
+    var reactive_widget: ReactiveWidget = ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
     reactive_widget.position.value = parent.size / 2.0 - widget.size / 2.0
     reactive_widget.size.value     = widget.size
     reactive_widget.z_index.value  = widget.z_index
@@ -201,26 +241,26 @@ func spawn_widget(scene: PackedScene) -> void:
 # ── Parent Resolution ─────────────────────────────────────────────────────────
 
 func _resolve_parent_for_placement(drop_position: Vector2) -> Control:
-    var best := _find_deepest_drop_target(self, drop_position)
+    var best: Control = _find_deepest_drop_target(self, drop_position)
     return best if best != null else self
 
 
 func _find_deepest_drop_target(root: Control, drop_position: Vector2) -> Control:
     var best: Control = null
 
-    for child in root.get_children():
+    for child: Node in root.get_children():
         if not child is BaseWidget:
             continue
 
-        var widget      := child as BaseWidget
-        var drop_target := widget.get_drop_target()
+        var widget     : BaseWidget = child as BaseWidget
+        var drop_target: Control = widget.get_drop_target()
 
         if drop_target == null:
             continue
         if not drop_target.get_global_rect().has_point(drop_position):
             continue
 
-        var deeper := _find_deepest_drop_target(drop_target, drop_position)
+        var deeper: Control = _find_deepest_drop_target(drop_target, drop_position)
         best = deeper if deeper != null else drop_target
 
     return best
@@ -235,12 +275,12 @@ func _subscribe_widget(widget: BaseWidget) -> void:
 
 
 func _subscribe_all_recursive(root: Control) -> void:
-    for child in root.get_children():
+    for child: Node in root.get_children():
         if not child is BaseWidget:
             continue
-        var widget := child as BaseWidget
+        var widget: BaseWidget = child as BaseWidget
         _subscribe_widget(widget)
-        var drop_target := widget.get_drop_target()
+        var drop_target: Control = widget.get_drop_target()
         if drop_target != null:
             _subscribe_all_recursive(drop_target)
 
@@ -253,12 +293,12 @@ func get_all_nodes_recursive() -> Array[Node]:
 
 
 func _collect_nodes_recursive(root: Control, result: Array[Node]) -> void:
-    for child in root.get_children():
+    for child: Node in root.get_children():
         if not child is BaseWidget:
             continue
-        var widget := child as BaseWidget
+        var widget: BaseWidget = child as BaseWidget
         result.append(widget)
-        var drop_target := widget.get_drop_target()
+        var drop_target: Control = widget.get_drop_target()
         if drop_target != null:
             _collect_nodes_recursive(drop_target, result)
 
@@ -267,7 +307,7 @@ func _collect_nodes_recursive(root: Control, result: Array[Node]) -> void:
 func clear_all_widgets() -> void:
     _deselect_current()
     _context_target = null
-    for child in get_children():
+    for child: Node in get_children():
         if child is BaseWidget:
             child.queue_free()
 
@@ -294,7 +334,7 @@ func _on_add_widget_requested(scene: PackedScene) -> void:
 func _on_delete_widget_requested(widget_id: String) -> void:
     if not _is_active_canvas():
         return
-    for node in get_all_nodes_recursive():
+    for node: Node in get_all_nodes_recursive():
         if node is BaseWidget and (node as BaseWidget).data != null \
                 and (node as BaseWidget).data.widget_id.value == widget_id:
             _delete_widget(node as BaseWidget)

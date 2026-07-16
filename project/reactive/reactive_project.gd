@@ -4,7 +4,7 @@ extends ReactiveObject
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-const FILE_VERSION := 2
+const FILE_VERSION: int = 2
 
 # ── Fields ────────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ static func create_empty() -> ReactiveProject:
 static func from_dict(payload: Dictionary) -> ReactiveProject:
     if not _validate(payload):
         return null
-    var p := ReactiveProject.new()
+    var p: ReactiveProject = ReactiveProject.new()
     p._deserialize(payload)
     return p
 
@@ -49,7 +49,7 @@ static func from_dict(payload: Dictionary) -> ReactiveProject:
 func serialize() -> Dictionary:
     var serialised_pages: Array = []
     for item: Variant in pages.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page != null:
             serialised_pages.append(page.serialize())
 
@@ -68,7 +68,7 @@ func _deserialize(payload: Dictionary) -> void:
 
     pages.clear()
     for page_dict: Dictionary in payload.get("pages", []):
-        var page := ReactivePage.from_dict(page_dict, self)
+        var page: ReactivePage = ReactivePage.from_dict(page_dict, self)
         if page != null:
             pages.append(page)
 
@@ -96,7 +96,7 @@ func remove_page(target_id: String) -> bool:
 func _remove_recursive(target_id: String, array: ReactiveArray) -> bool:
     var items: Array = array.values()
     for i: int in items.size():
-        var page := items[i] as ReactivePage
+        var page: ReactivePage = items[i] as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
@@ -115,7 +115,7 @@ func move_page(page_id: String, target: ReactivePage, drop_mode: int) -> bool:
         push_warning("ReactiveProject: Cannot move '%s' into itself or a descendant." % page_id)
         return false
 
-    var page := _detach_recursive(page_id, pages)
+    var page: ReactivePage = _detach_recursive(page_id, pages)
     if page == null:
         push_warning("ReactiveProject: Could not detach page '%s'." % page_id)
         return false
@@ -138,7 +138,7 @@ func find_page_id(target_id: String) -> ReactivePage:
 
 func _find_recursive_id(target_id: String, array: ReactiveArray) -> ReactivePage:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
@@ -155,7 +155,7 @@ func find_page_name(target_name: String) -> ReactivePage:
 
 func _find_recursive_name(target_name: String, array: ReactiveArray) -> ReactivePage:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.page_name.value == target_name:
@@ -166,17 +166,19 @@ func _find_recursive_name(target_name: String, array: ReactiveArray) -> Reactive
     return null
 
 
-func get_default_page() -> ReactivePage:
+func get_default_page(default_first: bool = false) -> ReactivePage:
     var marked: ReactivePage = _find_default_recursive(pages)
     if marked != null:
         return marked
-    var all: Array = pages.values()
-    return all[0] as ReactivePage if not all.is_empty() else null
+    if default_first:
+        var all: Array = pages.values()
+        return all[0] as ReactivePage if not all.is_empty() else null
+    return null
 
 
 func _find_default_recursive(array: ReactiveArray) -> ReactivePage:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.is_default.value:
@@ -188,7 +190,7 @@ func _find_default_recursive(array: ReactiveArray) -> ReactivePage:
 
 
 func set_default_page(target_id: String) -> bool:
-    var found := _set_default_recursive(target_id, pages)
+    var found: bool = _set_default_recursive(target_id, pages)
     if not found:
         push_warning("ReactiveProject: set_default_page() — page_id '%s' not found." % target_id)
     return found
@@ -197,7 +199,7 @@ func set_default_page(target_id: String) -> bool:
 func _set_default_recursive(target_id: String, array: ReactiveArray) -> bool:
     var found: bool = false
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         page.is_default.value = (page.page_id.value == target_id)
@@ -212,27 +214,27 @@ func _set_default_recursive(target_id: String, array: ReactiveArray) -> bool:
 func _detach_recursive(target_id: String, array: ReactiveArray) -> ReactivePage:
     var items: Array = array.values()
     for i: int in items.size():
-        var page := items[i] as ReactivePage
+        var page: ReactivePage = items[i] as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
             array.remove_at(i)
             return page
-        var found := _detach_recursive(target_id, page.children)
+        var found: ReactivePage = _detach_recursive(target_id, page.children)
         if found != null:
             return found
     return null
 
 
 func _insert_sibling(page: ReactivePage, target: ReactivePage, offset: int) -> void:
-    var parent_array := _find_parent_array(target.page_id.value, pages)
+    var parent_array: ReactiveArray = _find_parent_array(target.page_id.value, pages)
     if parent_array == null:
         push_warning("ReactiveProject: Could not find parent array for target '%s'." % target.page_id.value)
         return
 
     var items: Array = parent_array.values()
     for i: int in items.size():
-        var item := items[i] as ReactivePage
+        var item: ReactivePage = items[i] as ReactivePage
         if item != null and item.page_id.value == target.page_id.value:
             page.owner = _find_parent_page(target.page_id.value)
             parent_array.insert(i + offset, page)
@@ -241,12 +243,12 @@ func _insert_sibling(page: ReactivePage, target: ReactivePage, offset: int) -> v
 
 func _find_parent_array(target_id: String, array: ReactiveArray) -> ReactiveArray:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
             return array
-        var found := _find_parent_array(target_id, page.children)
+        var found: ReactiveArray = _find_parent_array(target_id, page.children)
         if found != null:
             return found
     return null
@@ -262,12 +264,12 @@ func _find_parent_page_recursive(
     parent    : ReactivePage
 ) -> ReactivePage:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.page_id.value == target_id:
             return parent
-        var found := _find_parent_page_recursive(target_id, page.children, page)
+        var found: ReactivePage = _find_parent_page_recursive(target_id, page.children, page)
         if found != null:
             return found
     return null
@@ -279,7 +281,7 @@ func _is_ancestor(ancestor_id: String, target: ReactivePage) -> bool:
 
 func _is_ancestor_recursive(ancestor_id: String, array: ReactiveArray) -> bool:
     for item: Variant in array.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
         if page.page_id.value == ancestor_id:

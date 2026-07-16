@@ -18,7 +18,8 @@ func _ready() -> void:
     _timer.timeout.connect(_refresh)
 
     # Toggle the paused state whenever visibility changes
-    visibility_changed.connect(func():
+    visibility_changed.connect(
+        func() -> void:
         _timer.paused = not is_visible()
     )
 
@@ -65,9 +66,9 @@ func _refresh() -> void:
         _title_label.text     = "Status — All Servers"
         _show_all_button.visible = false
 
-    var server_count := 0
-    var group_count  := 0
-    var tag_count    := 0
+    var server_count : int = 0
+    var group_count  : int = 0
+    var tag_count    : int = 0
 
     for server_id: String in scope_ids:
         var conn: OpcUaServerConnection = connections[server_id]

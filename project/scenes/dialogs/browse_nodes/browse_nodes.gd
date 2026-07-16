@@ -17,23 +17,23 @@ signal node_id_selected(node_id: OpcUaNodeId)
 var _client:      GodotOpcUa = null
 var _owns_client: bool       = false
 
-var _browse_thread := Thread.new()
-var _thread_busy   := false
-var _thread_mutex  := Mutex.new()
+var _browse_thread: Thread = Thread.new()
+var _thread_busy: bool = false
+var _thread_mutex: Mutex = Mutex.new()
 
 ## When true, internal OPC UA namespace-0 infrastructure nodes are hidden.
 var _hide_internal_nodes: bool = true
 
 # ── TreeItem metadata slot indices ────────────────────────────────────────────
-const META_NODE_ID    := 0
-const META_NODE_CLASS := 1
-const PLACEHOLDER_TAG := "__placeholder__"
+const META_NODE_ID: int = 0
+const META_NODE_CLASS: int = 1
+const PLACEHOLDER_TAG: String = "__placeholder__"
 
 # ── String constants ──────────────────────────────────────────────────────────
-const TEXT_PLACEHOLDER     := "…"
-const TEXT_LOADING         := "Loading…"
-const TEXT_NO_SELECTION    := "No node selected"
-const TEXT_BROWSING_SERVER := "Browsing server…"
+const TEXT_PLACEHOLDER     : String = "…"
+const TEXT_LOADING         : String = "Loading…"
+const TEXT_NO_SELECTION    : String = "No node selected"
+const TEXT_BROWSING_SERVER : String = "Browsing server…"
 
 # ── Node classes that may contain children ────────────────────────────────────
 const EXPANDABLE_CLASSES: Array[String] = [
@@ -42,7 +42,7 @@ const EXPANDABLE_CLASSES: Array[String] = [
 ]
 
 # ── Color per node class ──────────────────────────────────────────────────────
-const CLASS_COLORS := {
+const CLASS_COLORS: Dictionary = {
     "Object":        Color(0.85, 0.85, 0.85),
     "Variable":      Color(0.45, 0.95, 0.45),
     "Method":        Color(0.45, 0.75, 1.00),
@@ -53,7 +53,7 @@ const CLASS_COLORS := {
     "View":          Color(0.85, 0.85, 0.85),
 }
 
-var _root_node := OpcUaNodeId.numeric(0, 84)
+var _root_node: OpcUaNodeId = OpcUaNodeId.numeric(0, 84)
 
 # =============================================================================
 # Lifecycle
@@ -242,7 +242,7 @@ func _populate_children(target_item: TreeItem, results: Array) -> void:
     if ph != null and ph.get_metadata(META_NODE_ID) == PLACEHOLDER_TAG:
         ph.free()
 
-    var visible_count := 0
+    var visible_count: int = 0
     for entry: Dictionary in results:
         if not _is_internal_node(entry):        # ← filter applied here
             _add_tree_item(target_item, entry)
@@ -269,7 +269,7 @@ func _parse_node_id(node_id_str: String) -> OpcUaNodeId:
 ## Cleans up a pending one-shot connection on the node_id_selected signal.
 ## Called when the user cancels without confirming a selection.
 func _clear_pending_selection_callback() -> void:
-    var connections := node_id_selected.get_connections()
+    var connections: Array = node_id_selected.get_connections()
     if connections.size() > 0:
         node_id_selected.disconnect(connections[0]["callable"])
 
@@ -372,7 +372,7 @@ func _filter_subtree(item: TreeItem, search: String) -> bool:
     var name_matches: bool = search.is_empty() or \
         item.get_text(0).to_lower().contains(search)
 
-    var child_matches := false
+    var child_matches: bool = false
     var child: TreeItem = item.get_first_child()
     while child != null:
         if _filter_subtree(child, search):
@@ -413,7 +413,7 @@ func _is_internal_node(entry: Dictionary) -> bool:
             return true
 
         # Filter low numeric IDs — OPC UA reserved range (0–999)
-        var numeric_part := node_id_str.trim_prefix("ns=0;i=").trim_prefix("i=")
+        var numeric_part: String = node_id_str.trim_prefix("ns=0;i=").trim_prefix("i=")
         if numeric_part.is_valid_int() and int(numeric_part) < 1000:
             return true
 

@@ -2,8 +2,8 @@
 class_name BaseWidget
 extends SelectableControl
 
-const MIN_SIZE     := Vector2(10.0, 10.0)
-const Z_INDEX_BASE := 0
+const MIN_SIZE: Vector2 = Vector2(10.0, 10.0)
+const Z_INDEX_BASE: int = 0
 
 # ─────────────────────────────────────────────
 # Exports
@@ -98,7 +98,7 @@ func get_protected_controls() -> Array[Control]:
     return []
 
 
-func _apply_properties(props: Dictionary) -> void:
+func _apply_properties(_props: Dictionary) -> void:
     pass
 
 # ─────────────────────────────────────────────
@@ -112,21 +112,21 @@ func _on_change_widget_property_requested(widget_id: String, property: String, v
         return
     _apply_property(property, value)
 
-func _on_widget_moved(_control: SelectableControl) -> void:
+func _on_widget_moved(_widget: SelectableControl) -> void:
     data.position.value = position
 
 
-func _on_widget_resized(_control: SelectableControl) -> void:
+func _on_widget_resized(_widget: SelectableControl) -> void:
     data.position.value = position
     data.size.value     = size
 
 
-func _on_reactive_position_changed(_reactive) -> void:
-    position = data.position.value
+func _on_reactive_position_changed(reactive_position: ReactiveVector2) -> void:
+    position = reactive_position.value
 
 
-func _on_reactive_size_changed(_reactive) -> void:
-    size = data.size.value
+func _on_reactive_size_changed(reactive_size: ReactiveVector2) -> void:
+    size = reactive_size.value
 
 ## Applies a single property change to the reactive data object and
 ## updates the live scene display. The mutation on data propagates
@@ -194,9 +194,9 @@ func serialize() -> Dictionary:
 
 func _serialize_children(root: Control) -> Array[ReactiveWidget]:
     var result: Array[ReactiveWidget] = []
-    for child in root.get_children():
+    for child: Node in root.get_children():
         if child is BaseWidget:
-            var child_widget := child as BaseWidget
+            var child_widget: BaseWidget = child as BaseWidget
             child_widget.serialize()
             if child_widget.data != null:
                 result.append(child_widget.data)

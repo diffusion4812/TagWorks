@@ -93,7 +93,7 @@ func poll() -> void:
 
     for tag_name: String in changed:
         if registry.apply_update(tag_name, changed[tag_name]):
-            var entry := registry.get_entry_by_name(tag_name)
+            var entry: OpcUaTagRegistry.TagEntry = registry.get_entry_by_name(tag_name)
             if entry:
                 tag_value_changed.emit(server_id, entry.node_id, entry.value)
 
@@ -103,7 +103,7 @@ func write_tag(node_id: OpcUaNodeId, value: Variant) -> bool:
     if not registry.has_tag(node_id):
         push_warning("OpcUaServerConnection [%s]: write on unregistered tag." % server_id)
         return false
-    var ok := _client.write_node(node_id, value)
+    var ok: bool = _client.write_node(node_id, value)
     if ok:
         registry.mark_dirty(node_id)
     return ok
@@ -127,13 +127,13 @@ func _get_or_create_group(interval_ms: float) -> OpcUaSubscriptionGroup:
 
 func _remove_entry_from_groups(tag_name: String) -> void:
     var to_delete: Array = []
-    for interval_ms in _groups:
+    for interval_ms: float in _groups:
         var group: OpcUaSubscriptionGroup = _groups[interval_ms]
         group.remove_entry(tag_name)
         if group.is_empty():
             group.delete(_client)
             to_delete.append(interval_ms)
-    for key in to_delete:
+    for key: float in to_delete:
         _groups.erase(key)
 
 
@@ -143,9 +143,9 @@ func _rebuild_all_groups() -> void:
         group.delete(_client)
     _groups.clear()
 
-    var by_interval := registry.get_active_entries_by_interval()
+    var by_interval: Dictionary = registry.get_active_entries_by_interval()
     for interval_ms: float in by_interval:
-        var group := _get_or_create_group(interval_ms)
+        var group: OpcUaSubscriptionGroup = _get_or_create_group(interval_ms)
         for entry: OpcUaTagRegistry.TagEntry in by_interval[interval_ms]:
             group.add_entry(entry)
         group.rebuild(_client)
@@ -153,10 +153,10 @@ func _rebuild_all_groups() -> void:
 # ── Registry signal handlers ──────────────────────────────────────────────────
 
 func _on_tag_registered(tag_name: String) -> void:
-    var entry := registry.get_entry_by_name(tag_name)
+    var entry: OpcUaTagRegistry.TagEntry = registry.get_entry_by_name(tag_name)
     if entry == null or not entry.is_active:
         return
-    var group := _get_or_create_group(entry.pub_interval_ms)
+    var group: OpcUaSubscriptionGroup = _get_or_create_group(entry.pub_interval_ms)
     group.add_entry(entry)
 
 
@@ -165,12 +165,12 @@ func _on_tag_unregistered(tag_name: String) -> void:
 
 
 func _on_tag_activation_changed(tag_name: String, active: bool) -> void:
-    var entry := registry.get_entry_by_name(tag_name)
+    var entry: OpcUaTagRegistry.TagEntry = registry.get_entry_by_name(tag_name)
     if entry == null:
         return
 
     if active:
-        var group := _get_or_create_group(entry.pub_interval_ms)
+        var group: OpcUaSubscriptionGroup = _get_or_create_group(entry.pub_interval_ms)
         group.add_entry(entry)
     else:
         _remove_entry_from_groups(tag_name)
@@ -186,7 +186,7 @@ func get_group_ids() -> Array:
 func add_group(group: OpcUaSubscriptionGroupConfig) -> void:
     _group_configs[group.id] = group
     # Create the runtime subscription group keyed by interval
-    var sub_group := _get_or_create_group(group.pub_interval_ms)
+    var sub_group: OpcUaSubscriptionGroup = _get_or_create_group(group.pub_interval_ms)
     if _connected:
         sub_group.rebuild(_client)
 
@@ -198,7 +198,7 @@ func remove_group(group_id: String) -> void:
     _group_configs.erase(group_id)
 
     # Remove the runtime group if no other config shares its interval
-    var interval_still_used := false
+    var interval_still_used: bool = false
     for remaining: OpcUaSubscriptionGroupConfig in _group_configs.values():
         if is_equal_approx(remaining.pub_interval_ms, cfg.pub_interval_ms):
             interval_still_used = true
@@ -216,7 +216,7 @@ func update_group(group: OpcUaSubscriptionGroupConfig) -> void:
     if old_cfg == null:
         return
 
-    var interval_changed := not is_equal_approx(
+    var interval_changed: bool = not is_equal_approx(
         old_cfg.pub_interval_ms, group.pub_interval_ms
     )
     _group_configs[group.id] = group

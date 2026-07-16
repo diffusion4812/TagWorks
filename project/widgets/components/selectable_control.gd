@@ -3,12 +3,10 @@ class_name SelectableControl
 extends Control
 
 signal selection_requested(control: SelectableControl)
-signal drag_moved(widget: SelectableControl)
-signal drag_ended(widget: SelectableControl)
 signal widget_moved(widget: SelectableControl)
 signal widget_resized(widget: SelectableControl)
 
-const GRID_SIZE := 10
+const GRID_SIZE: int = 10
 
 var _is_selected:      bool                  = false
 var _handle_container: ResizeHandleContainer = null
@@ -36,10 +34,10 @@ func _on_edit_mode_changed(_enabled: bool) -> void:
     pass
 
 func _propagate_edit_mode(enabled: bool) -> void:
-    var drop_target := get_drop_target()
+    var drop_target: Control = get_drop_target()
     if drop_target == null:
         return
-    for child in drop_target.get_children():
+    for child: Node in drop_target.get_children():
         if child is SelectableControl:
             (child as SelectableControl).edit_mode = enabled
 
@@ -58,7 +56,7 @@ func _snap(value: Vector2) -> Vector2:
 
 
 func _get_position_bounds() -> Rect2:
-    var parent := get_parent()
+    var parent: Node = get_parent()
     if parent is Control:
         return Rect2(Vector2.ZERO, (parent as Control).size - size)
     return Rect2(Vector2.ZERO, Vector2(INF, INF))
@@ -77,18 +75,16 @@ func _gui_input(event: InputEvent) -> void:
             select()
         else:
             if _dragging:
-                drag_ended.emit(self)
                 widget_moved.emit(self)
         _dragging = event.pressed
         get_viewport().set_input_as_handled()
 
     if _dragging:
         if event is InputEventMouseMotion or event is InputEventScreenDrag:
-            var bounds               := _get_position_bounds()
+            var bounds: Rect2         = _get_position_bounds()
             var local_mouse: Vector2  = (get_parent() as Control).get_local_mouse_position()
             _raw_position             = (local_mouse - _drag_offset).clamp(bounds.position, bounds.end)
             position                  = _snap(_raw_position)
-            drag_moved.emit(self)
             get_viewport().set_input_as_handled()
 
 # ── Selection ─────────────────────────────────────────────────────────────────
@@ -133,8 +129,8 @@ func _hide_handles() -> void:
 
 
 func _on_handle_dragged(delta: Vector2, anchor: ResizeHandle.HandleAnchor) -> void:
-    var raw_pos  := _raw_position
-    var raw_size := _raw_size
+    var raw_pos: Vector2  = _raw_position
+    var raw_size: Vector2 = _raw_size
 
     match anchor:
         ResizeHandle.HandleAnchor.TOP_LEFT:
@@ -168,7 +164,7 @@ func _on_handle_dragged(delta: Vector2, anchor: ResizeHandle.HandleAnchor) -> vo
 
 func _on_handle_drag_finished() -> void:
     widget_resized.emit(self)
-    
+
 # ── Serialization ─────────────────────────────────────────────────────────────
 
 func serialize() -> Dictionary:

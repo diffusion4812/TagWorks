@@ -22,7 +22,7 @@ func get_config(id: String) -> OpcUaServerConfig:
 
 func get_all_configs() -> Array[OpcUaServerConfig]:
     var result: Array[OpcUaServerConfig] = []
-    for cfg in _configs.values():
+    for cfg: OpcUaServerConfig in _configs.values():
         result.append(cfg)
     return result
 
@@ -65,7 +65,7 @@ func deserialize(data: Array) -> void:
     for entry: Variant in data:
         if not entry is Dictionary:
             continue
-        var cfg := OpcUaServerConfig.deserialize(entry)
+        var cfg: OpcUaServerConfig = OpcUaServerConfig.deserialize(entry)
         if cfg.id != "":
             _configs[cfg.id] = cfg
     configs_changed.emit()

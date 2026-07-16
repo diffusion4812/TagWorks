@@ -10,6 +10,11 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     widgets  = ReactiveArray.new([], self, "widgets")
     is_dirty = ReactiveBool.new(false, self, "is_dirty")
 
+    widgets.reactive_changed.connect(
+        func(_widgets: ReactiveArray) -> void:
+            is_dirty.value = true
+    )
+
     if not data.is_empty():
         from_data(data)
 
@@ -17,7 +22,8 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
 func from_data(data: Dictionary) -> void:
     widgets.clear()
     for widget_data: Dictionary in data.get("widgets", []):
-        widgets.append(widget_data)
+        var widget: ReactiveWidget = ReactiveWidget.from_dict(widget_data)
+        widgets.append(widget)
 
 
 func to_data() -> Dictionary:

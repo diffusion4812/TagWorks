@@ -1,5 +1,5 @@
 # main.gd
-extends Node
+extends Control
 
 # ── Child references ──────────────────────────────────────────────────────────
 
@@ -16,6 +16,11 @@ extends Node
 @onready var connection_dialog:   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
 @onready var file_dialog:         FileDialog            = $Dialogs/FileDialog
 @onready var status_dialog:       OpcUaStatusDialog     = $Dialogs/OpcUaStatusDialog
+
+var active_theme: Theme
+@onready var base_theme: Theme = preload("res://resources/base_theme.tres")
+@onready var dark_theme: Theme = preload("res://resources/dark_theme.tres")
+@onready var light_theme: Theme = preload("res://resources/light_theme.tres")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -35,16 +40,19 @@ func _ready() -> void:
     _set_scaling()
     _connect_signals()
 
-
 ## Scales the UI relative to the screen DPI so the layout is consistent
 ## across devices with different pixel densities.
 func _set_scaling() -> void:
-    var screen_dpi   := DisplayServer.screen_get_dpi()
-    var scale_factor := maxf(screen_dpi / 130.0, 1.0)
+    var screen_dpi: int = DisplayServer.screen_get_dpi()
+    var scale_factor: float = maxf(screen_dpi / 130.0, 1.0)
     get_tree().root.content_scale_factor = scale_factor
 
 
 func _connect_signals() -> void:
+    # ── System ────────────────────────────────────────────────────────────────
+    DisplayServer.set_system_theme_change_callback(_on_os_theme_changed)
+    _on_os_theme_changed()
+
     # ── Menu bar ──────────────────────────────────────────────────────────────
     file_menu.id_pressed.connect(_on_file_menu_pressed)
     edit_menu.id_pressed.connect(_on_edit_menu_pressed)
@@ -64,8 +72,21 @@ func _connect_signals() -> void:
     # ── File dialog ───────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
-    # ── AppState — project lifecycle ──────────────────────────────────────────
+    # ── AppState ──────────────────────────────────────────────────────────────
     AppState.current_project.changed.connect(_on_current_project_changed)
+    AppState.edit_mode.reactive_changed.connect(
+        func(edit_mode: ReactiveBool) -> void:
+            edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
+            inspector_container.visible = edit_mode.value
+    )
+
+# ── System ────────────────────────────────────────────────────────────────────
+
+func _on_os_theme_changed() -> void:
+    active_theme = base_theme.duplicate()
+    active_theme.merge_with(dark_theme if DisplayServer.is_dark_mode() else light_theme)
+    theme = active_theme
+
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
@@ -104,14 +125,14 @@ func _rebuild_server_menu() -> void:
     while server_menu.item_count > SERVER_MENU_FIXED_ITEM_COUNT:
         server_menu.remove_item(server_menu.item_count - 1)
 
-    var configs := ProjectManager.opc_ua_registry.get_all_configs()
+    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
     if configs.is_empty():
         return
 
     server_menu.add_separator()
 
     for cfg: OpcUaServerConfig in configs:
-        var submenu  := PopupMenu.new()
+        var submenu: PopupMenu = PopupMenu.new()
         submenu.name  = "sub_%s" % cfg.id
         submenu.add_item("Connect",    0)
         submenu.add_item("Disconnect", 1)
@@ -122,7 +143,7 @@ func _rebuild_server_menu() -> void:
         server_menu.add_child(submenu)
         _server_submenus[cfg.id] = submenu
 
-        var prefix := "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
+        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
         server_menu.add_submenu_node_item(prefix + cfg.display_name, submenu)
 
     _on_server_status_timeout()
@@ -140,7 +161,7 @@ func _on_server_submenu_pressed(server_id: String, id: int) -> void:
 ## Refreshes server menu dot indicators and submenu item states
 ## without triggering a full structural rebuild.
 func _on_server_status_timeout() -> void:
-    var configs := ProjectManager.opc_ua_registry.get_all_configs()
+    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
 
     for i: int in configs.size():
         var cfg        : OpcUaServerConfig = configs[i]
@@ -149,8 +170,8 @@ func _on_server_status_timeout() -> void:
         if menu_index >= server_menu.item_count:
             break
 
-        var connected := OpcUaManager.is_server_connected(cfg.id)
-        var prefix    := "● " if connected else "○ "
+        var connected: bool = OpcUaManager.is_server_connected(cfg.id)
+        var prefix: String  = "● " if connected else "○ "
         server_menu.set_item_text(menu_index, prefix + cfg.display_name)
 
         var submenu: PopupMenu = _server_submenus.get(cfg.id, null)
@@ -205,11 +226,8 @@ func _on_file_dialog_selected(path: String) -> void:
 ## An empty name and path indicates a closed or unloaded project.
 func _on_current_project_changed() -> void:
     var project: ReactiveProject = AppState.current_project.value
-    var is_open := not project.file_path.value.is_empty() \
+    var is_open: bool = not project.file_path.value.is_empty() \
                 or not project.project_name.value.is_empty()
-
-    AppState.edit_mode.value = false
-    edit_mode_toggle.set_pressed_no_signal(false)
 
     if is_open:
         inspector_container.show()

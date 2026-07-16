@@ -6,7 +6,7 @@ signal drag_started()
 signal drag_finished()
 signal dragged(delta: Vector2, anchor: ResizeHandle.HandleAnchor)
 
-const HANDLE_SIZE := ResizeHandle.HANDLE_SIZE
+const HANDLE_SIZE: float = ResizeHandle.HANDLE_SIZE
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -17,12 +17,12 @@ func _ready() -> void:
 
 
 func _spawn_handles() -> void:
-    for anchor in ResizeHandle.HandleAnchor.values():
-        var handle := ResizeHandle.new()
+    for anchor: ResizeHandle.HandleAnchor in ResizeHandle.HandleAnchor.values():
+        var handle: ResizeHandle = ResizeHandle.new()
         handle.anchor = anchor
-        handle.drag_started.connect(func(): drag_started.emit())
-        handle.drag_finished.connect(func(): drag_finished.emit())
-        handle.dragged.connect(func(delta, a): dragged.emit(delta, a))
+        handle.drag_started.connect(func() -> void: drag_started.emit())
+        handle.drag_finished.connect(func() -> void: drag_finished.emit())
+        handle.dragged.connect(func(delta: Vector2, a: ResizeHandle.HandleAnchor) -> void: dragged.emit(delta, a))
         add_child(handle)
 
 
@@ -32,7 +32,7 @@ func refresh() -> void:
     if not is_node_ready():
         return
 
-    var configs := {
+    var configs: Dictionary = {
         ResizeHandle.HandleAnchor.TOP_LEFT: {
             "preset":  Control.PRESET_TOP_LEFT,
             "grow_h":  Control.GROW_DIRECTION_BEGIN,
@@ -75,7 +75,7 @@ func refresh() -> void:
         },
     }
 
-    for child in get_children():
+    for child: Node in get_children():
         if child is ResizeHandle:
             var config: Dictionary = configs.get(child.anchor, {})
             if config.is_empty():

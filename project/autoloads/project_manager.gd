@@ -1,8 +1,8 @@
 # autoloads/project_manager.gd
 extends Node
 
-const SAVE_DIR     := "user://projects/"
-const FILE_VERSION := 2
+const SAVE_DIR     :String = "user://projects/"
+const FILE_VERSION :int    = 2
 
 const NODE_REGISTRY: Dictionary = {
     "ButtonWidget":       "res://widgets/button_widget/button_widget.tscn",
@@ -16,7 +16,7 @@ const NODE_REGISTRY: Dictionary = {
     "TabWidget":          "res://widgets/tab_widget/tab_widget.tscn",
 }
 
-var opc_ua_registry := OpcUaConfigRegistry.new()
+var opc_ua_registry: OpcUaConfigRegistry = OpcUaConfigRegistry.new()
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ func get_current_project_path() -> String:
 func _on_new_project_requested() -> void:
     var new_project: ReactiveProject = ReactiveProject.new(null, "new_project")
     new_project.project_name.value = "New Project"
-    var new_page := ReactivePage.create("New Page", new_project.pages, "new_page")
+    var new_page: ReactivePage = ReactivePage.create("New Page", new_project.pages, "new_page")
     new_project.pages.append(new_page)
 
     AppState.current_project.value = new_project
@@ -63,7 +63,7 @@ func _on_open_project_requested(path: String) -> void:
 
 
 func _on_close_project_requested() -> void:
-    AppState.clear()
+    AppState.current_project.value = null
 
 # ── Save ──────────────────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ func _save(path: String) -> void:
     # Inject live OPC UA server state before serialising
     project.opc_ua_servers.value = opc_ua_registry.serialize()
 
-    var file := FileAccess.open(path, FileAccess.WRITE)
+    var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
     if file == null:
         push_error("Failed to open file for writing: %s" % path)
         return
@@ -97,7 +97,7 @@ func _load(path: String) -> void:
         AppState.last_error.value = "Project file not found: %s" % path
         return
 
-    var file := FileAccess.open(path, FileAccess.READ)
+    var file: FileAccess = FileAccess.open(path, FileAccess.READ)
     if file == null:
         AppState.last_error.value = "Failed to open file for reading: %s" % path
         return
@@ -109,7 +109,7 @@ func _load(path: String) -> void:
         AppState.last_error.value = "Invalid project file format."
         return
 
-    var project := ReactiveProject.from_dict(payload)
+    var project: ReactiveProject = ReactiveProject.from_dict(payload)
     if project == null:
         AppState.last_error.value = "Unsupported or corrupt project file."
         return
@@ -119,14 +119,13 @@ func _load(path: String) -> void:
     opc_ua_registry.deserialize(project.opc_ua_servers.value)
 
     # Rebuild the live scene widget trees for every page from canvas data
-    _restore_all_canvases(project.pages)
+    # _restore_all_canvases(project.pages)
 
     # Push the fully hydrated project into AppState
     AppState.current_project.value = project
 
     var default_page: ReactivePage = AppState.current_project.value.get_default_page()
     if default_page != null:
-        AppState.focused_page.value = default_page
         AppState.active_page.value  = default_page
 
 # ── Canvas Restore ────────────────────────────────────────────────────────────
@@ -135,7 +134,7 @@ func _load(path: String) -> void:
 ## tree from the widget dictionaries stored in ReactivePage.canvas.
 func _restore_all_canvases(pages: ReactiveArray) -> void:
     for item: Variant in pages.values():
-        var page := item as ReactivePage
+        var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
 
@@ -148,7 +147,7 @@ func _restore_canvas(page: ReactivePage) -> void:
     # Resolve the scene node responsible for hosting this page's widgets.
     # Each WidgetHost node should expose a page_id property and belong to
     # the "widget_host" group so it can be matched to its ReactivePage.
-    var host := _find_host_for_page(page)
+    var host: Control = _find_host_for_page(page)
     if host == null:
         push_warning("ProjectManager: No widget host found for page '%s'." % page.page_id.value)
         return
@@ -162,9 +161,9 @@ func _restore_canvas(page: ReactivePage) -> void:
 
 ## Resolves the scene node responsible for hosting widgets for the given page.
 func _find_host_for_page(page: ReactivePage) -> Control:
-    var hosts := get_tree().get_nodes_in_group("widget_host")
+    var hosts: Array[Node] = get_tree().get_nodes_in_group("widget_host")
     for node: Node in hosts:
-        var host := node as Control
+        var host: Control = node as Control
         if host != null and host.get("page_id") == page.page_id.value:
             return host
     return null
@@ -180,12 +179,12 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
         push_error("ProjectManager: Unknown node type '%s'." % type)
         return
 
-    var packed := load(NODE_REGISTRY[type]) as PackedScene
+    var packed: PackedScene = load(NODE_REGISTRY[type]) as PackedScene
     if packed == null:
         push_error("ProjectManager: Failed to load scene for '%s'." % type)
         return
 
-    var instance := packed.instantiate()
+    var instance: Node = packed.instantiate()
     if not instance is BaseWidget:
         push_error("ProjectManager: Scene is not a BaseWidget for type '%s'." % type)
         instance.queue_free()
@@ -193,7 +192,7 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
 
     parent.add_child(instance)
 
-    var widget := instance as BaseWidget
+    var widget: BaseWidget = instance as BaseWidget
 
     if parent is BaseWidget and (parent as BaseWidget).is_container:
         (parent as BaseWidget)._elevate_child(widget)
@@ -201,7 +200,7 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
     widget.deserialize(data)
 
     if widget.is_container:
-        var drop_target := widget.get_drop_target()
+        var drop_target: Control = widget.get_drop_target()
         if drop_target != null:
             for child_data: Variant in data.get("children", []):
                 if child_data is Dictionary:
@@ -212,11 +211,11 @@ func _restore_node(parent: Control, data: Dictionary) -> void:
 func get_saved_projects() -> Array[String]:
     _ensure_save_dir()
     var result: Array[String] = []
-    var dir := DirAccess.open(SAVE_DIR)
+    var dir: DirAccess = DirAccess.open(SAVE_DIR)
     if dir == null:
         return result
     dir.list_dir_begin()
-    var file_name := dir.get_next()
+    var file_name: String = dir.get_next()
     while file_name != "":
         if not dir.current_is_dir() and file_name.ends_with(".json"):
             result.append(file_name.trim_suffix(".json"))
