@@ -58,9 +58,6 @@ func _on_value_changed(value: Variant) -> void:
     var f: float = value
     live_plot.push_data(signal_name, f)
 
-func _on_edit_mode_changed(enabled: bool) -> void:
-    super._on_edit_mode_changed(enabled)
-
 # ─────────────────────────────────────────────
 # Class
 # ─────────────────────────────────────────────
@@ -73,19 +70,20 @@ func get_widget_class() -> String:
 # ─────────────────────────────────────────────
 
 func build_properties(builder: WidgetPropertyBuilder) -> void:
-    builder.add_node_field(  "node_id",      "Node ID",      node_id)
-    builder.add_string_field("signal_name",  "Signal Name",  signal_name)
-    builder.add_color_field( "signal_color", "Signal Color", signal_color)
-    builder.add_int_field(   "signal_axis",  "Axis",         signal_axis)
+    pass
+   # builder.add_node_field(  "node_id",      "Node ID",      node_id)
+   # builder.add_string_field("signal_name",  "Signal Name",  signal_name)
+   # builder.add_color_field( "signal_color", "Signal Color", signal_color)
+   # builder.add_int_field(   "signal_axis",  "Axis",         signal_axis)
 
 # ─────────────────────────────────────────────
 # Serialization
 # ─────────────────────────────────────────────
 
 func serialize() -> Dictionary:
-    var data := super.serialize()
-    data["signal"] = {
-        "node_id":      node_id.to_tag_name() if node_id != null else null,
+    var serialized_data: Dictionary = super.serialize()
+    serialized_data["signal"] = {
+        "node_id":      node_id.to_tag_name() if node_id != null else "",
         "signal_name":  signal_name,
         "signal_color": {
             "r": signal_color.r,
@@ -95,12 +93,12 @@ func serialize() -> Dictionary:
         },
         "signal_axis":  signal_axis
     }
-    return data
+    return serialized_data
 
-func deserialize(data: Dictionary) -> void:
-    super.deserialize(data)
-    var s: Dictionary = data.get("signal", {})
-    node_id      = OpcUaNodeId.parse(s["node_id"]) if s.get("node_id") != null else null
+func deserialize(serialized_data: Dictionary) -> void:
+    super.deserialize(serialized_data)
+    var s: Dictionary = serialized_data.get("signal", {})
+    node_id      = OpcUaNodeId.parse(s["node_id"]) if s.get("node_id") != "" else null
     signal_name  = s.get("signal_name",  signal_name)
     signal_color = Color(
         s.get("signal_color", {}).get("r", 0.0),

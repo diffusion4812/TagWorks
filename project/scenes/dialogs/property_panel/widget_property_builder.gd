@@ -1,15 +1,17 @@
 class_name WidgetPropertyBuilder
 
-var _panel: PropertyPanel
+var _panel       : PropertyPanel
+var _target_data : ReactiveWidget
 
-func _init(panel: PropertyPanel) -> void:
-    _panel = panel
+func _init(panel: PropertyPanel, target_data: ReactiveWidget) -> void:
+    _panel       = panel
+    _target_data = target_data
 
 ## Directly emits a property value without creating any UI field.
-## Used by emit_all() to synchronise current widget state into the
-## panel after fields have been built.
+## Used by emit_all() to synchronise current widget state after
+## fields have been built.
 func emit(prop: String, value: Variant) -> void:
-    _panel.property_changed.emit(prop, value)
+    IntentBus.change_widget_property_requested.emit(_target_data, prop, value)
 
 # ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -17,26 +19,29 @@ func _make_script_button(prop: String) -> Button:
     var button: Button = Button.new()
     button.text         = "{}"
     button.tooltip_text = "Open script editor"
-    button.pressed.connect(func(): _panel._open_script_editor(prop))
+    button.pressed.connect(func() -> void: _panel._open_script_editor(prop))
     return button
 
 # ── Field builders ────────────────────────────────────────────────────────────
 
-func add_float_field(prop: String, lbl: String, current: float) -> void:
+func add_float_field(lbl: String, target: ReactiveVariant) -> void:
     var row   :HBoxContainer = HBoxContainer.new()
     var label :Label = Label.new()
     var field :LineEdit = LineEdit.new()
 
     label.text                  = lbl
     label.custom_minimum_size.x = 100
-    field.text                  = str(current)
+    field.text                  = str(target.value)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, float(v)))
+    field.text_submitted.connect(func(v: String) -> void:
+        _panel.property_changed.emit(target.label, float(v))
+        field.text = str(target.value) # re-sync after widget accepts/refuses
+    )
 
     row.add_child(label)
     row.add_child(field)
-    row.add_child(_make_script_button(prop))
+    #row.add_child(_make_script_button(target))
     _panel.extra_props.add_child(row)
 
 
@@ -50,7 +55,7 @@ func add_int_field(prop: String, lbl: String, current: int) -> void:
     field.text                  = str(current)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, int(v)))
+    field.text_submitted.connect(func(v: String) -> void: emit(prop, int(v)))
 
     row.add_child(label)
     row.add_child(field)
@@ -58,21 +63,24 @@ func add_int_field(prop: String, lbl: String, current: int) -> void:
     _panel.extra_props.add_child(row)
 
 
-func add_string_field(prop: String, lbl: String, current: String) -> void:
+func add_string_field(p: String, l: String, v: ReactiveDictionary) -> void:
     var row   :HBoxContainer = HBoxContainer.new()
     var label :Label = Label.new()
     var field :LineEdit = LineEdit.new()
 
-    label.text                  = lbl
+    label.text                  = l
     label.custom_minimum_size.x = 100
-    field.text                  = current
+    field.text                  = v.value[p].value
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
+    field.text_submitted.connect(func(n: String) -> void:
+        _panel.property_changed.emit(p, n)
+        field.text = v.value[p].value # re-sync after widget accepts/refuses
+    )
 
     row.add_child(label)
     row.add_child(field)
-    row.add_child(_make_script_button(prop))
+    #row.add_child(_make_script_button(target))
     _panel.extra_props.add_child(row)
 
 
@@ -86,7 +94,7 @@ func add_bool_field(prop: String, lbl: String, current: bool) -> void:
     checkbox.button_pressed        = current
     checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    checkbox.toggled.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
+    checkbox.toggled.connect(func(v: bool) -> void: emit(prop, v))
 
     row.add_child(label)
     row.add_child(checkbox)
@@ -105,7 +113,7 @@ func add_color_field(prop: String, lbl: String, current: Color) -> void:
     picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     picker.custom_minimum_size.y = 32
 
-    picker.color_changed.connect(func(v: String) -> void: _panel.property_changed.emit(prop, v))
+    picker.color_changed.connect(func(v: Color) -> void: emit(prop, v))
 
     row.add_child(label)
     row.add_child(picker)
@@ -144,7 +152,7 @@ func add_string_list_field(prop: String, lbl: String, current: Array[String]) ->
     add_btn.pressed.connect(func() -> void:
         working_copy.append("New Tab")
         _add_string_list_entry(prop, list_container, working_copy, working_copy.size() - 1)
-        _panel.property_changed.emit(prop, working_copy.duplicate())
+        emit(prop, working_copy.duplicate())
     )
     col.add_child(add_btn)
     _panel.extra_props.add_child(col)
@@ -163,7 +171,7 @@ func _add_string_list_entry(
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     field.text_submitted.connect(func(new_text: String) -> void:
         list[index] = new_text
-        _panel.property_changed.emit(prop, list.duplicate())
+        emit(prop, list.duplicate())
     )
     entry_row.add_child(field)
 
@@ -173,7 +181,7 @@ func _add_string_list_entry(
     remove_btn.pressed.connect(func() -> void:
         list.remove_at(index)
         entry_row.queue_free()
-        _panel.property_changed.emit(prop, list.duplicate())
+        emit(prop, list.duplicate())
     )
     entry_row.add_child(remove_btn)
     container.add_child(entry_row)
@@ -253,16 +261,16 @@ func add_node_field(
         _populate_group_option(group_option, sid)
         var first_gid: String = _get_first_group_id(sid)
         _select_option_by_meta(group_option, first_gid)
-        _panel.property_changed.emit(prop + "/server_id", sid)
-        _panel.property_changed.emit(prop + "/group_id",  first_gid)
+        emit(prop + "/server_id", sid)
+        emit(prop + "/group_id",  first_gid)
         if is_instance_valid(tag_edit):
             tag_edit.text = ""
-        _panel.property_changed.emit(prop + "/node_id", null)
+        emit(prop + "/node_id", null)
     )
 
     group_option.item_selected.connect(func(_index: int) -> void:
         var gid: String = group_option.get_item_metadata(group_option.selected)
-        _panel.property_changed.emit(prop + "/group_id", gid)
+        emit(prop + "/group_id", gid)
     )
 
     browse_btn.pressed.connect(func() -> void:
@@ -279,7 +287,7 @@ func add_node_field(
         _panel._open_browser_for_server(sid, func(node_id: OpcUaNodeId) -> void:
             if is_instance_valid(tag_edit):
                 tag_edit.text = node_id.to_tag_name()
-            _panel.property_changed.emit(prop + "/node_id", node_id)
+            emit(prop + "/node_id", node_id)
         )
     )
 

@@ -21,20 +21,18 @@ var children    : ReactiveArray
 
 # ── Properties & Binding ──────────────────────────────────────────────────────
 
-var properties  : ReactiveDictionary
+var properties  : ReactiveDictionary # String -> ReactiveVariant
 var node_id     : ReactiveString
 var server_id   : ReactiveString
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
-func _init(initial_owner: Reactive = null) -> void:
-    super._init(null, initial_owner)
+func _init(initial_value: Variant = null, initial_owner: Reactive = null, label: String = "") -> void:
+    super._init(initial_value, initial_owner, label)
 
     widget_id   = ReactiveString.new("",                 self, "widget_id")
     widget_type = ReactiveString.new("",                 self, "widget_type")
     widget_name = ReactiveString.new("",                 self, "widget_name")
-    position    = ReactiveVector2.new(Vector2.ZERO,      self, "position")
-    size        = ReactiveVector2.new(Vector2(100, 100), self, "size")
     z_index     = ReactiveInt.new(0,                     self, "z_index")
     parent_id   = ReactiveString.new("",                 self, "parent_id")
     properties  = ReactiveDictionary.new({},             self, "properties")
@@ -46,10 +44,10 @@ func _init(initial_owner: Reactive = null) -> void:
 
 ## Creates a new ReactiveWidget with a generated ID and the given type.
 static func create(type: String, name: String = "") -> ReactiveWidget:
-    var w            := ReactiveWidget.new()
-    w.widget_id.value   = _generate_id()
-    w.widget_type.value = type
-    w.widget_name.value = name if name != "" else type
+    var w: ReactiveWidget = ReactiveWidget.new()
+    w.widget_id.value     = _generate_id()
+    w.widget_type.value   = type
+    w.widget_name.value   = name if name != "" else type
     return w
 
 
@@ -58,7 +56,7 @@ static func create(type: String, name: String = "") -> ReactiveWidget:
 static func from_dict(payload: Dictionary) -> ReactiveWidget:
     if not _validate(payload):
         return null
-    var w := ReactiveWidget.new()
+    var w: ReactiveWidget = ReactiveWidget.new()
     w.from_data(payload)
     return w
 
@@ -67,7 +65,7 @@ static func from_dict(payload: Dictionary) -> ReactiveWidget:
 func to_data() -> Dictionary:
     var serialised_children: Array = []
     for item: Variant in children.values():
-        var child := item as ReactiveWidget
+        var child: ReactiveWidget = item as ReactiveWidget
         if child != null:
             serialised_children.append(child.serialize())
 
@@ -75,8 +73,6 @@ func to_data() -> Dictionary:
         "widget_id":   widget_id.value,
         "widget_type": widget_type.value,
         "widget_name": widget_name.value,
-        "position":    { "x": position.value.x, "y": position.value.y },
-        "size":        { "x": size.value.x,      "y": size.value.y     },
         "z_index":     z_index.value,
         "parent_id":   parent_id.value,
         "node_id":     node_id.value,
@@ -97,14 +93,9 @@ func from_data(payload: Dictionary) -> void:
     server_id.value   = payload.get("server_id",   "")
     properties.value  = payload.get("properties",  {})
 
-    var pos: Dictionary = payload.get("position", {})
-    var sz:  Dictionary = payload.get("size",     {})
-    position.value = Vector2(pos.get("x", 0.0),   pos.get("y", 0.0))
-    size.value     = Vector2(sz.get("x",  100.0), sz.get("y", 100.0))
-
     children.clear()
     for child_dict: Dictionary in payload.get("children", []):
-        var child := ReactiveWidget.from_dict(child_dict)
+        var child: ReactiveWidget = ReactiveWidget.from_dict(child_dict)
         if child != null:
             child.owner = self
             children.append(child)

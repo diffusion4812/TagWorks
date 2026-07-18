@@ -82,9 +82,33 @@ func _connect_signals() -> void:
 
 # ── System ────────────────────────────────────────────────────────────────────
 
+func deep_merge_themes(base: Theme, modifier: Theme) -> Theme:
+    var result: Theme = base.duplicate(true)
+    
+    for type_name: String in modifier.get_type_list():
+        # Merge StyleBoxes intelligently instead of overwriting them
+        for style_name: String in modifier.get_stylebox_list(type_name):
+            var mod_sb: StyleBox = modifier.get_stylebox(style_name, type_name)
+            
+            if mod_sb is StyleBoxFlat and result.has_stylebox(style_name, type_name):
+                var base_sb: StyleBox = result.get_stylebox(style_name, type_name)
+                if base_sb is StyleBoxFlat:
+                    # Explicitly copy color data over the base layout geometry
+                    base_sb.bg_color = mod_sb.bg_color
+                    base_sb.border_color = mod_sb.border_color
+                    base_sb.shadow_color = mod_sb.shadow_color
+            else:
+                # Fallback if the base doesn't have it or it's a texture/empty stylebox
+                result.set_stylebox(style_name, type_name, mod_sb)
+
+        # Colors, Fonts, Constants merge perfectly with the default engine methods
+        for color_name: String in modifier.get_color_list(type_name):
+            result.set_color(color_name, type_name, modifier.get_color(color_name, type_name))
+
+    return result
+
 func _on_os_theme_changed() -> void:
-    active_theme = base_theme.duplicate()
-    active_theme.merge_with(dark_theme if DisplayServer.is_dark_mode() else light_theme)
+    active_theme = deep_merge_themes(base_theme, dark_theme if DisplayServer.is_dark_mode() else light_theme)
     theme = active_theme
 
 

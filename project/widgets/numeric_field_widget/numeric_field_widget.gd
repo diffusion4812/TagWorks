@@ -8,7 +8,7 @@ extends BaseWidget
 # Property Management
 # ─────────────────────────────────────────────
 
-var properties := WidgetProperties.new()
+var properties: WidgetProperties = WidgetProperties.new()
 
 # ─────────────────────────────────────────────
 # Local State
@@ -110,7 +110,7 @@ func _on_focus_entered() -> void:
 
 
 func _on_text_submitted(text: String) -> void:
-    var parsed := float(text)
+    var parsed: float = float(text)
     if is_instance_valid(_binding):
         _binding.write_value(parsed)
     line_edit.release_focus()
@@ -121,8 +121,7 @@ func _on_value_changed(value: Variant) -> void:
     update_display(value)
 
 
-func _on_edit_mode_changed(enabled: bool) -> void:
-    super._on_edit_mode_changed(enabled)
+func _on_edit_mode_changed(enabled: ReactiveBool) -> void:
     line_edit.editable = not enabled
 
 # ─────────────────────────────────────────────
@@ -137,33 +136,34 @@ func get_widget_class() -> String:
 # ─────────────────────────────────────────────
 
 func build_properties(builder: WidgetPropertyBuilder) -> void:
-    super.build_properties(builder)
-    builder.add_node_field(  "node_id",        "Node ID",        _node_id, _server_id, _group_id)
-    builder.add_int_field(   "decimal_places",  "Decimal Places", _decimal_places)
-    builder.add_string_field("unit",            "Unit",           _unit)
+    pass
+   # super.build_properties(builder)
+   # builder.add_node_field(  "node_id",        "Node ID",        _node_id, _server_id, _group_id)
+   # builder.add_int_field(   "decimal_places",  "Decimal Places", _decimal_places)
+   # builder.add_string_field("unit",            "Unit",           _unit)
 
 # ─────────────────────────────────────────────
 # Serialization
 # ─────────────────────────────────────────────
 
 func serialize() -> Dictionary:
-    var data := super.serialize()
-    data["server_id"]      = _server_id
-    data["group_id"]       = _group_id
-    data["node_id"]        = _node_id.to_tag_name() if _node_id != null else null
-    data["decimal_places"] = _decimal_places
-    data["unit"]           = _unit
-    return data
+    var serialized_data: Dictionary = super.serialize()
+    serialized_data["server_id"]      = _server_id
+    serialized_data["group_id"]       = _group_id
+    serialized_data["node_id"]        = _node_id.to_tag_name() if _node_id != null else ""
+    serialized_data["decimal_places"] = _decimal_places
+    serialized_data["unit"]           = _unit
+    return serialized_data
 
 
-func deserialize(data: Dictionary) -> void:
-    super.deserialize(data)
+func deserialize(serialized_data: Dictionary) -> void:
+    super.deserialize(serialized_data)
     # Apply non-binding properties immediately
-    properties.apply("decimal_places",    data.get("decimal_places", 2))
-    properties.apply("unit",              data.get("unit", ""))
+    properties.apply("decimal_places",    serialized_data.get("decimal_places", 2))
+    properties.apply("unit",              serialized_data.get("unit", ""))
     # Apply binding fields last — _apply_binding() fires once node_id is set
-    properties.apply("node_id/server_id", data.get("server_id", ""))
-    properties.apply("node_id/group_id",  data.get("group_id",  ""))
+    properties.apply("node_id/server_id", serialized_data.get("server_id", ""))
+    properties.apply("node_id/group_id",  serialized_data.get("group_id",  ""))
     properties.apply("node_id/node_id",
-        OpcUaNodeId.parse(data["node_id"]) if data.get("node_id") != null else null
+        OpcUaNodeId.parse(serialized_data["node_id"]) if serialized_data.get("node_id") != "" else null
     )

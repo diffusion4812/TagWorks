@@ -8,7 +8,7 @@ var margin_bottom: int = 8
 func _ready() -> void:
     # 1. Check if the game is running on a PC platform
     # This includes Windows, macOS, Linux, and Web browsers
-    var pc_platforms = ["Windows", "macOS", "Linux", "Web"]
+    var pc_platforms: Array = ["Windows", "macOS", "Linux", "Web"]
     if not OS.get_name() in pc_platforms:
         # 2. If it's a mobile or handheld device, calculate the safe area
         var safe_area: Rect2i = DisplayServer.get_display_safe_area()

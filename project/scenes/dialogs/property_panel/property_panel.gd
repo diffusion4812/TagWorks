@@ -2,15 +2,17 @@
 class_name PropertyPanel
 extends PanelContainer
 
-var _current_target: BaseWidget = null
-
-var node_browser:  BrowseNodes = null
-var script_editor: Node        = null
+var node_browser:    BrowseNodes     = null
+var script_editor:   Node            = null
+var _current_target: ReactiveWidget  = null
+var _current_widget_node: BaseWidget = null
 
 @onready var panel_title: Label         = $MarginContainer/VBoxContainer/PanelTitle
 @onready var extra_props: VBoxContainer = %ExtraProperties
 @onready var apply_btn:   Button        = %ApplyButton
 @onready var close_btn:   Button        = %CloseButton
+
+signal property_changed(p: String, v: Variant)
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ func _ready() -> void:
     apply_btn.pressed.connect(_on_apply_btn_pressed)
     close_btn.pressed.connect(_on_close_btn_pressed)
 
-    AppState.selected_widget.changed.connect(_on_selected_widget_changed)
+    AppState.selected_widget.reactive_changed.connect(_on_selected_widget_changed)
 
 
 func _on_apply_btn_pressed() -> void:
@@ -31,69 +33,67 @@ func _on_close_btn_pressed() -> void:
 # ── AppState Handlers ─────────────────────────────────────────────────────────
 
 ## Responds to changes on AppState.selected_widget.
-## Null indicates deselection; any BaseWidget value triggers a panel load.
-func _on_selected_widget_changed() -> void:
-    var widget: BaseWidget = AppState.selected_widget.value
-    if widget == null:
+## Null indicates deselection; any ReactiveWidget value triggers a panel load.
+func _on_selected_widget_changed(selected_widget: ReactiveVariant) -> void:
+    if _current_widget_node != null and property_changed.is_connected(_current_widget_node._on_property_changed):
+        property_changed.disconnect(_current_widget_node._on_property_changed)
+    _current_widget_node = null
+
+    _current_target = selected_widget.value as ReactiveWidget
+    if _current_target == null:
         clear()
+        return
+
+    _current_widget_node = get_widget_node(_current_target)
+    if _current_widget_node == null:
+        push_warning("No live node found for widget_id: %s" % _current_target.widget_id)
     else:
-        _load_target(widget)
+        property_changed.connect(_current_widget_node._on_property_changed)
 
-# ── Load target into panel ────────────────────────────────────────────────────
+    _load_widget(_current_widget_node, _current_target)
 
-func _load_target(target: BaseWidget) -> void:
-    _current_target = target
+#TODO: Update this to be more efficient!
+func get_widget_node(w: ReactiveWidget) -> BaseWidget:
+    return _find_widget(get_tree().root, w)
 
-    for child: Node in extra_props.get_children():
-        child.queue_free()
+func _find_widget(node: Node, widget_id: ReactiveWidget) -> BaseWidget:
+    if node is BaseWidget and node.data == widget_id:
+        return node
+    for child: Node in node.get_children():
+        var found: BaseWidget = _find_widget(child, widget_id)
+        if found != null:
+            return found
+    return null
 
-    _load_widget(target)
-
+# ── Clear / Load ──────────────────────────────────────────────────────────────
 
 func clear() -> void:
-    _current_target  = null
     panel_title.text = ""
+    _current_target  = null
     for child: Node in extra_props.get_children():
         child.queue_free()
     hide()
 
+
+func _load_widget(node: Node, widget: ReactiveWidget) -> void:
+    for child: Node in extra_props.get_children():
+        child.queue_free()
+
+    panel_title.text = widget.widget_type.value
+    node.build_properties(WidgetPropertyBuilder.new(self, widget))
+
+    show()
+
 # ── Apply ─────────────────────────────────────────────────────────────────────
 
+## Re-emits every current property value on the selected widget through the
+## Intent Bus. Useful after reconnecting a data source or forcing a resync.
 func _reapply_current_target() -> void:
-    var props: WidgetProperties = _get_target_properties(_current_target)
-    if props != null:
-        props.reapply()
-
-# ── Widget Loading ────────────────────────────────────────────────────────────
-
-func _load_widget(widget: BaseWidget) -> void:
-    panel_title.text = widget.get_widget_class()
-    widget.build_properties(WidgetPropertyBuilder.new(self))
-
-# ── Property Emission ─────────────────────────────────────────────────────────
-
-## Called by WidgetPropertyBuilder when the user edits a property.
-## Emits a change intent — BaseWidget receives it, mutates ReactiveWidget,
-## and the reactive changed signal propagates to any listeners automatically.
-func emit_property_changed(property: String, value: Variant) -> void:
-    if _current_target == null or _current_target.data == null:
-        return
-    IntentBus.change_widget_property_requested.emit(
-        _current_target.data.widget_id.value,
-        property,
-        value
-    )
+    if _current_target != null:
+        for id: String in _current_target.properties.keys():
+            IntentBus.change_widget_property_requested.emit(_current_target, id, _current_target.properties[id])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-func _get_target_properties(target: Node) -> WidgetProperties:
-    if target == null:
-        return null
-    if "properties" in target and target.properties is WidgetProperties:
-        return target.properties
-    push_warning("PropertyPanel: target '%s' has no WidgetProperties instance." % target.name)
-    return null
-
 
 func _open_script_editor(_prop: String) -> void:
     if not is_instance_valid(script_editor):

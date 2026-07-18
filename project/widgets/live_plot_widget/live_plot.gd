@@ -17,7 +17,7 @@ class PlotSignal:
 class AxisBounds:
     var min_v : float = INF
     var max_v : float = -INF
-    func update(v: float):
+    func update(v: float) -> void:
         min_v = minf(min_v, v)
         max_v = maxf(max_v, v)
 
@@ -41,10 +41,10 @@ class AxisBounds:
 @export var y_smooth_speed      : float = 5.0
 
 # --- State ------------------------------------------------------------------
-var signals : Dictionary = {} # name -> PlotSignal
+var signals : Dictionary = {} # String -> PlotSignal
 var _redraw_pending : bool = false
-var _smooth_min: float = 0.0
-var _smooth_max: float = 1.0
+var _smooth_min : float = 0.0
+var _smooth_max : float = 1.0
 
 # --- Public API -------------------------------------------------------------
 
@@ -54,22 +54,23 @@ func add_signal(sig_name: String, color: Color = Color.WHITE, axis: int = 0) -> 
         queue_redraw()
 
 func push_data(sig_name: String, value: float, timestamp: float = -1.0) -> void:
-    if not signals.has(sig_name): return
-    var t = timestamp if timestamp >= 0.0 else Time.get_ticks_usec() * 1e-6
-    var sig = signals[sig_name]
+    if not signals.has(sig_name):
+        return
+    var t: float = timestamp if timestamp >= 0.0 else Time.get_ticks_usec() * 1e-6
+    var sig: PlotSignal = signals[sig_name]
     sig.times.append(t)
     sig.values.append(value)
-    
+
     # Trim logic
-    var cutoff = t - time_window
+    var cutoff: float = t - time_window
     while sig.times.size() > 0 and sig.times[0] < cutoff:
         sig.times.remove_at(0)
         sig.values.remove_at(0)
-    
+
     if sig.times.size() > max_points:
         sig.times = sig.times.slice(sig.times.size() - max_points)
         sig.values = sig.values.slice(sig.values.size() - max_points)
-    
+
     _redraw_pending = true
 
 ## Set the axis number of an existing signal at runtime
@@ -94,11 +95,11 @@ func _gui_input(event: InputEvent) -> void:
             accept_event()
 
 func _process(delta: float) -> void:
-    var raw_min := INF
-    var raw_max := -INF
+    var raw_min : float = INF
+    var raw_max : float = -INF
 
-    for sig in signals.values():
-        for v in sig.values:
+    for sig: PlotSignal in signals.values():
+        for v: float in sig.values:
             raw_min = minf(raw_min, v)
             raw_max = maxf(raw_max, v)
 
@@ -114,72 +115,73 @@ func _process(delta: float) -> void:
 
 # --- Drawing ----------------------------------------------------------------
 
-func _draw():
+func _draw() -> void:
     draw_rect(Rect2(Vector2.ZERO, size), background_color)
 
     # Always use current real time so the axis scrolls continuously
-    var t_now := Time.get_ticks_usec() * 1e-6
-    var t_max := t_now
-    var t_min := t_max - time_window
+    var t_now : float = Time.get_ticks_usec() * 1e-6
+    var t_max : float = t_now
+    var t_min : float = t_max - time_window
 
-    var active_axes: Dictionary = {}
+    var active_axes : Dictionary = {} # int -> AxisBounds
 
-    for sig in signals.values():
+    for sig: PlotSignal in signals.values():
         if not sig.enabled or sig.times.size() == 0:
             continue
         if not active_axes.has(sig.axis_id):
             active_axes[sig.axis_id] = AxisBounds.new()
-        for v in sig.values:
+        for v: float in sig.values:
             active_axes[sig.axis_id].update(v)
 
     if active_axes.is_empty():
         return
 
-    var sorted_axis_ids = active_axes.keys()
+    var sorted_axis_ids : Array = active_axes.keys()
     sorted_axis_ids.sort()
 
-    var margin_left = 10.0 + (sorted_axis_ids.size() * 45.0)
-    var plot_rect = Rect2(margin_left, 10, size.x - margin_left - 20, size.y - 40)
+    var margin_left : float = 10.0 + (sorted_axis_ids.size() * 45.0)
+    var plot_rect : Rect2 = Rect2(margin_left, 10, size.x - margin_left - 20, size.y - 40)
 
     _draw_time_grid(plot_rect, t_min, t_max)
 
-    for i in range(sorted_axis_ids.size()):
-        var id = sorted_axis_ids[i]
-        var b  = active_axes[id]
-        var x_pos = plot_rect.position.x - (i * 45.0) - 5.0
+    for i: int in range(sorted_axis_ids.size()):
+        var id: int = sorted_axis_ids[i]
+        var b: AxisBounds = active_axes[id]
+        var x_pos: float = plot_rect.position.x - (i * 45.0) - 5.0
         _draw_v_axis(plot_rect, x_pos, id, b.min_v, b.max_v)
 
-    for sig in signals.values():
+    for sig: PlotSignal in signals.values():
         if not sig.enabled or sig.times.size() < 2:
             continue
-        var b = active_axes[sig.axis_id]
+        var b: AxisBounds = active_axes[sig.axis_id]
         _draw_signal_line(sig, plot_rect, t_min, t_max, b.min_v, b.max_v)
 
-func _draw_time_grid(r: Rect2, t_min: float, t_max: float):
-    for i in range(time_divisions + 1):
-        var x = r.position.x + (float(i)/time_divisions) * r.size.x
+func _draw_time_grid(r: Rect2, t_min: float, t_max: float) -> void:
+    for i: int in range(time_divisions + 1):
+        var x: float = r.position.x + (float(i) / time_divisions) * r.size.x
         draw_line(Vector2(x, r.position.y), Vector2(x, r.end.y), axis_color)
-        var lbl = "%.1fs" % ((t_min + (float(i)/time_divisions) * time_window) - t_max)
+        var lbl: String = "%.1fs" % ((t_min + (float(i) / time_divisions) * time_window) - t_max)
         draw_string(font, Vector2(x - 15, r.end.y + 18), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color.GRAY)
 
-func _draw_v_axis(r: Rect2, x: float, id: int, v_min: float, v_max: float):
-    if is_equal_approx(v_min, v_max): v_max += 1.0
+func _draw_v_axis(r: Rect2, x: float, id: int, v_min: float, v_max: float) -> void:
+    if is_equal_approx(v_min, v_max):
+        v_max += 1.0
     draw_line(Vector2(x, r.position.y), Vector2(x, r.end.y), axis_color, 1.0)
     # Label the axis ID at top
     draw_string(font, Vector2(x - 20, r.position.y - 2), "A%d" % id, HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color.WHITE)
-    
-    for i in range(5):
-        var frac = i / 4.0
-        var y = r.end.y - (frac * r.size.y)
-        var val = lerp(v_min, v_max, frac)
+
+    for i: int in range(5):
+        var frac: float = i / 4.0
+        var y: float = r.end.y - (frac * r.size.y)
+        var val: float = lerp(v_min, v_max, frac)
         draw_string(font, Vector2(x - 42, y + 4), str(snapped(val, 0.01)), HORIZONTAL_ALIGNMENT_RIGHT, -1, 9, Color.LIGHT_GRAY)
 
-func _draw_signal_line(sig: PlotSignal, r: Rect2, t0: float, t1: float, y0: float, y1: float):
-    var pts := PackedVector2Array()
-    var tr = t1 - t0
-    var yr = y1 - y0 if not is_equal_approx(y1, y0) else 1.0
-    for i in sig.times.size():
-        var px = r.position.x + ((sig.times[i] - t0) / tr) * r.size.x
-        var py = r.end.y - ((sig.values[i] - y0) / yr) * r.size.y
+func _draw_signal_line(sig: PlotSignal, r: Rect2, t0: float, t1: float, y0: float, y1: float) -> void:
+    var pts : PackedVector2Array = PackedVector2Array()
+    var t_range : float = t1 - t0
+    var y_range : float = y1 - y0 if not is_equal_approx(y1, y0) else 1.0
+    for i: int in sig.times.size():
+        var px: float = r.position.x + ((sig.times[i] - t0) / t_range) * r.size.x
+        var py: float = r.end.y - ((sig.values[i] - y0) / y_range) * r.size.y
         pts.append(Vector2(px, py))
     draw_polyline(pts, sig.color, 1.5, true)

@@ -58,5 +58,6 @@ func _ready() -> void:
 
     active_page.reactive_changed.connect(
         func(_active_page: ReactiveVariant) -> void:
+            pass
             edit_mode.value = false
     )

@@ -30,20 +30,6 @@ func get_drop_target() -> Control:
 func get_class_name_override() -> String:
     return "SelectableControl"
 
-func _on_edit_mode_changed(_enabled: bool) -> void:
-    pass
-
-func _propagate_edit_mode(enabled: bool) -> void:
-    var drop_target: Control = get_drop_target()
-    if drop_target == null:
-        return
-    for child: Node in drop_target.get_children():
-        if child is SelectableControl:
-            (child as SelectableControl).edit_mode = enabled
-
-func build_properties(_builder: WidgetPropertyBuilder) -> void:
-    pass
-
 # ── Grid Snapping ─────────────────────────────────────────────────────────────
 
 func _snap(value: Vector2) -> Vector2:

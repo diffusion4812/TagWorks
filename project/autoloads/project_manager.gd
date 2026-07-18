@@ -5,15 +5,11 @@ const SAVE_DIR     :String = "user://projects/"
 const FILE_VERSION :int    = 2
 
 const NODE_REGISTRY: Dictionary = {
-    "ButtonWidget":       "res://widgets/button_widget/button_widget.tscn",
-    "LabelWidget":        "res://widgets/label_widget/label_widget.tscn",
-    "SliderWidget":       "res://widgets/slider_widget/slider_widget.tscn",
-    "NumericFieldWidget": "res://widgets/numeric_field_widget/numeric_field_widget.tscn",
-    "LivePlotWidget":     "res://widgets/live_plot_widget/live_plot_widget.tscn",
-    "LedIndicatorWidget": "res://widgets/led_indicator_widget/led_indicator_widget.tscn",
-    "GaugeWidget":        "res://widgets/gauge_widget/gauge_widget.tscn",
-    "TextDisplayWidget":  "res://widgets/text_display_widget/text_display_widget.tscn",
-    "TabWidget":          "res://widgets/tab_widget/tab_widget.tscn",
+    "ButtonWidget":       preload("res://widgets/button_widget/button_widget.tscn"),
+    "LabelWidget":        preload("res://widgets/label_widget/label_widget.tscn"),
+    "NumericFieldWidget": preload("res://widgets/numeric_field_widget/numeric_field_widget.tscn"),
+    "LivePlotWidget":     preload("res://widgets/live_plot_widget/live_plot_widget.tscn"),
+    "LedIndicatorWidget": preload("res://widgets/led_indicator_widget/led_indicator_widget.tscn"),
 }
 
 var opc_ua_registry: OpcUaConfigRegistry = OpcUaConfigRegistry.new()

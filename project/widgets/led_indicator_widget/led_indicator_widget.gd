@@ -75,8 +75,9 @@ func get_widget_class() -> String:
 # ─────────────────────────────────────────────
 
 func build_properties(builder: WidgetPropertyBuilder) -> void:
-    builder.add_color_field( "color_on",  "Color ON",  color_on)
-    builder.add_color_field( "color_off", "Color OFF", color_off)
+    pass
+   # builder.add_color_field( "color_on",  "Color ON",  color_on)
+  #  builder.add_color_field( "color_off", "Color OFF", color_off)
 
 # ─────────────────────────────────────────────
 # Serialization

@@ -348,7 +348,7 @@ func _get_drag_data(_position: Vector2) -> Variant:
     return { "page": page }
 
 
-func _can_drop_data(position: Vector2, data: Variant) -> bool:
+func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
     page_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
 
     if not data is Dictionary or not data.has("page"):
@@ -375,12 +375,12 @@ func _can_drop_data(position: Vector2, data: Variant) -> bool:
     return not _is_descendant_of(target_page.page_id.value, dragged)
 
 
-func _drop_data(position: Vector2, data: Variant) -> void:
+func _drop_data(pos: Vector2, data: Variant) -> void:
     var dragged: ReactivePage = data["page"] as ReactivePage
     if dragged == null:
         return
 
-    var target_item: TreeItem = page_tree.get_item_at_position(position)
+    var target_item: TreeItem = page_tree.get_item_at_position(pos)
     if target_item == null:
         return
 

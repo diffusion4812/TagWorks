@@ -80,35 +80,36 @@ func get_widget_class() -> String:
 # ─────────────────────────────────────────────
 
 func build_properties(builder: WidgetPropertyBuilder) -> void:
-    builder.add_string_field("text",                "Text",                 text)
-    builder.add_int_field(   "font_size",            "Font Size",            font_size)
-    builder.add_color_field( "font_color",           "Font Color",           font_color)
-    builder.add_int_field(   "horizontal_alignment", "Horizontal Alignment", horizontal_alignment)
-    builder.add_int_field(   "vertical_alignment",   "Vertical Alignment",   vertical_alignment)
-    builder.add_bool_field(  "autowrap",             "Autowrap",             autowrap)
+    pass
+   # builder.add_string_field("text",                "Text",                 text)
+   # builder.add_int_field(   "font_size",            "Font Size",            font_size)
+   # builder.add_color_field( "font_color",           "Font Color",           font_color)
+   # builder.add_int_field(   "horizontal_alignment", "Horizontal Alignment", horizontal_alignment)
+   # builder.add_int_field(   "vertical_alignment",   "Vertical Alignment",   vertical_alignment)
+   # builder.add_bool_field(  "autowrap",             "Autowrap",             autowrap)
 
 # ─────────────────────────────────────────────
 # Serialization
 # ─────────────────────────────────────────────
 
 func serialize() -> Dictionary:
-    var data := super.serialize()
-    data["text"]                 = text
-    data["font_size"]            = font_size
-    data["font_color"]           = { "r": font_color.r, "g": font_color.g, "b": font_color.b, "a": font_color.a }
-    data["horizontal_alignment"] = horizontal_alignment
-    data["vertical_alignment"]   = vertical_alignment
-    data["autowrap"]             = autowrap
-    return data
+    var serialized_data: Dictionary = super.serialize()
+    serialized_data["text"]                 = text
+    serialized_data["font_size"]            = font_size
+    serialized_data["font_color"]           = { "r": font_color.r, "g": font_color.g, "b": font_color.b, "a": font_color.a }
+    serialized_data["horizontal_alignment"] = horizontal_alignment
+    serialized_data["vertical_alignment"]   = vertical_alignment
+    serialized_data["autowrap"]             = autowrap
+    return serialized_data
 
 
-func deserialize(data: Dictionary) -> void:
-    super.deserialize(data)
-    text                 = data.get("text",                 "Label")
-    font_size            = data.get("font_size",            16)
-    horizontal_alignment = data.get("horizontal_alignment", HORIZONTAL_ALIGNMENT_LEFT)
-    vertical_alignment   = data.get("vertical_alignment",   VERTICAL_ALIGNMENT_CENTER)
-    autowrap             = data.get("autowrap",             false)
+func deserialize(serialized_data: Dictionary) -> void:
+    super.deserialize(serialized_data)
+    text                 = serialized_data.get("text",                 "Label")
+    font_size            = serialized_data.get("font_size",            16)
+    horizontal_alignment = serialized_data.get("horizontal_alignment", HORIZONTAL_ALIGNMENT_LEFT)
+    vertical_alignment   = serialized_data.get("vertical_alignment",   VERTICAL_ALIGNMENT_CENTER)
+    autowrap             = serialized_data.get("autowrap",             false)
 
     if data.has("font_color"):
         var c: Dictionary = data["font_color"]

@@ -1,6 +1,6 @@
 # WidgetCanvas.gd
 class_name WidgetCanvas
-extends Control
+extends Panel
 
 var _context_target : Node      = null
 var _context_menu   : PopupMenu = null
@@ -43,7 +43,7 @@ func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
         push_error("ProjectManager: Unknown node type '%s'." % type)
         return
 
-    var packed: PackedScene = load(ProjectManager.NODE_REGISTRY[type]) as PackedScene
+    var packed: PackedScene = ProjectManager.NODE_REGISTRY[type] as PackedScene
     if packed == null:
         push_error("ProjectManager: Failed to load scene for '%s'." % type)
         return
@@ -169,12 +169,24 @@ func _on_child_gui_input(event: InputEvent, target: Node) -> void:
 # ── Selection ─────────────────────────────────────────────────────────────────
 
 func _deselect_current() -> void:
-    var current: BaseWidget = AppState.selected_widget.value as BaseWidget
+    var current: ReactiveWidget = AppState.selected_widget.value as ReactiveWidget
     if current == null:
         return
-    current.deselect()
+    get_widget_node(current).deselect()
     AppState.selected_widget.value = null
 
+#TODO: Update this to be more efficient!
+func get_widget_node(w: ReactiveWidget) -> BaseWidget:
+    return _find_widget(get_tree().root, w)
+
+func _find_widget(node: Node, widget_id: ReactiveWidget) -> BaseWidget:
+    if node is BaseWidget and node.data == widget_id:
+        return node
+    for child: Node in node.get_children():
+        var found: BaseWidget = _find_widget(child, widget_id)
+        if found != null:
+            return found
+    return null
 
 func _select_target(target: Node) -> void:
     if target == null or not target is BaseWidget:
@@ -182,12 +194,12 @@ func _select_target(target: Node) -> void:
 
     var widget: BaseWidget = target as BaseWidget
 
-    if AppState.selected_widget.value == widget:
+    if AppState.selected_widget.value == widget.data:
         return
 
     _deselect_current()          # ← deselects previous widget
     widget.select()              # ← canvas instructs new widget to select itself
-    AppState.selected_widget.value = widget  # ← state updated
+    AppState.selected_widget.value = widget.data  # ← state updated
 
 
 func _on_widget_selection_requested(widget: SelectableControl) -> void:
@@ -211,7 +223,15 @@ func spawn_widget(scene: PackedScene) -> void:
 
     var widget: BaseWidget = instance as BaseWidget
 
-    # Resolve parent first so initial position and size can be set correctly
+    # Build the backing ReactiveWidget now that get_widget_class() is available
+    var reactive_widget: ReactiveWidget = ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
+    reactive_widget.z_index.value = widget.z_index
+    data.widgets.append(reactive_widget)
+
+    # Initialise the scene node from its backing data (applies default properties)
+    widget.init(reactive_widget)
+
+    # Resolve placement and attach to the scene tree
     var parent: Control = _resolve_parent_for_placement(get_global_mouse_position())
     parent.add_child(widget)
 
@@ -219,23 +239,16 @@ func spawn_widget(scene: PackedScene) -> void:
     if parent_widget != null and parent_widget.is_container:
         parent_widget._elevate_child(widget)
 
-    # Build the backing ReactiveWidget now that get_widget_class() is available
-    var reactive_widget: ReactiveWidget = ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
-    reactive_widget.position.value = parent.size / 2.0 - widget.size / 2.0
-    reactive_widget.size.value     = widget.size
-    reactive_widget.z_index.value  = widget.z_index
-
-    # Register in the reactive page canvas
-    data.widgets.append(reactive_widget)
-
-    # Initialise the scene node from its backing data
-    widget.init(reactive_widget)
+    # Centre the widget under the spawn point, using its own default size
+    var centered_position: Vector2 = parent.size / 2.0 - widget.size / 2.0
+    reactive_widget.properties.value["position"].value = centered_position
 
     _subscribe_widget(widget)
 
+    # Wait a frame so layout/containers have settled before syncing the node's transform
     await get_tree().process_frame
+    widget.position = centered_position
 
-    widget.position = parent.size / 2.0 - widget.size / 2.0
     _mark_dirty()
 
 # ── Parent Resolution ─────────────────────────────────────────────────────────

@@ -4,19 +4,17 @@ extends Node
 @warning_ignore("unused_signal")
 signal create_page_requested(page_name: String)
 @warning_ignore("unused_signal")
-signal delete_page_requested(page_id: String)
+signal delete_page_requested(page: ReactivePage)
 @warning_ignore("unused_signal")
-signal rename_page_requested(page_id: String, new_name: String)
+signal rename_page_requested(page: ReactivePage, new_name: String)
 
 # ── Widgets ───────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")
 signal add_widget_requested(scene: PackedScene)
 @warning_ignore("unused_signal")
-signal delete_widget_requested(widget_id: String)
+signal delete_widget_requested(widget: ReactiveWidget)
 @warning_ignore("unused_signal")
-signal rename_widget_requested(widget_id: String, new_name: String)
-@warning_ignore("unused_signal")
-signal change_widget_property_requested(widget_id: String, property: String, value: Variant)
+signal rename_widget_requested(widget: ReactiveWidget, new_name: String)
 
 # ── Project ───────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")

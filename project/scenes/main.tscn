@@ -116,13 +116,15 @@ text = "Edit Mode"
 [node name="WorkArea" type="HSplitContainer" parent="SafeAreaContainer/RootLayout" unique_id=1534408628]
 layout_mode = 2
 size_flags_vertical = 3
-split_offsets = PackedInt32Array(-2, -1)
-split_offset = -2
+split_offsets = PackedInt32Array(250)
+drag_nested_intersections = true
+split_offset = 250
 
 [node name="PageContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1090117370]
+custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
-size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.4
+drag_nested_intersections = true
 
 [node name="PagesPanel" parent="SafeAreaContainer/RootLayout/WorkArea/PageContainer" unique_id=1118176807 instance=ExtResource("3_ya4ey")]
 visible = false
@@ -146,18 +148,18 @@ script = ExtResource("4_eb6dy")
 
 [node name="InspectorContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1030319876]
 unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.4
+drag_nested_intersections = true
 
 [node name="WidgetPalette" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=232280490 instance=ExtResource("3_tbgi4")]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-size_flags_vertical = 3
 
 [node name="PropertyPanel" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=77828116 instance=ExtResource("5_o6xl0")]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
 
 [node name="Dialogs" type="CanvasLayer" parent="." unique_id=276274510]
 

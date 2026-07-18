@@ -43,30 +43,27 @@ func _ready() -> void:
     if is_container:
         z_index = Z_INDEX_BASE
 
-    # React to property change intents targeting this widget
-    IntentBus.change_widget_property_requested.connect(_on_change_widget_property_requested)
-
 
 ## Initialises this widget from a ReactiveWidget data object.
 func init(widget_data: ReactiveWidget) -> void:
     data         = widget_data
+    _define_default_properties()
+    _connect_data_signals()
     widget_label = data.widget_name.value
-    position     = data.position.value
-    size         = data.size.value
+    position     = data.properties.value["position"].value
+    size         = data.properties.value["size"].value
     z_index      = data.z_index.value
 
     if is_container:
         container_name = data.properties.value.get("container_name", "Container")
-
-    _apply_properties(data.properties.value)
 
     # Keep ReactiveWidget in sync with scene node movement and resizing
     widget_moved.connect(_on_widget_moved)
     widget_resized.connect(_on_widget_resized)
 
     # React to external reactive data changes
-    data.position.reactive_changed.connect(_on_reactive_position_changed)
-    data.size.reactive_changed.connect(_on_reactive_size_changed)
+    data.properties.value["position"].reactive_changed.connect(_on_reactive_position_changed)
+    data.properties.value["size"].reactive_changed.connect(_on_reactive_size_changed)
 
 # ─────────────────────────────────────────────
 # Virtuals
@@ -80,15 +77,33 @@ func update_display(_value: Variant) -> void:
     pass
 
 
+## Overridden per concrete widget type. Must only set a property if it
+## doesn't already exist, so loaded/saved widgets aren't overwritten.
+func _define_default_properties() -> void:
+    _ensure_property("size", func() -> ReactiveVector2:
+        return ReactiveVector2.new(Vector2(80, 20), data.properties, "size")
+    )
+    _ensure_property("position", func() -> ReactiveVector2:
+        return ReactiveVector2.new(get_parent_area_size() / 2.0 - data.properties.value["size"].value / 2.0, data.properties, "position")
+    )
+
+func _ensure_property(id: String, factory: Callable) -> void:
+    if not data.properties.value.has(id):
+        data.properties.value[id] = factory.call()
+
+func _connect_data_signals() -> void:
+    pass # set up per-property reactive_changed listeners if needed
+
+
 func build_properties(builder: WidgetPropertyBuilder) -> void:
-    builder.add_float_field("position/x", "Pos X", position.x)
-    builder.add_float_field("position/y", "Pos Y", position.y)
-    builder.add_float_field("size/x",     "Size X", size.x)
-    builder.add_float_field("size/y",     "Size Y", size.y)
+    pass
+    #builder.add_float_field("position/x", "Pos X",  widget.properties["position/x"].value)
+    #builder.add_float_field("position/y", "Pos Y",  widget.properties["position/y"].value)
+    #builder.add_float_field("size/x",     "Size X", widget.properties["size/x"].value)
+    #builder.add_float_field("size/y",     "Size Y", widget.properties["size/y"].value)
 
-    if is_container:
-        builder.add_string_field("container_name", "Name", container_name)
-
+func _on_property_changed(p: String, v: Variant) -> void:
+    pass
 
 func get_drop_target() -> Control:
     return self if is_container else null
@@ -97,28 +112,17 @@ func get_drop_target() -> Control:
 func get_protected_controls() -> Array[Control]:
     return []
 
-
-func _apply_properties(_props: Dictionary) -> void:
-    pass
-
 # ─────────────────────────────────────────────
 # Property Changes
 # ─────────────────────────────────────────────
 
-## Receives property change intents from IntentBus.
-## Ignores intents not targeting this widget instance.
-func _on_change_widget_property_requested(widget_id: String, property: String, value: Variant) -> void:
-    if data == null or data.widget_id.value != widget_id:
-        return
-    _apply_property(property, value)
-
 func _on_widget_moved(_widget: SelectableControl) -> void:
-    data.position.value = position
+    data.properties.value["position"].value = position
 
 
 func _on_widget_resized(_widget: SelectableControl) -> void:
-    data.position.value = position
-    data.size.value     = size
+    data.properties.value["position"].value = position
+    data.properties.value["size"].value     = size
 
 
 func _on_reactive_position_changed(reactive_position: ReactiveVector2) -> void:
@@ -127,32 +131,6 @@ func _on_reactive_position_changed(reactive_position: ReactiveVector2) -> void:
 
 func _on_reactive_size_changed(reactive_size: ReactiveVector2) -> void:
     size = reactive_size.value
-
-## Applies a single property change to the reactive data object and
-## updates the live scene display. The mutation on data propagates
-## automatically via the reactive changed signal.
-func _apply_property(property: String, value: Variant) -> void:
-    if data == null:
-        return
-
-    match property:
-        "position/x":
-            position.x          = value
-            data.position.value = position
-        "position/y":
-            position.y          = value
-            data.position.value = position
-        "size/x":
-            size.x          = value
-            data.size.value = size
-        "size/y":
-            size.y          = value
-            data.size.value = size
-        "container_name":
-            container_name = value
-        _:
-            data.properties.value[property] = value
-            _apply_properties({ property: value })
 
 # ─────────────────────────────────────────────
 # Container Behaviour
@@ -218,5 +196,3 @@ func deserialize(payload: Dictionary) -> void:
 
     if is_container:
         container_name = data.properties.value.get("container_name", "Container")
-
-    _apply_properties(data.properties.value)

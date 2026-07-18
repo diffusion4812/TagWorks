@@ -42,7 +42,7 @@ func apply(prop: String, value: Variant) -> void:
 ## Called when the Apply button is pressed in PropertyPanel to guarantee
 ## widget state is consistent with the panel's current values.
 func reapply() -> void:
-    for prop in _props:
+    for prop: String in _props:
         var setter: Callable = _props[prop]["setter"]
         if setter.is_valid():
             setter.call(_props[prop]["value"])
