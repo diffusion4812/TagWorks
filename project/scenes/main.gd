@@ -74,7 +74,7 @@ func _connect_signals() -> void:
 
     # ── AppState ──────────────────────────────────────────────────────────────
     AppState.current_project.changed.connect(_on_current_project_changed)
-    AppState.edit_mode.reactive_changed.connect(
+    AppState.edit_mode.connect_self_changed(
         func(edit_mode: ReactiveBool) -> void:
             edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
             inspector_container.visible = edit_mode.value

@@ -10,14 +10,16 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     widgets  = ReactiveArray.new([], self, "widgets")
     is_dirty = ReactiveBool.new(false, self, "is_dirty")
 
-    widgets.reactive_changed.connect(
-        func(_widgets: ReactiveArray) -> void:
+    widgets.connect_any_changed(
+        func(_origin: Reactive) -> void:
             is_dirty.value = true
     )
 
     if not data.is_empty():
         from_data(data)
 
+func _describe_value() -> String:
+    return ""
 
 func from_data(data: Dictionary) -> void:
     widgets.clear()

@@ -13,6 +13,10 @@ const NODE_REGISTRY: Dictionary = {
 }
 
 var opc_ua_registry: OpcUaConfigRegistry = OpcUaConfigRegistry.new()
+var project: ReactiveProject = null
+
+var _tag_listener        :Callable       = Callable()
+var _connected_project   :ReactiveProject = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -22,6 +26,33 @@ func _ready() -> void:
     IntentBus.save_project_as_requested.connect(_on_save_project_as_requested)
     IntentBus.open_project_requested.connect(_on_open_project_requested)
     IntentBus.close_project_requested.connect(_on_close_project_requested)
+
+    AppState.current_project.connect_self_changed(
+        func(current_project: ReactiveVariant) -> void:
+            project = current_project.value
+            _reconnect_proj_signals()
+    )
+
+func _reconnect_proj_signals() -> void:
+    # Disconnect from the previous project, if any
+    if _connected_project != null \
+    and is_instance_valid(_connected_project) \
+    and _tag_listener.is_valid() \
+    and _connected_project.reactive_changed.is_connected(_tag_listener):
+        _connected_project.reactive_changed.disconnect(_tag_listener)
+
+    _connected_project = null
+    _tag_listener       = Callable()
+
+    if project == null:
+        return  # project was closed — nothing to (re)connect
+
+    _tag_listener = project.connect_changed_of_type(
+        ReactiveTag,
+        func(tag: ReactiveTag) -> void:
+            print(tag.node_id.value)
+    )
+    _connected_project = project
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

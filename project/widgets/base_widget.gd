@@ -62,8 +62,8 @@ func init(widget_data: ReactiveWidget) -> void:
     widget_resized.connect(_on_widget_resized)
 
     # React to external reactive data changes
-    data.properties.value["position"].reactive_changed.connect(_on_reactive_position_changed)
-    data.properties.value["size"].reactive_changed.connect(_on_reactive_size_changed)
+    data.properties.value["position"].connect_self_changed(_on_reactive_position_changed)
+    data.properties.value["size"].connect_self_changed(_on_reactive_size_changed)
 
 # ─────────────────────────────────────────────
 # Virtuals

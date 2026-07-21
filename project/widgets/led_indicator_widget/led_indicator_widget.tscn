@@ -20,8 +20,6 @@ fill_to = Vector2(0, 0)
 
 [node name="BaseWidget" unique_id=954027860 instance=ExtResource("1_grp56")]
 script = ExtResource("2_n6rof")
-color_on = Color(0, 1, 0, 1)
-color_off = Color(0, 0.39215687, 0, 1)
 
 [node name="Lamp" type="TextureRect" parent="MarginContainer/ContentSlot" parent_id_path=PackedInt32Array(227595631) index="0" unique_id=772807564]
 custom_minimum_size = Vector2(24, 24)

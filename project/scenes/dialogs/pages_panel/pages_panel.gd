@@ -90,10 +90,10 @@ func _connect_signals() -> void:
     IntentBus.delete_page_requested.connect(_on_delete_page_requested)
 
     # React to project being loaded or cleared
-    AppState.current_project.reactive_changed.connect(_on_current_project_changed)
+    AppState.current_project.connect_self_changed(_on_current_project_changed)
 
     # React to confirmed page selection
-    AppState.active_page.reactive_changed.connect(_on_active_page_changed)
+    AppState.active_page.connect_self_changed(_on_active_page_changed)
 
 # ─────────────────────────────────────────────
 # Tree Building
@@ -311,7 +311,7 @@ func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
     if is_open:
         if project.pages.reactive_changed.is_connected(_on_page_hierarchy_changed):
             project.pages.reactive_changed.disconnect(_on_page_hierarchy_changed)
-        project.pages.reactive_changed.connect(_on_page_hierarchy_changed)
+        project.pages.connect_self_changed(_on_page_hierarchy_changed)
 
         _rebuild_tree()
         show()

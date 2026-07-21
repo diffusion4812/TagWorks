@@ -11,8 +11,8 @@ const META_PAGE_ID: String = "page_id"
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-    AppState.active_page.reactive_changed.connect(_on_active_page_changed)
-    AppState.current_project.reactive_changed.connect(_on_current_project_changed)
+    AppState.active_page.connect_self_changed(_on_active_page_changed)
+    AppState.current_project.connect_self_changed(_on_current_project_changed)
 
     tab_changed.connect(_on_tab_changed)
     
@@ -57,7 +57,7 @@ func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
     if is_open:
         if project.pages.reactive_changed.is_connected(_on_pages_changed):
             project.pages.reactive_changed.disconnect(_on_pages_changed)
-        project.pages.reactive_changed.connect(_on_pages_changed)
+        project.pages.connect_self_changed(_on_pages_changed)
 
     _close_all_tabs()
 

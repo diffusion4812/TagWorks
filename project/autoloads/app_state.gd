@@ -48,16 +48,15 @@ func _ready() -> void:
     last_error      = ReactiveString.new("", null,    "app_state.last_error")
     last_saved_path = ReactiveString.new("", null,    "app_state.last_saved_path")
 
-    current_project.reactive_changed.connect(
+    current_project.connect_self_changed(
         func(_current_project: ReactiveVariant) -> void:
-            focused_page.value = null
-            active_page.value  = null
+            focused_page.value    = null
+            active_page.value     = null
             selected_widget.value = null
-            edit_mode.value = false
+            edit_mode.value        = false
     )
 
-    active_page.reactive_changed.connect(
+    active_page.connect_self_changed(
         func(_active_page: ReactiveVariant) -> void:
-            pass
             edit_mode.value = false
     )

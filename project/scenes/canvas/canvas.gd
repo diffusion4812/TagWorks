@@ -29,12 +29,12 @@ func _ready() -> void:
     IntentBus.add_widget_requested.connect(_on_add_widget_requested)
     IntentBus.delete_widget_requested.connect(_on_delete_widget_requested)
 
-    AppState.edit_mode.reactive_changed.connect(_on_edit_mode_changed)
+    AppState.edit_mode.connect_self_changed(_on_edit_mode_changed)
 
     for widget: ReactiveWidget in data.widgets.value:
         _restore_node(self, widget)
 
-## Instantiates and deserialises a single widget from a serialised Dictionary,
+## Instantiates and initialises a single widget from its backing ReactiveWidget,
 ## then recurses into container children.
 func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
     var type: String = reactive_widget.widget_type.value
@@ -54,21 +54,26 @@ func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
         instance.queue_free()
         return
 
-    parent.add_child(instance)
-
     var widget: BaseWidget = instance as BaseWidget
+
+    # Initialise from backing data BEFORE entering the tree, so _ready()
+    # (triggered by add_child) can safely rely on `data` being set.
+    widget.init(reactive_widget)
+
+    parent.add_child(widget)
 
     if parent is BaseWidget and (parent as BaseWidget).is_container:
         (parent as BaseWidget)._elevate_child(widget)
 
-    widget.init(reactive_widget)
+    if not widget.is_container:
+        return
 
-    if widget.is_container:
-        var drop_target: Control = widget.get_drop_target()
-        if drop_target != null:
-            for child_data: Variant in reactive_widget.value.children:
-                if child_data is Dictionary:
-                    _restore_node(drop_target, child_data)
+    var drop_target: Control = widget.get_drop_target()
+    if drop_target == null:
+        return
+
+    for child_widget: ReactiveWidget in reactive_widget.children.value:
+        _restore_node(drop_target, child_widget)
 
 # ── Guards ────────────────────────────────────────────────────────────────────
 
@@ -224,7 +229,7 @@ func spawn_widget(scene: PackedScene) -> void:
     var widget: BaseWidget = instance as BaseWidget
 
     # Build the backing ReactiveWidget now that get_widget_class() is available
-    var reactive_widget: ReactiveWidget = ReactiveWidget.create(widget.get_widget_class(), widget.widget_label)
+    var reactive_widget: ReactiveWidget = ReactiveWidget.create(widget.get_widget_class(), widget.widget_label, null, data.widgets)
     reactive_widget.z_index.value = widget.z_index
     data.widgets.append(reactive_widget)
 

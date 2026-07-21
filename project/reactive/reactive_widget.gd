@@ -40,12 +40,16 @@ func _init(initial_value: Variant = null, initial_owner: Reactive = null, label:
     server_id   = ReactiveString.new("",                 self, "server_id")
     children    = ReactiveArray.new([],                  self, "children")
 
+func _describe_value() -> String:
+    return ""
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 ## Creates a new ReactiveWidget with a generated ID and the given type.
-static func create(type: String, name: String = "") -> ReactiveWidget:
-    var w: ReactiveWidget = ReactiveWidget.new()
-    w.widget_id.value     = _generate_id()
+static func create(type: String, name: String = "", initial_value: Variant = null, initial_owner: Reactive = null) -> ReactiveWidget:
+    var id : String = _generate_id()
+    var w: ReactiveWidget = ReactiveWidget.new(initial_value, initial_owner, type+"_"+id)
+    w.widget_id.value     = id
     w.widget_type.value   = type
     w.widget_name.value   = name if name != "" else type
     return w
@@ -91,7 +95,7 @@ func from_data(payload: Dictionary) -> void:
     parent_id.value   = payload.get("parent_id",   "")
     node_id.value     = payload.get("node_id",     "")
     server_id.value   = payload.get("server_id",   "")
-    properties.value  = payload.get("properties",  {})
+    properties.value  = payload.get("properties",  {}) #TODO: Update this to serialise the type with ReactiveXYZ
 
     children.clear()
     for child_dict: Dictionary in payload.get("children", []):

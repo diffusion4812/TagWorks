@@ -2,7 +2,7 @@
 class_name PropertyPanel
 extends PanelContainer
 
-var node_browser:    BrowseNodes     = null
+@onready var node_browser:    BrowseNodes     = $"../../../../../Dialogs/BrowseNodes"
 var script_editor:   Node            = null
 var _current_target: ReactiveWidget  = null
 var _current_widget_node: BaseWidget = null
@@ -20,7 +20,7 @@ func _ready() -> void:
     apply_btn.pressed.connect(_on_apply_btn_pressed)
     close_btn.pressed.connect(_on_close_btn_pressed)
 
-    AppState.selected_widget.reactive_changed.connect(_on_selected_widget_changed)
+    AppState.selected_widget.connect_self_changed(_on_selected_widget_changed)
 
 
 func _on_apply_btn_pressed() -> void:

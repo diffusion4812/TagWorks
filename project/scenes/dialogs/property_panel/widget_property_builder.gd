@@ -188,12 +188,12 @@ func _add_string_list_entry(
 
 
 func add_node_field(
-    prop:           String,
-    lbl:            String,
-    current_node:   OpcUaNodeId,
-    current_server: String = "",
-    current_group:  String = ""
+    prop: String,
+    lbl:  String,
+    v:    ReactiveDictionary
 ) -> void:
+    var tag :ReactiveTag = v.value[prop] as ReactiveTag
+
     var col   :VBoxContainer = VBoxContainer.new()
     var label :Label = Label.new()
     label.text = lbl
@@ -209,8 +209,8 @@ func add_node_field(
 
     _populate_server_option(server_option)
 
-    var initial_server_id :String = current_server \
-        if current_server != "" \
+    var initial_server_id :String = tag.server_id.value \
+        if tag.server_id.value != "" \
         else _get_first_server_id()
     _select_option_by_meta(server_option, initial_server_id)
 
@@ -228,8 +228,8 @@ func add_node_field(
 
     _populate_group_option(group_option, initial_server_id)
 
-    var initial_group_id :String = current_group \
-        if current_group != "" \
+    var initial_group_id :String = tag.group_id.value \
+        if tag.group_id.value != "" \
         else _get_first_group_id(initial_server_id)
     _select_option_by_meta(group_option, initial_group_id)
 
@@ -244,8 +244,7 @@ func add_node_field(
 
     tag_label.text                  = "Tag"
     tag_label.custom_minimum_size.x = 60
-    tag_edit.text                   = current_node.to_tag_name() \
-                                          if current_node != null else ""
+    tag_edit.text                   = tag.to_tag_name()
     tag_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
     tag_edit.editable               = false
     browse_btn.text                 = "Browse"
@@ -261,16 +260,25 @@ func add_node_field(
         _populate_group_option(group_option, sid)
         var first_gid: String = _get_first_group_id(sid)
         _select_option_by_meta(group_option, first_gid)
-        emit(prop + "/server_id", sid)
-        emit(prop + "/group_id",  first_gid)
+
+        _panel.property_changed.emit(prop + "/server_id", sid)
+        _panel.property_changed.emit(prop + "/group_id",  first_gid)
+        _panel.property_changed.emit(prop + "/node_id",   null)
+
+        # re-sync after widget accepts/refuses
+        _select_option_by_meta(server_option, tag.server_id.value)
+        _select_option_by_meta(group_option,  tag.group_id.value)
         if is_instance_valid(tag_edit):
-            tag_edit.text = ""
-        emit(prop + "/node_id", null)
+            tag_edit.text = tag.to_tag_name()
     )
 
     group_option.item_selected.connect(func(_index: int) -> void:
         var gid: String = group_option.get_item_metadata(group_option.selected)
-        emit(prop + "/group_id", gid)
+
+        _panel.property_changed.emit(prop + "/group_id", gid)
+
+        # re-sync after widget accepts/refuses
+        _select_option_by_meta(group_option, tag.group_id.value)
     )
 
     browse_btn.pressed.connect(func() -> void:
@@ -279,15 +287,17 @@ func add_node_field(
 
         if sid == "":
             OS.alert(
-                "No server configured.\nAdd a server in the OPC UA connection dialog.",
+                "No server configured.
+    Add a server in the OPC UA connection dialog.",
                 "Browse Unavailable"
             )
             return
 
         _panel._open_browser_for_server(sid, func(node_id: OpcUaNodeId) -> void:
+            tag.node_id.value = node_id   # mutate the ReactiveTag sub-field directly
+
             if is_instance_valid(tag_edit):
-                tag_edit.text = node_id.to_tag_name()
-            emit(prop + "/node_id", node_id)
+                tag_edit.text = tag.to_tag_name()
         )
     )
 
