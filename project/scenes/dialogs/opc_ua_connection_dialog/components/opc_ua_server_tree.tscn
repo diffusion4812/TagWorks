@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://cndtww46vr4gu"]
+
+[ext_resource type="Script" uid="uid://dris0gu5cxo1p" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_tree.gd" id="1_4iypq"]
+
+[node name="OpcUaServerTree" type="Tree" unique_id=1618288988]
+offset_right = 16.0
+offset_bottom = 17.0
+script = ExtResource("1_4iypq")
+
+[node name="StatusRefreshTimer" type="Timer" parent="." unique_id=293177190]
+autostart = true

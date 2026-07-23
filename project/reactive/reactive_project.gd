@@ -29,12 +29,6 @@ func _describe_value() -> String:
     return project_name.value
 
 # ── Factory ───────────────────────────────────────────────────────────────────
-
-## Returns a new, empty ReactiveProject.
-static func create_empty() -> ReactiveProject:
-    return ReactiveProject.new()
-
-
 ## Deserialises a ReactiveProject from a Dictionary.
 ## Returns null if the payload is invalid.
 static func from_dict(payload: Dictionary) -> ReactiveProject:

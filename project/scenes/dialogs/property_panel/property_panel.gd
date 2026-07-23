@@ -32,8 +32,6 @@ func _on_close_btn_pressed() -> void:
 
 # ── AppState Handlers ─────────────────────────────────────────────────────────
 
-## Responds to changes on AppState.selected_widget.
-## Null indicates deselection; any ReactiveWidget value triggers a panel load.
 func _on_selected_widget_changed(selected_widget: ReactiveVariant) -> void:
     if _current_widget_node != null and property_changed.is_connected(_current_widget_node._on_property_changed):
         property_changed.disconnect(_current_widget_node._on_property_changed)
@@ -86,8 +84,6 @@ func _load_widget(node: Node, widget: ReactiveWidget) -> void:
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
 
-## Re-emits every current property value on the selected widget through the
-## Intent Bus. Useful after reconnecting a data source or forcing a resync.
 func _reapply_current_target() -> void:
     if _current_target != null:
         for id: String in _current_target.properties.keys():
@@ -111,26 +107,40 @@ func _open_browser_for_server(server_id: String, on_selected: Callable) -> void:
         node_browser.request_node_id(OpcUaManager, server_id, on_selected)
         return
 
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
+    var cfg: ReactiveOpcUaServer = _find_server_config(server_id)
     if cfg == null:
         OS.alert("Server configuration not found.", "Browse Unavailable")
         return
 
     var temp_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
-    if cfg.username.is_empty():
-        ok = temp_client.connect_to_server(cfg.endpoint_url)
+    if cfg.username.value.is_empty():
+        ok = temp_client.connect_to_server(cfg.endpoint_url.value)
     else:
         ok = temp_client.connect_with_credentials(
-            cfg.endpoint_url, cfg.username, cfg.password
+            cfg.endpoint_url.value, cfg.username.value, cfg.password.value
         )
 
     if not ok:
         OS.alert(
             "Could not connect to '%s' for browsing.\nCheck the endpoint and credentials in the server configuration." \
-                % cfg.display_name,
-            "Browse Failed"
+                % cfg.display_name.value,
+			"Browse Failed"
         )
         return
 
     node_browser.request_node_id_temporary(temp_client, on_selected)
+
+
+## Looks up a ReactiveOpcUaServer by id within the current project.
+## Returns null if no project is loaded or no server matches.
+func _find_server_config(server_id: String) -> ReactiveOpcUaServer:
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        return null
+
+    for server: ReactiveOpcUaServer in project.servers.values():
+        if server.id.value == server_id:
+            return server
+
+    return null

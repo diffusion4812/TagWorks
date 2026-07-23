@@ -38,8 +38,6 @@ var read_only: bool = false
 var server_id: String = ""
 
 ## The subscription group this tag belongs to.
-## The binding will only react to tag_value_changed signals that originate
-## from a server whose group pub_interval_ms matches this group's interval.
 var group_id: String = ""
 
 ## The OPC UA node this binding subscribes to.
@@ -47,57 +45,56 @@ var node_id: OpcUaNodeId = null
 
 # ── Private ───────────────────────────────────────────────────────────────────
 
-## Cached pub_interval_ms resolved from group_id at registration time.
-## Used to validate that incoming updates originate from the correct group.
-var _group_interval_ms: float = -1.0
+var _registered: bool = false
 
 # =============================================================================
 # Public API
 # =============================================================================
 
-## Primary setup method. Call this after add_child() to configure the binding.
-## Handles unregistering any previous binding before applying the new one.
+## Primary setup method. Call this after add_child() to configure the binding,
+## and again any time the widget's server_id/group_id/node_id properties change.
 func setup(
     p_server_id: String,
     p_group_id:  String,
     p_node_id:   OpcUaNodeId,
     p_read_only: bool = false
 ) -> void:
-    _unregister()
-
     server_id = p_server_id
     group_id  = p_group_id
     node_id   = p_node_id
     read_only = p_read_only
 
-    _register()
+    _registered = server_id != "" and group_id != "" and node_id != null
+
+    if _registered and is_inside_tree() and OpcUaManager.is_server_connected(server_id):
+        value_changed.emit(OpcUaManager.get_tag_value(server_id, node_id))
 
 
 ## Writes a value back to the bound node on the server.
-## Silently ignored when read_only is true or no node_id is set.
+## Silently ignored when read_only is true or the binding is incomplete.
 func write_value(value: Variant) -> void:
-    if read_only or node_id == null or server_id == "":
+    if read_only or not _registered:
         return
     OpcUaManager.write_tag(server_id, node_id, value)
 
 
 ## Returns the current cached value from the manager, or null.
 func get_current_value() -> Variant:
-    if node_id == null or server_id == "":
+    if not _registered:
         return null
     return OpcUaManager.get_tag_value(server_id, node_id)
 
 
 ## Serializes this binding's configuration into a Dictionary.
+## Matches the three flat properties used by the property panel
+## ("server_id", "group_id", "node_id") plus read_only.
 func serialize() -> Dictionary:
     if node_id == null:
         return {}
     return {
         "server_id": server_id,
         "group_id":  group_id,
-        "ns":        node_id.namespace_index,
-        "id":        node_id.identifier,
-        "type":      node_id.identifier_type,
+        "node_id":   node_id.to_string(),
         "read_only": read_only,
     }
 
@@ -110,16 +107,11 @@ func deserialize(data: Dictionary) -> void:
     var p_server_id: String = data.get("server_id", "")
     var p_group_id:  String = data.get("group_id",  "")
     var p_read_only: bool   = data.get("read_only", false)
+    var p_node_id_str: String = data.get("node_id", "")
 
-    var ns:      int    = data.get("ns",   0)
-    var raw_id:  int    = data.get("id",   0)
-    var id_type: String = data.get("type", "numeric")
-
-    var p_node_id: OpcUaNodeId
-    if id_type == "string":
-        p_node_id = OpcUaNodeId.from_string_id(ns, str(raw_id))
-    else:
-        p_node_id = OpcUaNodeId.numeric(ns, int(raw_id))
+    var p_node_id: OpcUaNodeId = null
+    if p_node_id_str != "":
+        p_node_id = OpcUaNodeId.parse(p_node_id_str)
 
     setup(p_server_id, p_group_id, p_node_id, p_read_only)
 
@@ -131,16 +123,11 @@ func _ready() -> void:
     OpcUaManager.tag_value_changed.connect(_on_tag_value_changed)
     OpcUaManager.connected.connect(_on_server_connected)
 
-    # Register if setup() was called before the node entered the tree
-    if node_id != null and server_id != "":
-        _register()
-        if OpcUaManager.is_server_connected(server_id):
-            value_changed.emit(OpcUaManager.get_tag_value(server_id, node_id))
+    if _registered and OpcUaManager.is_server_connected(server_id):
+        value_changed.emit(OpcUaManager.get_tag_value(server_id, node_id))
 
 
 func _exit_tree() -> void:
-    _unregister()
-
     if OpcUaManager.tag_value_changed.is_connected(_on_tag_value_changed):
         OpcUaManager.tag_value_changed.disconnect(_on_tag_value_changed)
 
@@ -148,79 +135,34 @@ func _exit_tree() -> void:
         OpcUaManager.connected.disconnect(_on_server_connected)
 
 # =============================================================================
-# Registration
-# =============================================================================
-
-func _register() -> void:
-    if node_id == null or server_id == "" or group_id == "":
-        return
-
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
-    if cfg == null:
-        push_warning("OpcUaBinding: server '%s' not found in registry." % server_id)
-        return
-
-    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id)
-    if group == null:
-        push_warning(
-            "OpcUaBinding: group '%s' not found on server '%s'." \
-            % [group_id, server_id]
-        )
-        return
-
-    # Cache the interval so _on_tag_value_changed can filter by group
-    _group_interval_ms = group.pub_interval_ms
-
-    OpcUaManager.register_tag(
-        server_id,
-        node_id,
-        group.pub_interval_ms,   # sampling_ms matches the group publishing rate
-        group.pub_interval_ms,   # pub_interval_ms — assigns tag to the correct group
-        0.0,
-        OpcUaSubscriptionMode.Mode.ALWAYS
-    )
-
-
-func _unregister() -> void:
-    if node_id != null and server_id != "":
-        OpcUaManager.unregister_tag(server_id, node_id)
-    _group_interval_ms = -1.0
-
-# =============================================================================
 # Signal handlers
 # =============================================================================
 
 func _on_server_connected(connected_server_id: String) -> void:
-    if connected_server_id != server_id or node_id == null:
+    if not _registered or connected_server_id != server_id:
         return
-    # Re-register in case the subscription was lost during reconnection
-    _register()
     value_changed.emit(OpcUaManager.get_tag_value(server_id, node_id))
 
 
+## OpcUaManager.tag_value_changed now carries (server_id, group_id, node_id, value)
+## directly from OpcUaServerConnection, so filtering is a simple three-way
+## equality check — no need to re-resolve group config on every update.
 func _on_tag_value_changed(
     changed_server_id: String,
+    changed_group_id:  String,
     changed_node_id:   OpcUaNodeId,
     value:             Variant
 ) -> void:
-    if node_id == null:
+    if not _registered:
         return
 
-    # Ignore updates from other servers
     if changed_server_id != server_id:
         return
 
-    # Ignore updates for other nodes
-    if changed_node_id.to_tag_name() != node_id.to_tag_name():
+    if changed_group_id != group_id:
         return
 
-    # Ignore updates that did not originate from the correct subscription group.
-    # The OpcUaTagRegistry only emits for active entries, but we additionally
-    # guard here to ensure the widget update rate matches the group rate exactly.
-    if _group_interval_ms >= 0.0:
-        var cfg: OpcUaServerConfig              = ProjectManager.opc_ua_registry.get_config(server_id)
-        var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id) if cfg else null
-        if group == null or group.pub_interval_ms != _group_interval_ms:
-            return
+    if changed_node_id.to_string() != node_id.to_string():
+        return
 
     value_changed.emit(value)

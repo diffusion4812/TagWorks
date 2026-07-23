@@ -2,6 +2,9 @@
 
 [ext_resource type="PackedScene" uid="uid://ctuakifyo3wa3" path="res://scenes/dialogs/base_dialog.tscn" id="1_e1spn"]
 [ext_resource type="Script" uid="uid://by3pq3d71fv2d" path="res://scenes/dialogs/opc_ua_connection_dialog/opc_ua_connection_dialog.gd" id="2_vdtpp"]
+[ext_resource type="PackedScene" uid="uid://cndtww46vr4gu" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_tree.tscn" id="3_sffmb"]
+[ext_resource type="PackedScene" uid="uid://dtkkgm3jk4wns" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_group_detail_form.tscn" id="4_iro6b"]
+[ext_resource type="PackedScene" uid="uid://cua07jkkaxfta" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_detail_form.tscn" id="5_psehr"]
 
 [node name="ConnectionDialog" unique_id=425608285 instance=ExtResource("1_e1spn")]
 size = Vector2i(750, 450)
@@ -35,7 +38,7 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "- Remove"
 
-[node name="ServerTree" type="Tree" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide" index="1" unique_id=1694544389]
+[node name="ServerTree" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide" index="1" unique_id=1618288988 instance=ExtResource("3_sffmb")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -49,161 +52,15 @@ visible = false
 layout_mode = 2
 text = "No server selected"
 
-[node name="ServerDetailForm" type="VBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="1" unique_id=2098717737]
+[node name="GroupDetailForm" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="1" unique_id=56569965 instance=ExtResource("4_iro6b")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="0" unique_id=2025534580]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer" index="0" unique_id=1630165050]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
-text = "Display name:"
-
-[node name="DisplayNameEdit" type="LineEdit" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer" index="1" unique_id=824641494]
+[node name="ServerDetailForm" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="2" unique_id=1912633500 instance=ExtResource("5_psehr")]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="1" unique_id=1272258280]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer2" index="0" unique_id=649122746]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
-text = "Endpoint:"
-
-[node name="EndpointEdit" type="LineEdit" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer2" index="1" unique_id=2007874597]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer3" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="2" unique_id=1626466351]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer3" index="0" unique_id=1352987684]
-custom_minimum_size = Vector2(150, 0)
-layout_mode = 2
-text = "Security policy:"
-
-[node name="SecurityPolicyOption" type="OptionButton" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer3" index="1" unique_id=715176700]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer4" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="3" unique_id=158163879]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer4" index="0" unique_id=682871964]
-custom_minimum_size = Vector2(150, 0)
-layout_mode = 2
-text = "Message mode:"
-
-[node name="MessageModeOption" type="OptionButton" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer4" index="1" unique_id=1195884571]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer5" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="4" unique_id=373543400]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer5" index="0" unique_id=992158643]
-custom_minimum_size = Vector2(100, 0)
-layout_mode = 2
-text = "Username:"
-
-[node name="UsernameEdit" type="LineEdit" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer5" index="1" unique_id=1557773435]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer6" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="5" unique_id=1783752907]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer6" index="0" unique_id=830168980]
-custom_minimum_size = Vector2(100, 0)
-layout_mode = 2
-text = "Password:"
-
-[node name="PasswordEdit" type="LineEdit" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer6" index="1" unique_id=303515295]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer7" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="6" unique_id=298766924]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer7" index="0" unique_id=1904440480]
-custom_minimum_size = Vector2(180, 0)
-layout_mode = 2
-text = "Poll interval:"
-
-[node name="PollIntervalSpin" type="SpinBox" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer7" index="1" unique_id=979402285]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer8" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="7" unique_id=895191147]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer8" index="0" unique_id=800657843]
-custom_minimum_size = Vector2(180, 0)
-layout_mode = 2
-text = "Reconnect interval:"
-
-[node name="ReconnectIntervalSpin" type="SpinBox" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer8" index="1" unique_id=1175281412]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer9" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm" index="8" unique_id=2006214009]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer9" index="0" unique_id=295688943]
-layout_mode = 2
-text = "Max. connection attempts:"
-
-[node name="MaxAttemptsSpin" type="SpinBox" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/ServerDetailForm/HBoxContainer9" index="1" unique_id=945699156]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="GroupDetailForm" type="VBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="2" unique_id=40915261]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm" index="0" unique_id=594881092]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm/HBoxContainer" index="0" unique_id=1451224916]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
-text = "Display name:"
-
-[node name="GroupNameEdit" type="LineEdit" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm/HBoxContainer" index="1" unique_id=1963931149]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm" index="1" unique_id=592959360]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm/HBoxContainer2" index="0" unique_id=329889263]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
-text = "Interval:"
-
-[node name="GroupIntervalSpin" type="SpinBox" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide/GroupDetailForm/HBoxContainer2" index="1" unique_id=167089698]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-step = 10.0
-value = 100.0
-rounded = true
-allow_greater = true
-allow_lesser = true
 
 [node name="Footer" type="HBoxContainer" parent="Panel/MarginContainer/VBox" index="1" unique_id=1844605241]
 layout_mode = 2

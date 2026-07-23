@@ -34,6 +34,11 @@ const SERVER_MENU_FIXED_ITEM_COUNT: int = 1
 ## Enables clean teardown and rebuild when the server list changes.
 var _server_submenus: Dictionary = {}
 
+## Tracks the actual ReactiveProject we're currently bound to, so we can
+## unbind cleanly (and avoid dangling references) when the project changes.
+var _bound_project: ReactiveProject = null
+var _servers_changed_callable: Callable = Callable()
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -60,8 +65,8 @@ func _connect_signals() -> void:
     server_status_timer.timeout.connect(_on_server_status_timeout)
     edit_mode_toggle.toggled.connect(_on_mode_toggled)
 
-    # ── Server registry ───────────────────────────────────────────────────────
-    ProjectManager.opc_ua_registry.configs_changed.connect(_rebuild_server_menu)
+    # ── Server registry (now sourced from the reactive project) ──────────────
+    _bind_project_servers()
     _rebuild_server_menu()
 
     # ── OPC UA connection state ───────────────────────────────────────────────
@@ -84,24 +89,20 @@ func _connect_signals() -> void:
 
 func deep_merge_themes(base: Theme, modifier: Theme) -> Theme:
     var result: Theme = base.duplicate(true)
-    
+
     for type_name: String in modifier.get_type_list():
-        # Merge StyleBoxes intelligently instead of overwriting them
         for style_name: String in modifier.get_stylebox_list(type_name):
             var mod_sb: StyleBox = modifier.get_stylebox(style_name, type_name)
-            
+
             if mod_sb is StyleBoxFlat and result.has_stylebox(style_name, type_name):
                 var base_sb: StyleBox = result.get_stylebox(style_name, type_name)
                 if base_sb is StyleBoxFlat:
-                    # Explicitly copy color data over the base layout geometry
                     base_sb.bg_color = mod_sb.bg_color
                     base_sb.border_color = mod_sb.border_color
                     base_sb.shadow_color = mod_sb.shadow_color
             else:
-                # Fallback if the base doesn't have it or it's a texture/empty stylebox
                 result.set_stylebox(style_name, type_name, mod_sb)
 
-        # Colors, Fonts, Constants merge perfectly with the default engine methods
         for color_name: String in modifier.get_color_list(type_name):
             result.set_color(color_name, type_name, modifier.get_color(color_name, type_name))
 
@@ -137,9 +138,33 @@ func _on_server_menu_pressed(id: int) -> void:
     match id:
         0: connection_dialog.popup_centered(Vector2i(800, 520))
 
+# ── Server Menu — Reactive Binding ─────────────────────────────────────────────
+
+## Rebinds to the current project's `servers` array, so that any structural
+## change (add/remove/reorder) triggers a menu rebuild, even though
+## AppState.current_project.value itself did not change. Explicitly unbinds
+## from the previously bound project first to avoid dangling references.
+func _bind_project_servers() -> void:
+    if _bound_project != null and _servers_changed_callable.is_valid():
+        _bound_project.servers.disconnect_self_changed(_servers_changed_callable)
+
+    _bound_project = null
+    _servers_changed_callable = Callable()
+
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        return
+
+    _servers_changed_callable = func(_origin: Reactive) -> void:
+        _rebuild_server_menu()
+
+    project.servers.connect_self_changed(_servers_changed_callable)
+    _bound_project = project
+
 
 ## Tears down all dynamic server menu entries and rebuilds them from
-## the current registry state. Called when the server list changes structurally.
+## the current project's server list. Called when the server list changes
+## structurally, or when the bound project itself changes.
 func _rebuild_server_menu() -> void:
     for submenu: PopupMenu in _server_submenus.values():
         if is_instance_valid(submenu):
@@ -149,26 +174,32 @@ func _rebuild_server_menu() -> void:
     while server_menu.item_count > SERVER_MENU_FIXED_ITEM_COUNT:
         server_menu.remove_item(server_menu.item_count - 1)
 
-    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
-    if configs.is_empty():
+    var project: ReactiveProject = _bound_project
+    if project == null:
+        return
+
+    var servers: Array = project.servers.values()
+    if servers.is_empty():
         return
 
     server_menu.add_separator()
 
-    for cfg: OpcUaServerConfig in configs:
+    for cfg: ReactiveOpcUaServer in servers:
+        var server_id: String = cfg.id.value
+
         var submenu: PopupMenu = PopupMenu.new()
-        submenu.name  = "sub_%s" % cfg.id
+        submenu.name = "sub_%s" % server_id
         submenu.add_item("Connect",    0)
         submenu.add_item("Disconnect", 1)
         submenu.add_item("Status",     2)
         submenu.id_pressed.connect(
-            func(id: int) -> void: _on_server_submenu_pressed(cfg.id, id)
+            func(id: int) -> void: _on_server_submenu_pressed(server_id, id)
         )
         server_menu.add_child(submenu)
-        _server_submenus[cfg.id] = submenu
+        _server_submenus[server_id] = submenu
 
-        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
-        server_menu.add_submenu_node_item(prefix + cfg.display_name, submenu)
+        var prefix: String = "● " if OpcUaManager.is_server_connected(server_id) else "○ "
+        server_menu.add_submenu_node_item(prefix + cfg.display_name.value, submenu)
 
     _on_server_status_timeout()
 
@@ -185,20 +216,25 @@ func _on_server_submenu_pressed(server_id: String, id: int) -> void:
 ## Refreshes server menu dot indicators and submenu item states
 ## without triggering a full structural rebuild.
 func _on_server_status_timeout() -> void:
-    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
+    var project: ReactiveProject = _bound_project
+    if project == null:
+        return
 
-    for i: int in configs.size():
-        var cfg        : OpcUaServerConfig = configs[i]
-        var menu_index : int               = SERVER_MENU_FIXED_ITEM_COUNT + i + 1
+    var servers: Array = project.servers.values()
+
+    for i: int in servers.size():
+        var cfg: ReactiveOpcUaServer = servers[i]
+        var server_id: String        = cfg.id.value
+        var menu_index: int          = SERVER_MENU_FIXED_ITEM_COUNT + i + 1
 
         if menu_index >= server_menu.item_count:
             break
 
-        var connected: bool = OpcUaManager.is_server_connected(cfg.id)
+        var connected: bool = OpcUaManager.is_server_connected(server_id)
         var prefix: String  = "● " if connected else "○ "
-        server_menu.set_item_text(menu_index, prefix + cfg.display_name)
+        server_menu.set_item_text(menu_index, prefix + cfg.display_name.value)
 
-        var submenu: PopupMenu = _server_submenus.get(cfg.id, null)
+        var submenu: PopupMenu = _server_submenus.get(server_id, null)
         if submenu == null:
             continue
 
@@ -249,9 +285,14 @@ func _on_file_dialog_selected(path: String) -> void:
 ## Fires whenever AppState.current_project changes.
 ## An empty name and path indicates a closed or unloaded project.
 func _on_current_project_changed() -> void:
+    _bind_project_servers()
+    _rebuild_server_menu()
+
     var project: ReactiveProject = AppState.current_project.value
-    var is_open: bool = not project.file_path.value.is_empty() \
-                or not project.project_name.value.is_empty()
+    var is_open: bool = project != null and (
+        not project.file_path.value.is_empty() \
+        or not project.project_name.value.is_empty()
+    )
 
     if is_open:
         inspector_container.show()

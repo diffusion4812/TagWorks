@@ -13,8 +13,18 @@ signal rename_page_requested(page: ReactivePage, new_name: String)
 signal add_widget_requested(scene: PackedScene)
 @warning_ignore("unused_signal")
 signal delete_widget_requested(widget: ReactiveWidget)
+
+# ── Servers ───────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")
-signal rename_widget_requested(widget: ReactiveWidget, new_name: String)
+signal add_server_requested()
+@warning_ignore("unused_signal")
+signal delete_server_requested(server: ReactiveOpcUaServer)
+
+# ── Groups ────────────────────────────────────────────────────────────────────
+@warning_ignore("unused_signal")
+signal add_group_requested()
+@warning_ignore("unused_signal")
+signal delete_group_requested(server: ReactiveOpcUaGroup)
 
 # ── Project ───────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")

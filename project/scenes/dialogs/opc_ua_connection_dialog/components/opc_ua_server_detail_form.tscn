@@ -1,0 +1,122 @@
+[gd_scene format=3 uid="uid://cua07jkkaxfta"]
+
+[ext_resource type="Script" uid="uid://8wi3j1nwp3am" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_detail_form.gd" id="1_s4yny"]
+
+[node name="OpcUaServerDetailForm" type="VBoxContainer" unique_id=56569965]
+script = ExtResource("1_s4yny")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="." unique_id=1521361351]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer" unique_id=677007712]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Display name:"
+
+[node name="DisplayNameEdit" type="LineEdit" parent="HBoxContainer" unique_id=609289353]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="." unique_id=17846351]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer2" unique_id=1470123257]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Endpoint:"
+
+[node name="EndpointEdit" type="LineEdit" parent="HBoxContainer2" unique_id=1392634705]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="." unique_id=1249664992]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer3" unique_id=2101852501]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Security policy:"
+
+[node name="SecurityPolicyOption" type="OptionButton" parent="HBoxContainer3" unique_id=958829188]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer4" type="HBoxContainer" parent="." unique_id=1261461305]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer4" unique_id=1812911073]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+text = "Message mode:"
+
+[node name="MessageModeOption" type="OptionButton" parent="HBoxContainer4" unique_id=2025809049]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer5" type="HBoxContainer" parent="." unique_id=158288640]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer5" unique_id=1856617523]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Username:"
+
+[node name="UsernameEdit" type="LineEdit" parent="HBoxContainer5" unique_id=654030383]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer6" type="HBoxContainer" parent="." unique_id=1454680121]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer6" unique_id=1386182880]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Password:"
+
+[node name="PasswordEdit" type="LineEdit" parent="HBoxContainer6" unique_id=924628355]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer7" type="HBoxContainer" parent="." unique_id=700195805]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer7" unique_id=1279897100]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Poll interval:"
+
+[node name="PollIntervalSpin" type="SpinBox" parent="HBoxContainer7" unique_id=1607749334]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer8" type="HBoxContainer" parent="." unique_id=1546346375]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer8" unique_id=1074515295]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Reconnect interval:"
+
+[node name="ReconnectIntervalSpin" type="SpinBox" parent="HBoxContainer8" unique_id=1019011061]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer9" type="HBoxContainer" parent="." unique_id=1893212575]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer9" unique_id=1340255583]
+layout_mode = 2
+text = "Max. connection attempts:"
+
+[node name="MaxAttemptsSpin" type="SpinBox" parent="HBoxContainer9" unique_id=1178237632]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3

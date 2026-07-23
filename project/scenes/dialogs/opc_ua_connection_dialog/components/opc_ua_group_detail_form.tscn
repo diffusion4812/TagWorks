@@ -1,0 +1,37 @@
+[gd_scene format=3 uid="uid://dtkkgm3jk4wns"]
+
+[ext_resource type="Script" uid="uid://bsdqpdpmdv2u0" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_group_detail_form.gd" id="1_uk8co"]
+
+[node name="OpcUaServerDetailForm" type="VBoxContainer" unique_id=56569965]
+script = ExtResource("1_uk8co")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="." unique_id=1066325100]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer" unique_id=1648653446]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Display name:"
+
+[node name="GroupNameEdit" type="LineEdit" parent="HBoxContainer" unique_id=1159476863]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="." unique_id=408088289]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer2" unique_id=2137850020]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Interval:"
+
+[node name="GroupIntervalSpin" type="SpinBox" parent="HBoxContainer2" unique_id=1956500996]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+step = 10.0
+value = 100.0
+rounded = true
+allow_greater = true
+allow_lesser = true

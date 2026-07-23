@@ -1,282 +1,132 @@
 # autoloads/opc_ua_manager.gd
+## Autoload singleton. Derives its set of live OpcUaServerConnection instances
+## purely from AppState.current_project.value.servers. UI code never calls
+## add_server()/remove_server() directly — it only mutates project data;
+## this manager reconciles automatically whenever:
+##   1. AppState.current_project itself changes (a new project is loaded), or
+##   2. the current project's `servers` array layout changes (add/remove/reorder).
 extends Node
 
 signal connected(server_id: String)
 signal connection_lost(server_id: String)
 signal connection_failed(server_id: String)
-signal tag_value_changed(server_id: String, node_id: OpcUaNodeId, value: Variant)
+signal data_changed(server_id: String, node_id: String, value: Variant)
 
-## { server_id: String -> OpcUaServerConnection }
-var _connections: Dictionary = {}
+var _connections: Dictionary = {}   # server_id (String) -> OpcUaServerConnection
 
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
+# Tracks the actual ReactiveProject we're currently bound to, so we can
+# unbind cleanly (and avoid dangling references) when the project changes.
+var _bound_project: ReactiveProject = null
+var _servers_changed_callable: Callable = Callable()
+
 
 func _ready() -> void:
-    ProjectManager.opc_ua_registry.configs_changed.connect(_on_configs_changed)
+    AppState.current_project.changed.connect(_on_current_project_changed)
+    _bind_project()
+    _reconcile()
 
-func _process(_delta: float) -> void:
-    for conn: OpcUaServerConnection in _connections.values():
-        conn.poll()
 
-func _notification(what: int) -> void:
-    if what == NOTIFICATION_PREDELETE:
-        disconnect_all()
+func _on_current_project_changed() -> void:
+    _bind_project()
+    _reconcile()
 
-# ── Server management ─────────────────────────────────────────────────────────
 
-func add_server(config: OpcUaServerConfig) -> void:
-    if _connections.has(config.id):
-        push_warning("OpcUaManager: server '%s' already added." % config.id)
+# ── Binding ────────────────────────────────────────────────────────────────
+
+## Rebinds to the current project's `servers` array, so that any change to
+## the server layout (add/remove/reorder) triggers reconciliation, even
+## though AppState.current_project.value itself did not change. Explicitly
+## unbinds from the previously bound project first to avoid dangling
+## references or duplicate listeners.
+func _bind_project() -> void:
+    if _bound_project != null and _servers_changed_callable.is_valid():
+        _bound_project.servers.reactive_changed.disconnect(_servers_changed_callable)
+
+    _bound_project = null
+    _servers_changed_callable = Callable()
+
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
         return
 
-    var conn: OpcUaServerConnection = OpcUaServerConnection.new(config)
-    conn.connected.connect(func(server_id: String) -> void: connected.emit(server_id))
-    conn.connection_lost.connect(func(server_id: String) -> void: connection_lost.emit(server_id))
-    conn.connection_failed.connect(func(server_id: String) -> void: connection_failed.emit(server_id))
-    conn.tag_value_changed.connect(
-        func(server_id: String, node_id: OpcUaNodeId, value: Variant) -> void: tag_value_changed.emit(server_id, node_id, value)
+    _servers_changed_callable = func(_origin: ReactiveArray) -> void:
+        _reconcile()
+
+    project.servers.connect_self_changed(_servers_changed_callable)
+    _bound_project = project
+
+
+# ── Reconciliation ──────────────────────────────────────────────────────────
+
+func _reconcile() -> void:
+    var project: ReactiveProject = _bound_project
+
+    if project == null:
+        _teardown_all()
+        return
+
+    var configured_ids: Dictionary = {}
+
+    for cfg: ReactiveOpcUaServer in project.servers.values():
+        var server_id: String = cfg.id.value
+        configured_ids[server_id] = true
+
+        if _connections.has(server_id):
+            var connection: OpcUaServerConnection = _connections[server_id]
+            connection.apply_config(cfg)
+        else:
+            _spawn_connection(cfg)
+
+    # Remove connections whose server no longer exists in the project.
+    for server_id: String in _connections.keys().duplicate():
+        if not configured_ids.has(server_id):
+            _teardown_connection(server_id)
+
+
+func _spawn_connection(cfg: ReactiveOpcUaServer) -> void:
+    var server_id: String = cfg.id.value
+    var connection: OpcUaServerConnection = OpcUaServerConnection.new(cfg.id.value)
+    add_child(connection)
+
+    connection.connected.connect(func() -> void: connected.emit(server_id))
+    connection.connection_lost.connect(func() -> void: connection_lost.emit(server_id))
+    connection.connection_failed.connect(func() -> void: connection_failed.emit(server_id))
+    connection.data_changed.connect(
+        func(node_id: String, value: Variant) -> void:
+            data_changed.emit(server_id, node_id, value)
     )
-    _connections[config.id] = conn
 
-    # Seed any groups already present on the config at add time
-    # This handles the case where a project is loaded with pre-configured groups
-    for group: OpcUaSubscriptionGroupConfig in config.subscription_groups:
-        conn.add_group(group)
+    _connections[server_id] = connection
+    connection.apply_config(cfg)
 
 
-func remove_server(server_id: String) -> void:
-    var conn: OpcUaServerConnection = _connections.get(server_id, null)
-    if conn == null:
-        return
-    conn.disconnect_from_server()
+func _teardown_connection(server_id: String) -> void:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection != null:
+        connection.teardown()
     _connections.erase(server_id)
 
 
-func connect_server(server_id: String) -> bool:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn.connect_to_server() if conn else false
+func _teardown_all() -> void:
+    for server_id: String in _connections.keys().duplicate():
+        _teardown_connection(server_id)
 
 
-func disconnect_server(server_id: String) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn:
-        conn.disconnect_from_server()
-
-
-func disconnect_all() -> void:
-    for conn: OpcUaServerConnection in _connections.values():
-        conn.disconnect_from_server()
-    _connections.clear()
-
-# ── Group management ──────────────────────────────────────────────────────────
-
-## Adds a subscription group to an existing server connection.
-## Safe to call at any time — if the server is already connected the
-## new group subscription is created immediately, otherwise it will be
-## created the next time the server connects.
-func add_group(server_id: String, group: OpcUaSubscriptionGroupConfig) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn == null:
-        return
-
-    # Guard against duplicate groups
-    if conn.has_group(group.id):
-        push_warning(
-            "OpcUaManager: group '%s' already exists on server '%s'." \
-            % [group.id, server_id]
-        )
-        return
-
-    conn.add_group(group)
-
-
-## Removes a subscription group and all tags assigned to it.
-## Tags that were in this group are unregistered — widgets will stop updating
-## until re-bound to a different group.
-func remove_group(server_id: String, group_id: String) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn:
-        conn.remove_group(group_id)
-
-
-## Updates an existing group's configuration (e.g. display name or interval).
-## If the interval changes the group subscription is rebuilt automatically.
-func update_group(server_id: String, group: OpcUaSubscriptionGroupConfig) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn == null:
-        return
-
-    if not conn.has_group(group.id):
-        push_warning(
-            "OpcUaManager: cannot update unknown group '%s' on server '%s'." \
-            % [group.id, server_id]
-        )
-        return
-
-    conn.update_group(group)
-
-# ── Tag API ───────────────────────────────────────────────────────────────────
-
-func register_tag(
-    server_id:       String,
-    node_id:         OpcUaNodeId,
-    pub_interval_ms: float                      = 500.0,
-    sampling_ms:     float                      = -1.0,
-    deadband:        float                      = 0.0,
-    mode:            OpcUaSubscriptionMode.Mode = OpcUaSubscriptionMode.Mode.ALWAYS
-) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn == null:
-        return
-
-    var resolved_interval: float = _resolve_group_interval(server_id, pub_interval_ms)
-    var resolved_sampling: float = sampling_ms if sampling_ms > 0.0 else resolved_interval
-
-    conn.registry.register(
-        node_id,
-        resolved_sampling,
-        resolved_interval,
-        deadband,
-        mode
-    )
-
-    # Stamp the resolved group_id onto the entry so the status window
-    # can associate tags with their owning group unambiguously
-    var resolved_group_id: String = _resolve_group_id(server_id, resolved_interval)
-    if resolved_group_id != "":
-        var entry: OpcUaTagRegistry.TagEntry = conn.registry.get_entry(node_id)
-        if entry != null:
-            entry.group_id = resolved_group_id
-
-
-func _resolve_group_interval(server_id: String, pub_interval_ms: float) -> float:
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
-    if cfg == null:
-        return pub_interval_ms
-
-    if cfg.subscription_groups.is_empty():
-        push_warning(
-            "OpcUaManager: server '%s' has no subscription groups configured. " \
-            % server_id +
-            "Tag will be registered at %.0fms as an ad-hoc group." % pub_interval_ms
-        )
-        return pub_interval_ms
-
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        if is_equal_approx(group.pub_interval_ms, pub_interval_ms):
-            return group.pub_interval_ms
-
-    var nearest_interval: float = cfg.subscription_groups[0].pub_interval_ms
-    var nearest_delta: float = absf(nearest_interval - pub_interval_ms)
-
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        var delta: float = absf(group.pub_interval_ms - pub_interval_ms)
-        if delta < nearest_delta:
-            nearest_delta    = delta
-            nearest_interval = group.pub_interval_ms
-
-    push_warning(
-        "OpcUaManager: no subscription group at %.0fms on server '%s'. " \
-        % [pub_interval_ms, server_id] +
-        "Tag assigned to nearest group at %.0fms." % nearest_interval
-    )
-    return nearest_interval
-
-func _resolve_group_id(server_id: String, pub_interval_ms: float) -> String:
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
-    if cfg == null:
-        return ""
-
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        if is_equal_approx(group.pub_interval_ms, pub_interval_ms):
-            return group.id
-
-    return ""
-
-func unregister_tag(server_id: String, node_id: OpcUaNodeId) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn:
-        conn.registry.unregister(node_id)
-
-
-func get_tag_value(server_id: String, node_id: OpcUaNodeId) -> Variant:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn.registry.get_value(node_id) if conn else null
-
-
-func is_tag_quality_good(server_id: String, node_id: OpcUaNodeId) -> bool:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn.registry.is_quality_good(node_id) if conn else false
-
-
-func write_tag(server_id: String, node_id: OpcUaNodeId, value: Variant) -> bool:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn.write_tag(node_id, value) if conn else false
-
-
-func set_tag_visible(server_id: String, node_id: OpcUaNodeId, visible: bool) -> void:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    if conn:
-        conn.registry.set_tag_visible(node_id, visible)
-
+# ── Public read-only API (used by UI) ───────────────────────────────────────
 
 func is_server_connected(server_id: String) -> bool:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn.is_server_connected() if conn else false
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    return connection != null and connection.is_connected_to_server()
 
 
-func get_raw_client(server_id: String) -> GodotOpcUa:
-    var conn: OpcUaServerConnection = _get_connection(server_id)
-    return conn._client if conn else null
-
-# ── ProjectManager integration ────────────────────────────────────────────────
-
-func _on_configs_changed() -> void:
-    var registry: OpcUaConfigRegistry = ProjectManager.opc_ua_registry
-
-    # Remove servers no longer in the config
-    for server_id: String in _connections.keys():
-        if registry.get_config(server_id) == null:
-            remove_server(server_id)
-
-    # Add new servers and sync their groups
-    for cfg: OpcUaServerConfig in registry.get_all_configs():
-        if not _connections.has(cfg.id):
-            add_server(cfg)
-        else:
-            _sync_groups(cfg)
+func get_connection(server_id: String) -> OpcUaServerConnection:
+    return _connections.get(server_id)
 
 
-## Reconciles the groups on an existing connection against the current config.
-## Adds groups that are in the config but not yet on the connection.
-## Removes groups that have been deleted from the config.
-## Updates groups whose interval or display name has changed.
-func _sync_groups(cfg: OpcUaServerConfig) -> void:
-    var conn: OpcUaServerConnection = _get_connection(cfg.id)
-    if conn == null:
-        return
-
-    # Build a set of config group ids for fast lookup
-    var config_group_ids: Dictionary = {}
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        config_group_ids[group.id] = true
-
-    # Remove groups no longer in config
-    for group_id: String in conn.get_group_ids():
-        if not config_group_ids.has(group_id):
-            conn.remove_group(group_id)
-
-    # Add or update groups from config
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        if conn.has_group(group.id):
-            conn.update_group(group)
-        else:
-            conn.add_group(group)
-
-# ── Private ───────────────────────────────────────────────────────────────────
-
-func _get_connection(server_id: String) -> OpcUaServerConnection:
-    var conn: OpcUaServerConnection = _connections.get(server_id, null)
-    if conn == null:
-        push_warning("OpcUaManager: unknown server id '%s'." % server_id)
-    return conn
+## Borrows the live managed client for ad-hoc operations (e.g. browsing).
+## Returns null if the server is not currently connected.
+func get_client(server_id: String) -> GodotOpcUa:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection != null and connection.is_connected_to_server():
+        return connection.client
+    return null

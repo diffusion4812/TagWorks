@@ -192,16 +192,29 @@ func add_node_field(
     lbl:  String,
     v:    ReactiveDictionary
 ) -> void:
-    var tag :ReactiveTag = v.value[prop] as ReactiveTag
+    var server_id_prop: ReactiveString = v.value[prop + "/server_id"] as ReactiveString
+    var group_id_prop:  ReactiveString = v.value[prop + "/group_id"]  as ReactiveString
+    var node_id_prop:   ReactiveString = v.value[prop + "/node_id"]   as ReactiveString
 
-    var col   :VBoxContainer = VBoxContainer.new()
-    var label :Label = Label.new()
+    # Fundamental runtime type wrapping the three identity fields. Added as a
+    # child of `col` below so its lifecycle (and OpcUaManager signal cleanup
+    # in _exit_tree) is handled automatically when this field is torn down.
+    var binding: OpcUaBinding = OpcUaBinding.new()
+    binding.setup(
+        server_id_prop.value,
+        group_id_prop.value,
+        OpcUaNodeId.parse(node_id_prop.value) if node_id_prop.value != "" else null
+    )
+
+    var col   : VBoxContainer = VBoxContainer.new()
+    var label : Label = Label.new()
     label.text = lbl
     col.add_child(label)
+    col.add_child(binding)
 
-    var server_row    :HBoxContainer = HBoxContainer.new()
-    var server_label  :Label = Label.new()
-    var server_option :OptionButton = OptionButton.new()
+    var server_row    : HBoxContainer = HBoxContainer.new()
+    var server_label  : Label = Label.new()
+    var server_option : OptionButton = OptionButton.new()
 
     server_label.text                   = "Server"
     server_label.custom_minimum_size.x  = 60
@@ -209,42 +222,30 @@ func add_node_field(
 
     _populate_server_option(server_option)
 
-    var initial_server_id :String = tag.server_id.value \
-        if tag.server_id.value != "" \
-        else _get_first_server_id()
-    _select_option_by_meta(server_option, initial_server_id)
-
     server_row.add_child(server_label)
     server_row.add_child(server_option)
     col.add_child(server_row)
 
-    var group_row    :HBoxContainer = HBoxContainer.new()
-    var group_label  :Label = Label.new()
-    var group_option :OptionButton = OptionButton.new()
+    var group_row    : HBoxContainer = HBoxContainer.new()
+    var group_label  : Label = Label.new()
+    var group_option : OptionButton = OptionButton.new()
 
     group_label.text                   = "Group"
     group_label.custom_minimum_size.x  = 60
     group_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    _populate_group_option(group_option, initial_server_id)
-
-    var initial_group_id :String = tag.group_id.value \
-        if tag.group_id.value != "" \
-        else _get_first_group_id(initial_server_id)
-    _select_option_by_meta(group_option, initial_group_id)
-
     group_row.add_child(group_label)
     group_row.add_child(group_option)
     col.add_child(group_row)
 
-    var tag_row    :HBoxContainer = HBoxContainer.new()
-    var tag_label  :Label = Label.new()
-    var tag_edit   :LineEdit = LineEdit.new()
-    var browse_btn :Button = Button.new()
+    var tag_row    : HBoxContainer = HBoxContainer.new()
+    var tag_label  : Label = Label.new()
+    var tag_edit   : LineEdit = LineEdit.new()
+    var browse_btn : Button = Button.new()
 
     tag_label.text                  = "Tag"
     tag_label.custom_minimum_size.x = 60
-    tag_edit.text                   = tag.to_tag_name()
+    tag_edit.text                   = binding.node_id.to_string() if binding.node_id != null else "(none)"
     tag_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
     tag_edit.editable               = false
     browse_btn.text                 = "Browse"
@@ -258,27 +259,23 @@ func add_node_field(
     server_option.item_selected.connect(func(_index: int) -> void:
         var sid: String = server_option.get_item_metadata(server_option.selected)
         _populate_group_option(group_option, sid)
-        var first_gid: String = _get_first_group_id(sid)
-        _select_option_by_meta(group_option, first_gid)
+
+        binding.setup(sid, "", null)
 
         _panel.property_changed.emit(prop + "/server_id", sid)
-        _panel.property_changed.emit(prop + "/group_id",  first_gid)
-        _panel.property_changed.emit(prop + "/node_id",   null)
+        _panel.property_changed.emit(prop + "/group_id",  "")
+        _panel.property_changed.emit(prop + "/node_id",   "")
 
-        # re-sync after widget accepts/refuses
-        _select_option_by_meta(server_option, tag.server_id.value)
-        _select_option_by_meta(group_option,  tag.group_id.value)
         if is_instance_valid(tag_edit):
-            tag_edit.text = tag.to_tag_name()
+            tag_edit.text = "(none)"
     )
 
     group_option.item_selected.connect(func(_index: int) -> void:
         var gid: String = group_option.get_item_metadata(group_option.selected)
 
-        _panel.property_changed.emit(prop + "/group_id", gid)
+        binding.setup(binding.server_id, gid, binding.node_id)
 
-        # re-sync after widget accepts/refuses
-        _select_option_by_meta(group_option, tag.group_id.value)
+        _panel.property_changed.emit(prop + "/group_id", gid)
     )
 
     browse_btn.pressed.connect(func() -> void:
@@ -287,61 +284,116 @@ func add_node_field(
 
         if sid == "":
             OS.alert(
-                "No server configured.
-    Add a server in the OPC UA connection dialog.",
-                "Browse Unavailable"
+				"No server configured.
+Add a server in the OPC UA connection dialog.",
+				"Browse Unavailable"
+            )
+            return
+
+        var gid: String = group_option.get_item_metadata(group_option.selected) \
+            if group_option.item_count > 0 else ""
+
+        if gid == "":
+            OS.alert(
+				"No group selected.
+Choose a subscription group before browsing.",
+				"Browse Unavailable"
             )
             return
 
         _panel._open_browser_for_server(sid, func(node_id: OpcUaNodeId) -> void:
-            tag.node_id.value = node_id   # mutate the ReactiveTag sub-field directly
+            _ensure_tag_registered(sid, gid, node_id)
+
+            binding.setup(sid, gid, node_id)
+
+            _panel.property_changed.emit(prop + "/server_id", sid)
+            _panel.property_changed.emit(prop + "/group_id",  gid)
+            _panel.property_changed.emit(prop + "/node_id",   node_id.to_string())
 
             if is_instance_valid(tag_edit):
-                tag_edit.text = tag.to_tag_name()
+                tag_edit.text = node_id.to_string()
         )
     )
 
     _panel.extra_props.add_child(col)
 
 
-func _get_first_group_id(server_id: String) -> String:
-    if server_id == "":
-        return ""
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
-    if cfg == null or cfg.subscription_groups.is_empty():
-        return ""
-    return cfg.subscription_groups[0].id
+## Ensures a ReactiveOpcUaTag exists for `node_id` inside the target group's
+## tags array. If one already exists (matched by node_id string), it is left
+## untouched; otherwise a new tag entry is appended so OpcUaGroup will pick
+## it up on the next reconciliation and actually subscribe to it.
+func _ensure_tag_registered(server_id: String, group_id: String, node_id: OpcUaNodeId) -> void:
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        return
+
+    var server: ReactiveOpcUaServer = null
+    for s: ReactiveOpcUaServer in project.servers.values():
+        if s.id.value == server_id:
+            server = s
+            break
+
+    if server == null:
+        push_warning("_ensure_tag_registered: server '%s' not found." % server_id)
+        return
+
+    var group: ReactiveOpcUaGroup = null
+    for g: ReactiveOpcUaGroup in server.groups.values():
+        if g.id.value == group_id:
+            group = g
+            break
+
+    if group == null:
+        push_warning("_ensure_tag_registered: group '%s' not found on server '%s'." % [group_id, server_id])
+        return
+
+    var node_id_str: String = node_id.to_string()
+
+    for existing: ReactiveOpcUaTag in group.tags.values():
+        if existing.node_id.value == node_id_str:
+            return  # already registered — nothing to do
+
+    var new_tag: ReactiveOpcUaTag = ReactiveOpcUaTag.new({
+        "node_id": node_id_str,
+        "display_name": node_id_str,
+        "is_active": true,
+    }, group, "tag")
+
+    group.tags.append(new_tag)
 
 # ── Option population helpers ─────────────────────────────────────────────────
-
 func _populate_server_option(option: OptionButton) -> void:
     option.clear()
-    for cfg: OpcUaServerConfig in ProjectManager.opc_ua_registry.get_all_configs():
-        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id) else "○ "
-        option.add_item(prefix + cfg.display_name)
-        option.set_item_metadata(option.item_count - 1, cfg.id)
+
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        return
+
+    for cfg: ReactiveOpcUaServer in project.servers.values():
+        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id.value) else "○ "
+        option.add_item(prefix + cfg.display_name.value)
+        option.set_item_metadata(option.item_count - 1, cfg.id.value)
 
 
 func _populate_group_option(option: OptionButton, server_id: String) -> void:
     option.clear()
     if server_id == "":
         return
-    var cfg: OpcUaServerConfig = ProjectManager.opc_ua_registry.get_config(server_id)
+
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        return
+
+    var cfg: ReactiveOpcUaServer = null
+    for server: ReactiveOpcUaServer in project.servers.values():
+        if server.id.value == server_id:
+            cfg = server
+            break
+
     if cfg == null:
         return
-    for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
-        var item_label: String = "%s  —  %.0f ms" % [group.display_name, group.pub_interval_ms]
+
+    for group: ReactiveOpcUaGroup in cfg.groups.values():
+        var item_label: String = "%s  —  %.0f ms" % [group.id.value, group.pub_interval_ms.value]
         option.add_item(item_label)
-        option.set_item_metadata(option.item_count - 1, group.id)
-
-
-func _select_option_by_meta(option: OptionButton, target_value: String) -> void:
-    for i: int in option.item_count:
-        if option.get_item_metadata(i) == target_value:
-            option.select(i)
-            return
-
-
-func _get_first_server_id() -> String:
-    var configs: Array[OpcUaServerConfig] = ProjectManager.opc_ua_registry.get_all_configs()
-    return configs[0].id if not configs.is_empty() else ""
+        option.set_item_metadata(option.item_count - 1, group.id.value)
