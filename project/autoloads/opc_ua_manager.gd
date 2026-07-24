@@ -10,7 +10,7 @@ extends Node
 signal connected(server_id: String)
 signal connection_lost(server_id: String)
 signal connection_failed(server_id: String)
-signal data_changed(server_id: String, node_id: String, value: Variant)
+signal tag_value_changed(server_id: String, group_id: String, node_id: OpcUaNodeId, value: Variant)
 
 var _connections: Dictionary = {}   # server_id (String) -> OpcUaServerConnection
 
@@ -40,7 +40,7 @@ func _on_current_project_changed() -> void:
 ## references or duplicate listeners.
 func _bind_project() -> void:
     if _bound_project != null and _servers_changed_callable.is_valid():
-        _bound_project.servers.reactive_changed.disconnect(_servers_changed_callable)
+        _bound_project.servers.disconnect_self_changed(_servers_changed_callable)
 
     _bound_project = null
     _servers_changed_callable = Callable()
@@ -49,7 +49,7 @@ func _bind_project() -> void:
     if project == null:
         return
 
-    _servers_changed_callable = func(_origin: ReactiveArray) -> void:
+    _servers_changed_callable = func(_origin: Reactive) -> void:
         _reconcile()
 
     project.servers.connect_self_changed(_servers_changed_callable)
@@ -85,15 +85,15 @@ func _reconcile() -> void:
 
 func _spawn_connection(cfg: ReactiveOpcUaServer) -> void:
     var server_id: String = cfg.id.value
-    var connection: OpcUaServerConnection = OpcUaServerConnection.new(cfg.id.value)
+    var connection: OpcUaServerConnection = OpcUaServerConnection.new(server_id)
     add_child(connection)
 
     connection.connected.connect(func() -> void: connected.emit(server_id))
     connection.connection_lost.connect(func() -> void: connection_lost.emit(server_id))
     connection.connection_failed.connect(func() -> void: connection_failed.emit(server_id))
-    connection.data_changed.connect(
-        func(node_id: String, value: Variant) -> void:
-            data_changed.emit(server_id, node_id, value)
+    connection.tag_value_changed.connect(
+        func(sid: String, gid: String, node_id: OpcUaNodeId, value: Variant) -> void:
+            tag_value_changed.emit(sid, gid, node_id, value)
     )
 
     _connections[server_id] = connection
@@ -116,17 +116,60 @@ func _teardown_all() -> void:
 
 func is_server_connected(server_id: String) -> bool:
     var connection: OpcUaServerConnection = _connections.get(server_id)
-    return connection != null and connection.is_connected_to_server()
+    return connection != null and connection.is_server_connected()
 
 
 func get_connection(server_id: String) -> OpcUaServerConnection:
     return _connections.get(server_id)
 
 
+func get_all_server_ids() -> Array:
+    return _connections.keys()
+
+
 ## Borrows the live managed client for ad-hoc operations (e.g. browsing).
 ## Returns null if the server is not currently connected.
 func get_client(server_id: String) -> GodotOpcUa:
     var connection: OpcUaServerConnection = _connections.get(server_id)
-    if connection != null and connection.is_connected_to_server():
+    if connection != null and connection.is_server_connected():
         return connection.client
     return null
+
+
+# ── Public write / read API (used by OpcUaBinding) ──────────────────────────
+
+func write_tag(server_id: String, node_id: OpcUaNodeId, value: Variant) -> bool:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection == null:
+        push_warning("OpcUaManager: write_tag on unknown server '%s'." % server_id)
+        return false
+    return connection.write_tag(node_id, value)
+
+
+func get_tag_value(server_id: String, node_id: OpcUaNodeId) -> Variant:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection == null:
+        return null
+    var group: OpcUaGroup = connection._find_group_for_tag(node_id)
+    if group == null:
+        return null
+    return group.get_value(node_id)
+
+
+# ── Manual connect/disconnect (used by the server menu) ─────────────────────
+
+func connect_server(server_id: String) -> void:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection == null:
+        push_warning("OpcUaManager: connect_server on unknown server '%s'." % server_id)
+        return
+    if not connection.is_server_connected():
+        connection.connect_to_server()
+
+
+func disconnect_server(server_id: String) -> void:
+    var connection: OpcUaServerConnection = _connections.get(server_id)
+    if connection == null:
+        push_warning("OpcUaManager: disconnect_server on unknown server '%s'." % server_id)
+        return
+    connection.disconnect_manually()

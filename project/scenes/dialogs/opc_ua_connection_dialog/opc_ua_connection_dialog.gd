@@ -59,7 +59,7 @@ func _connect_signals() -> void:
     OpcUaManager.connection_failed.connect(_on_server_connection_failed)
 
     # React to the *active project itself* changing (load / unload / switch)
-    AppState.current_project.changed.connect(_on_current_project_changed)
+    AppState.current_project.connect_self_changed(_on_current_project_changed)
 
 # ── Project access helpers ────────────────────────────────────────────────────
 
@@ -71,48 +71,48 @@ func _project() -> ReactiveProject:
     return AppState.current_project.value
 
 
-func _servers() -> Array[OpcUaServerConfig]:
+func _servers() -> Array[ReactiveOpcUaServer]:
     var project: ReactiveProject = _project()
     if project == null:
         return []
-    return project.servers
+
+    var typed_servers: Array[ReactiveOpcUaServer] = []
+    typed_servers.assign(project.opc_ua_servers.value)
+    return typed_servers
 
 
-func _get_server(server_id: String) -> OpcUaServerConfig:
+func _get_server(server_id: String) -> ReactiveOpcUaServer:
     if server_id == "":
         return null
-    for cfg: OpcUaServerConfig in _servers():
-        if cfg.id == server_id:
+    for cfg: ReactiveOpcUaServer in _servers():
+        if cfg.id.value == server_id:
             return cfg
     return null
 
+func _get_group(server: ReactiveOpcUaServer, group_id: String) -> ReactiveOpcUaGroup:
+    for group: ReactiveOpcUaGroup in server.groups.value:
+        if group.id.value == group_id:
+            return group
+    return null
 
-func _add_server(cfg: OpcUaServerConfig) -> void:
+func _add_server(cfg: ReactiveOpcUaServer) -> void:
     if not _has_project():
         return
-    _servers().append(cfg)
-    _notify_project_changed()
+    _project().opc_ua_servers.append(cfg)
 
 
 func _remove_server(server_id: String) -> void:
     if not _has_project():
         return
-    var servers: Array[OpcUaServerConfig] = _servers()
+    var servers: Array[ReactiveOpcUaServer] = _servers()
     for i: int in servers.size():
-        if servers[i].id == server_id:
+        if servers[i].id.value == server_id:
             servers.remove_at(i)
             break
-    _notify_project_changed()
-
-
-func _notify_project_changed() -> void:
-    var project: ReactiveProject = _project()
-    if project != null:
-        project.changed.emit()
 
 # ── Project (re)binding ───────────────────────────────────────────────────────
 
-func _on_current_project_changed() -> void:
+func _on_current_project_changed(_project: ReactiveVariant) -> void:
     _rebind_project_signal()
 
     _selection_type     = SelectionType.NONE
@@ -170,7 +170,7 @@ func _set_panel(type: SelectionType) -> void:
 # ── Form loading ──────────────────────────────────────────────────────────────
 
 func _load_server_form(server_id: String) -> void:
-    var cfg: OpcUaServerConfig = _get_server(server_id)
+    var cfg: ReactiveOpcUaServer = _get_server(server_id)
     if cfg == null:
         return
 
@@ -180,8 +180,8 @@ func _load_server_form(server_id: String) -> void:
 
 
 func _load_group_form(server_id: String, group_id: String) -> void:
-    var cfg: OpcUaServerConfig = _get_server(server_id)
-    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(group_id) if cfg else null
+    var cfg: ReactiveOpcUaServer = _get_server(server_id)
+    var group: ReactiveOpcUaGroup = _get_group(cfg, group_id) if cfg else null
     if group == null:
         return
 
@@ -209,22 +209,20 @@ func _commit_form() -> void:
 
 
 func _commit_server_form() -> void:
-    var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
+    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
     if cfg == null:
         return
 
     server_detail_form.commit_to(cfg)
-    _notify_project_changed()
 
 
 func _commit_group_form() -> void:
-    var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
-    var group: OpcUaSubscriptionGroupConfig = cfg.get_group(_selected_group_id) if cfg else null
+    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
+    var group: ReactiveOpcUaGroup = _get_group(cfg, _selected_group_id) if cfg else null
     if group == null:
         return
 
     group_detail_form.commit_to(group)
-    _notify_project_changed()
 
 # ── Tree selection handlers ───────────────────────────────────────────────────
 
@@ -262,16 +260,16 @@ func _on_add_server_pressed() -> void:
 
     _commit_form()
 
-    var cfg: OpcUaServerConfig = OpcUaServerConfig.new()
-    cfg.id           = "server_%d" % Time.get_ticks_msec()
-    cfg.display_name = "New Server"
-    cfg.endpoint_url = "opc.tcp://127.0.0.1:4840"
+    var id: String = "server_%d" % Time.get_ticks_msec()
+    var cfg: ReactiveOpcUaServer = ReactiveOpcUaServer.new({}, _bound_project.opc_ua_servers, id)
+    cfg.id.value           = id
+    cfg.display_name.value = "New Server"
+    cfg.endpoint_url.value = "opc.tcp://127.0.0.1:4840"
 
     _add_server(cfg)
-    OpcUaManager.add_server(cfg)
 
     server_tree.set_servers(_servers())
-    server_tree.select_server(cfg.id)
+    server_tree.select_server(cfg.id.value)
 
 
 func _on_add_group_pressed() -> void:
@@ -280,20 +278,19 @@ func _on_add_group_pressed() -> void:
 
     _commit_form()
 
-    var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
+    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
     if cfg == null:
         return
 
-    var group: OpcUaSubscriptionGroupConfig = OpcUaSubscriptionGroupConfig.new()
-    group.id              = "group_%d" % Time.get_ticks_msec()
-    group.display_name    = "New Group"
-    group.pub_interval_ms = 500.0
-    cfg.add_group(group)
-
-    _notify_project_changed()
+    var id: String = "group_%d" % Time.get_ticks_msec()
+    var group: ReactiveOpcUaGroup = ReactiveOpcUaGroup.new({}, cfg, id)
+    group.id.value              = id
+    group.display_name.value    = "New Group"
+    group.pub_interval_ms.value = 500.0
+    cfg.groups.append(group)
 
     server_tree.set_servers(_servers())
-    server_tree.select_group(_selected_server_id, group.id)
+    server_tree.select_group(_selected_server_id, group.id.value)
 
 
 func _on_remove_pressed() -> void:
@@ -310,10 +307,9 @@ func _on_remove_pressed() -> void:
             _selection_type     = SelectionType.NONE
 
         SelectionType.GROUP:
-            var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
+            var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
             if cfg:
                 cfg.remove_group(_selected_group_id)
-                _notify_project_changed()
             _selected_group_id = ""
             _selection_type    = SelectionType.SERVER
 
@@ -330,17 +326,17 @@ func _on_remove_pressed() -> void:
 
 func _on_test_pressed() -> void:
     _commit_form()
-    var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
+    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
     if cfg == null:
         return
 
     var test_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
     if cfg.username.is_empty():
-        ok = test_client.connect_to_server(cfg.endpoint_url)
+        ok = test_client.connect_to_server(cfg.endpoint_url.value)
     else:
         ok = test_client.connect_with_credentials(
-            cfg.endpoint_url, cfg.username, cfg.password
+            cfg.endpoint_url.value, cfg.username.value, cfg.password.value
         )
     test_client.disconnect_server()
 
@@ -356,7 +352,7 @@ func _on_browse_pressed() -> void:
 
     _commit_form()
 
-    var cfg: OpcUaServerConfig = _get_server(_selected_server_id)
+    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
     if cfg == null:
         return
 
@@ -371,10 +367,10 @@ func _on_browse_pressed() -> void:
     var temp_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
     if cfg.username.is_empty():
-        ok = temp_client.connect_to_server(cfg.endpoint_url)
+        ok = temp_client.connect_to_server(cfg.endpoint_url.value)
     else:
         ok = temp_client.connect_with_credentials(
-            cfg.endpoint_url, cfg.username, cfg.password
+            cfg.endpoint_url.value, cfg.username.value, cfg.password.value
         )
 
     if not ok:

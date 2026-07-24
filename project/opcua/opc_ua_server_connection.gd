@@ -5,7 +5,7 @@ extends Node
 signal connected(server_id: String)
 signal connection_lost(server_id: String)
 signal connection_failed(server_id: String)
-signal tag_value_changed(server_id: String, node_id: OpcUaNodeId, value: Variant)
+signal tag_value_changed(server_id: String, group_id: String, node_id: OpcUaNodeId, value: Variant)
 
 var server_id: String
 var config: ReactiveOpcUaServer
@@ -14,6 +14,12 @@ var _client: GodotOpcUa
 var _connected: bool = false
 var _last_tick_ms: int = 0
 var _poll_accum_sec: float = 0.0
+
+## True once the user explicitly calls disconnect_from_server() (e.g. via the
+## server menu). While set, apply_config() will NOT auto-reconnect on
+## structural project changes — the user must explicitly reconnect. Cleared
+## whenever connect_to_server() is called again.
+var _manually_disconnected: bool = false
 
 ## group_id (String) -> OpcUaGroup
 var _groups: Dictionary = {}
@@ -53,6 +59,11 @@ func _exit_tree() -> void:
 
 # ── Config application ──────────────────────────────────────────────────────
 
+## Applies (or re-applies) the reactive config. Safe to call repeatedly
+## whenever the project's server layout changes. Respects a prior manual
+## disconnect — connection-parameter changes still reconnect (since the
+## server identity itself changed), but unrelated config changes (e.g. group
+## edits) will NOT resurrect a connection the user explicitly closed.
 func apply_config(cfg: ReactiveOpcUaServer) -> void:
     var is_initial: bool = config == null
 
@@ -75,8 +86,9 @@ func apply_config(cfg: ReactiveOpcUaServer) -> void:
     if connection_params_changed:
         if _connected:
             disconnect_from_server()
+        _manually_disconnected = false
         connect_to_server()
-    elif not _connected:
+    elif not _connected and not _manually_disconnected:
         connect_to_server()
 
 # ── Binding ─────────────────────────────────────────────────────────────────
@@ -126,7 +138,7 @@ func _spawn_group(group_cfg: ReactiveOpcUaGroup) -> void:
 
     group.tag_value_changed.connect(
         func(node_id: OpcUaNodeId, value: Variant) -> void:
-            tag_value_changed.emit(server_id, node_id, value)
+            tag_value_changed.emit(server_id, group_id, node_id, value)
     )
 
     _groups[group_id] = group
@@ -141,10 +153,15 @@ func _teardown_group(group_id: String) -> void:
 
 # ── Connection ────────────────────────────────────────────────────────────
 
+## Explicitly (re)connects to the server. Clears any prior manual-disconnect
+## flag, since an explicit connect always represents user/system intent to
+## be connected going forward.
 func connect_to_server() -> bool:
     if config == null:
         push_warning("OpcUaServerConnection [%s]: connect attempted before apply_config()." % server_id)
         return false
+
+    _manually_disconnected = false
 
     var ok: bool
     if config.username.value.is_empty():
@@ -163,11 +180,23 @@ func connect_to_server() -> bool:
     return true
 
 
+## Disconnects from the server. Does NOT set _manually_disconnected —
+## callers that want the disconnect to "stick" against future reconciliation
+## (e.g. the server menu) should call disconnect_manually() instead.
 func disconnect_from_server() -> void:
     for group: OpcUaGroup in _groups.values():
         group.delete(_client)
     _client.disconnect_server()
     _connected = false
+
+
+## Disconnects and marks this connection as manually disconnected, so
+## apply_config() will not silently reconnect it on unrelated config changes
+## (e.g. editing a different server, or this server's groups/tags) until the
+## user explicitly reconnects via connect_to_server().
+func disconnect_manually() -> void:
+    disconnect_from_server()
+    _manually_disconnected = true
 
 
 func teardown() -> void:
@@ -217,21 +246,22 @@ func poll() -> void:
     _last_tick_ms = Time.get_ticks_msec()
 
     for node_id: OpcUaNodeId in changed:
-        var group: OpcUaGroup = _find_group_for_tag(node_id)
+        var group: OpcUaGroup = find_group_for_tag(node_id)
         if group != null:
             group.apply_update(node_id, changed[node_id])
 
 # ── Write ─────────────────────────────────────────────────────────────────
 
 func write_tag(node_id: OpcUaNodeId, value: Variant) -> bool:
-    var group: OpcUaGroup = _find_group_for_tag(node_id)
+    var group: OpcUaGroup = find_group_for_tag(node_id)
     if group == null:
         push_warning("OpcUaServerConnection [%s]: write on unregistered tag '%s'." % [server_id, node_id.to_string()])
         return false
     return group.write_tag(node_id, value, _client)
 
 
-func _find_group_for_tag(node_id: OpcUaNodeId) -> OpcUaGroup:
+## Public — used by OpcUaManager.get_tag_value() and internally by poll()/write_tag().
+func find_group_for_tag(node_id: OpcUaNodeId) -> OpcUaGroup:
     for group: OpcUaGroup in _groups.values():
         if group.has_tag(node_id):
             return group
@@ -245,6 +275,14 @@ func is_server_connected() -> bool:
 
 func get_active_group_count() -> int:
     return _groups.size()
+
+
+func get_group_ids() -> Array:
+    return _groups.keys()
+
+
+func get_group(group_id: String) -> OpcUaGroup:
+    return _groups.get(group_id, null)
 
 
 func _rebuild_all_groups() -> void:

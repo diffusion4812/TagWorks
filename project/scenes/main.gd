@@ -78,7 +78,7 @@ func _connect_signals() -> void:
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
     # ── AppState ──────────────────────────────────────────────────────────────
-    AppState.current_project.changed.connect(_on_current_project_changed)
+    AppState.current_project.connect_self_changed(_on_current_project_changed)
     AppState.edit_mode.connect_self_changed(
         func(edit_mode: ReactiveBool) -> void:
             edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
@@ -155,10 +155,10 @@ func _bind_project_servers() -> void:
     if project == null:
         return
 
-    _servers_changed_callable = func(_origin: Reactive) -> void:
+    _servers_changed_callable = func(_origin: ReactiveArray) -> void:
         _rebuild_server_menu()
 
-    project.servers.connect_self_changed(_servers_changed_callable)
+    project.opc_ua_servers.connect_self_changed(_servers_changed_callable)
     _bound_project = project
 
 
@@ -178,7 +178,7 @@ func _rebuild_server_menu() -> void:
     if project == null:
         return
 
-    var servers: Array = project.servers.values()
+    var servers: Array = project.opc_ua_servers.value
     if servers.is_empty():
         return
 
@@ -220,7 +220,7 @@ func _on_server_status_timeout() -> void:
     if project == null:
         return
 
-    var servers: Array = project.servers.values()
+    var servers: Array = project.opc_ua_servers.value
 
     for i: int in servers.size():
         var cfg: ReactiveOpcUaServer = servers[i]
@@ -284,7 +284,7 @@ func _on_file_dialog_selected(path: String) -> void:
 
 ## Fires whenever AppState.current_project changes.
 ## An empty name and path indicates a closed or unloaded project.
-func _on_current_project_changed() -> void:
+func _on_current_project_changed(_project: ReactiveVariant) -> void:
     _bind_project_servers()
     _rebuild_server_menu()
 

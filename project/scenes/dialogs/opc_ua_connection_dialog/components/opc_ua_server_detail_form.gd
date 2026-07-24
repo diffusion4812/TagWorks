@@ -54,35 +54,35 @@ func _emit_edited() -> void:
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
-func load_config(cfg: OpcUaServerConfig) -> void:
+func load_config(cfg: ReactiveOpcUaServer) -> void:
     _loading = true
 
-    display_name_edit.text        = cfg.display_name
-    endpoint_edit.text             = cfg.endpoint_url
-    username_edit.text             = cfg.username
-    password_edit.text             = cfg.password
-    poll_interval_spin.value       = cfg.poll_interval_sec
-    reconnect_interval_spin.value  = cfg.reconnect_interval_sec
-    max_attempts_spin.value        = cfg.max_reconnect_attempts
+    display_name_edit.text         = cfg.display_name.value
+    endpoint_edit.text             = cfg.endpoint_url.value
+    username_edit.text             = cfg.username.value
+    password_edit.text             = cfg.password.value
+    poll_interval_spin.value       = cfg.poll_interval_sec.value
+    reconnect_interval_spin.value  = cfg.reconnect_interval_sec.value
+    max_attempts_spin.value        = cfg.max_reconnect_attempts.value
 
-    _select_option(security_policy_option, cfg.security_policy)
-    _select_option(message_mode_option,    cfg.message_mode)
+    _select_option(security_policy_option, cfg.security_policy.value)
+    _select_option(message_mode_option,    cfg.message_mode.value)
 
     _loading = false
 
 
-func commit_to(cfg: OpcUaServerConfig) -> void:
-    cfg.display_name           = display_name_edit.text.strip_edges()
-    cfg.endpoint_url           = endpoint_edit.text.strip_edges()
-    cfg.security_policy        = security_policy_option.get_item_text(
+func commit_to(cfg: ReactiveOpcUaServer) -> void:
+    cfg.display_name.value           = display_name_edit.text.strip_edges()
+    cfg.endpoint_url.value           = endpoint_edit.text.strip_edges()
+    cfg.security_policy.value        = security_policy_option.get_item_text(
                                      security_policy_option.selected)
-    cfg.message_mode           = message_mode_option.get_item_text(
+    cfg.message_mode.value           = message_mode_option.get_item_text(
                                      message_mode_option.selected)
-    cfg.username               = username_edit.text.strip_edges()
-    cfg.password               = password_edit.text
-    cfg.poll_interval_sec      = poll_interval_spin.value
-    cfg.reconnect_interval_sec = reconnect_interval_spin.value
-    cfg.max_reconnect_attempts = int(max_attempts_spin.value)
+    cfg.username.value               = username_edit.text.strip_edges()
+    cfg.password.value               = password_edit.text
+    cfg.poll_interval_sec.value      = poll_interval_spin.value
+    cfg.reconnect_interval_sec.value = reconnect_interval_spin.value
+    cfg.max_reconnect_attempts.value = int(max_attempts_spin.value)
 
 # ── Utility ────────────────────────────────────────────────────────────────
 

@@ -3,6 +3,7 @@ class_name ReactiveOpcUaGroup
 extends Reactive
 
 var id: ReactiveString
+var display_name: ReactiveString
 var pub_interval_ms: ReactiveFloat
 var tags: ReactiveArray   # ReactiveArray of ReactiveOpcUaTag
 
@@ -10,6 +11,7 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     super._init(initial_owner, label)
 
     id = ReactiveString.new("", self, "id")
+    display_name = ReactiveString.new("", self, "display_name")
     pub_interval_ms = ReactiveFloat.new(1000.0, self, "pub_interval_ms")
     tags = ReactiveArray.new([], self, "tags")
 

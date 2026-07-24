@@ -18,7 +18,7 @@ signal selection_cleared
 const STATUS_CONNECTED    :String = "● "
 const STATUS_DISCONNECTED :String = "○ "
 
-var _servers:            Array[OpcUaServerConfig] = []
+var _servers:            Array[ReactiveOpcUaServer] = []
 var _selected_server_id: String = ""
 var _selected_group_id:  String = ""
 var _has_group_selected:  bool   = false
@@ -46,7 +46,7 @@ func _ready() -> void:
 
 ## Rebuilds the tree from the given server list, preserving the current
 ## selection if it still exists.
-func set_servers(servers: Array[OpcUaServerConfig]) -> void:
+func set_servers(servers: Array[ReactiveOpcUaServer]) -> void:
     _servers = servers
     _rebuild()
 
@@ -64,9 +64,9 @@ func refresh_status_icons() -> void:
         var meta: Dictionary = server_item.get_metadata(0)
         if meta.get("type") == "server":
             var server_id: String = meta.get("server_id", "")
-            var cfg: OpcUaServerConfig = _find_server(server_id)
+            var cfg: ReactiveOpcUaServer = _find_server(server_id)
             if cfg != null:
-                server_item.set_text(0, _status_prefix(server_id) + cfg.display_name)
+                server_item.set_text(0, _status_prefix(server_id) + cfg.display_name.value)
         server_item = server_item.get_next()
 
 
@@ -123,20 +123,20 @@ func _rebuild() -> void:
     if root == null:
         return
 
-    for cfg: OpcUaServerConfig in _servers:
+    for cfg: ReactiveOpcUaServer in _servers:
         var server_item: TreeItem = create_item(root)
-        server_item.set_text(0, _status_prefix(cfg.id) + cfg.display_name)
+        server_item.set_text(0, _status_prefix(cfg.id.value) + cfg.display_name.value)
         server_item.set_text(1, "")
-        server_item.set_metadata(0, { "type": "server", "server_id": cfg.id })
+        server_item.set_metadata(0, { "type": "server", "server_id": cfg.id.value })
 
-        for group: OpcUaSubscriptionGroupConfig in cfg.subscription_groups:
+        for group: ReactiveOpcUaGroup in cfg.groups.value:
             var group_item: TreeItem = create_item(server_item)
-            group_item.set_text(0, "  " + group.display_name)
-            group_item.set_text(1, "%d ms" % group.pub_interval_ms)
+            group_item.set_text(0, "  " + group.display_name.value)
+            group_item.set_text(1, "%d ms" % group.pub_interval_ms.value)
             group_item.set_metadata(0, {
                 "type":      "group",
-                "server_id": cfg.id,
-                "group_id":  group.id
+                "server_id": cfg.id.value,
+                "group_id":  group.id.value
             })
 
     _restore_selection()
@@ -165,9 +165,9 @@ func _restore_selection() -> void:
 
 # ── Lookup helpers ────────────────────────────────────────────────────────
 
-func _find_server(server_id: String) -> OpcUaServerConfig:
-    for cfg: OpcUaServerConfig in _servers:
-        if cfg.id == server_id:
+func _find_server(server_id: String) -> ReactiveOpcUaServer:
+    for cfg: ReactiveOpcUaServer in _servers:
+        if cfg.id.value == server_id:
             return cfg
     return null
 

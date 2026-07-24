@@ -23,6 +23,10 @@ func _ready() -> void:
         _timer.paused = not is_visible()
     )
 
+    # Refresh immediately on project switch, rather than waiting for the
+    # next timer tick — avoids showing a stale project's servers/groups/tags.
+    AppState.current_project.changed.connect(_refresh)
+
     close_requested.connect(hide)
     _close_button.pressed.connect(hide)
     _show_all_button.pressed.connect(_on_show_all_pressed)
@@ -45,100 +49,129 @@ func _refresh() -> void:
     var root: TreeItem = _tree.create_item()
     root.set_text(0, "OPC UA Servers")
 
-    var manager: Node = get_node_or_null("/root/OpcUaManager")
-    if manager == null:
-        _status.text = "⚠ OpcUaManager autoload not found."
+    var project: ReactiveProject = AppState.current_project.value
+    if project == null:
+        _status.text = "No project loaded."
         return
 
-    var connections: Dictionary = manager._connections
-    if connections.is_empty():
-        _status.text = "No servers registered."
+    var configured_servers: Array = project.opc_ua_servers.value
+    if configured_servers.is_empty():
+        _status.text = "No servers configured in project."
         return
 
-    var scope_ids: Array = connections.keys()
+    var manager_available: bool = is_instance_valid(OpcUaManager)
+    if not manager_available:
+        _status.text = "⚠ OpcUaManager autoload not found. Showing config only."
+
+    var scope: Array = configured_servers
     if focused_server_id != "":
-        scope_ids = scope_ids.filter(
-            func(id: String) -> bool: return id == focused_server_id
+        scope = configured_servers.filter(
+            func(s: ReactiveOpcUaServer) -> bool: return s.id.value == focused_server_id
         )
-        _title_label.text     = "Status — %s" % focused_server_id
+        _title_label.text        = "Status — %s" % focused_server_id
         _show_all_button.visible = true
     else:
-        _title_label.text     = "Status — All Servers"
+        _title_label.text        = "Status — All Servers"
         _show_all_button.visible = false
+
+    if scope.is_empty():
+        _status.text = "No matching server found in project configuration."
+        return
 
     var server_count : int = 0
     var group_count  : int = 0
     var tag_count    : int = 0
 
-    for server_id: String in scope_ids:
-        var conn: OpcUaServerConnection = connections[server_id]
+    for server: ReactiveOpcUaServer in scope:
         server_count += 1
+
+        # Live status lookup — null means "configured but not connected"
+        var conn: OpcUaServerConnection = null
+        if manager_available:
+            conn = OpcUaManager.get_connection(server.id.value)
+
+        var is_connected: bool = conn != null and conn.is_server_connected()
 
         # ── Server row ────────────────────────────────────────────────────────
         var server_item: TreeItem = _tree.create_item(root)
         server_item.set_text(
-            0, "%s  %s" % ["🟢" if conn.is_server_connected() else "🔴", server_id]
+            0,
+            "%s  %s%s" % [
+                "🟢" if is_connected else "🔴",
+                server.display_name.value,
+                "" if conn != null else "  (not connected)"
+            ]
         )
 
-        var group_ids: Array = conn.get_group_ids()
-        if group_ids.is_empty():
+        var configured_groups: Array = server.groups.value
+        if configured_groups.is_empty():
             var empty: TreeItem = _tree.create_item(server_item)
             empty.set_text(0, "  (no groups configured)")
             continue
 
-        for group_id: String in group_ids:
+        for group_cfg: ReactiveOpcUaGroup in configured_groups:
             group_count += 1
 
-            var group_cfg: OpcUaSubscriptionGroupConfig = \
-                conn._group_configs.get(group_id, null)
+            # Live group lookup — may be null if server/group not connected yet
+            var live_group: OpcUaGroup = null
+            if conn != null:
+                live_group = conn.get_group(group_cfg.group_id)
 
             # ── Group row ─────────────────────────────────────────────────────
             var group_item: TreeItem = _tree.create_item(server_item)
             group_item.set_text(
                 0,
-                "📦  %s  (%s)" % [
-                    group_cfg.display_name if group_cfg else group_id,
-                    ("%.0f ms" % group_cfg.pub_interval_ms) if group_cfg else "unknown interval"
+                "📦  %s  (%.0f ms)%s" % [
+                    group_cfg.display_name.value,
+                    group_cfg.pub_interval_ms.value,
+                    "" if live_group != null else "  ⚠ not active"
                 ]
             )
 
-            if group_cfg == null:
-                var no_cfg: TreeItem = _tree.create_item(group_item)
-                no_cfg.set_text(0, "  ⚠ group config missing")
-                continue
-
-            # ── Tag rows — matched by group_id exactly ────────────────────────
-            var entries: Array = conn.registry.get_active_entries_for_group(group_id)
-            if entries.is_empty():
+            var configured_entries: Array = group_cfg.tags.value
+            if configured_entries.is_empty():
                 var no_tags: TreeItem = _tree.create_item(group_item)
-                no_tags.set_text(0, "  (no active tags)")
+                no_tags.set_text(0, "  (no tags configured)")
                 continue
 
-            for entry: OpcUaTagRegistry.TagEntry in entries:
+            for entry_cfg: ReactiveOpcUaTag in configured_entries:
                 tag_count += 1
+
+                # Live value lookup — fall back to config-only if not connected
+                var live_entry: OpcUaGroup.TagEntry = null
+                if live_group != null:
+                    live_entry = live_group.get_entry(entry_cfg.node_id)
+
+                var value_display: String = str(live_entry.value) if live_entry != null else "—"
+                var is_active: bool       = live_entry.is_active if live_entry != null else false
+
                 var tag_item: TreeItem = _tree.create_item(group_item)
                 tag_item.set_text(
                     0,
                     "  %s  %s  →  %s" % [
-                        "✅" if entry.quality_good else "⚠",
-                        entry.tag_name,
-                        str(entry.value)
+                        "✅" if is_active else "⏸",
+                        entry_cfg.display_name.value,
+                        value_display
                     ]
                 )
                 tag_item.set_tooltip_text(
                     0,
-                    "Tag:          %s
-Value:        %s
-Quality Good: %s
-Sampling:     %.0f ms
-Interval:     %.0f ms
-Mode:         %s" % [
-                        entry.tag_name,
-                        str(entry.value),
-                        str(entry.quality_good),
-                        entry.sampling_ms,
-                        entry.pub_interval_ms,
-                        OpcUaSubscriptionMode.Mode.keys()[entry.subscribe_mode]
+					"Node ID:        %s
+Display Name:   %s
+Value:          %s
+Active:         %s
+Sampling:       %.0f ms
+Deadband:       %.2f
+Group Interval: %.0f ms
+Connected:      %s" % [
+                        entry_cfg.node_id.to_string(),
+                        entry_cfg.display_name,
+                        value_display,
+                        str(is_active),
+                        entry_cfg.sampling_ms,
+                        entry_cfg.deadband,
+                        group_cfg.pub_interval_ms,
+                        str(live_entry != null)
                     ]
                 )
 

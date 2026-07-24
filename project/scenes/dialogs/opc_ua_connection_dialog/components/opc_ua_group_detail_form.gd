@@ -21,13 +21,13 @@ func _emit_edited() -> void:
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
-func load_config(group: OpcUaSubscriptionGroupConfig) -> void:
+func load_config(group: ReactiveOpcUaGroup) -> void:
     _loading = true
-    group_name_edit.text      = group.display_name
-    group_interval_spin.value = group.pub_interval_ms
+    group_name_edit.text      = group.display_name.value
+    group_interval_spin.value = group.pub_interval_ms.value
     _loading = false
 
 
-func commit_to(group: OpcUaSubscriptionGroupConfig) -> void:
-    group.display_name    = group_name_edit.text.strip_edges()
-    group.pub_interval_ms = group_interval_spin.value
+func commit_to(group: ReactiveOpcUaGroup) -> void:
+    group.display_name.value    = group_name_edit.text.strip_edges()
+    group.pub_interval_ms.value = group_interval_spin.value
