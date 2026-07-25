@@ -36,8 +36,8 @@ func _define_default_properties() -> void:
     _ensure_property("label", func() -> ReactiveString:
         return ReactiveString.new("Button", data.properties, "label")
     )
-    _ensure_property("node_id", func() -> ReactiveOpcUaTag:
-        return ReactiveOpcUaTag.new({}, data.properties, "node_id")
+    _ensure_property("node_id", func() -> ReactiveOpcUaTagBinding:
+        return ReactiveOpcUaTagBinding.new({}, data.properties, "node_id")
     )
 
 func _connect_data_signals() -> void:

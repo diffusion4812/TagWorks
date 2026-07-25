@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://cndtww46vr4gu" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_tree.tscn" id="3_sffmb"]
 [ext_resource type="PackedScene" uid="uid://dtkkgm3jk4wns" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_group_detail_form.tscn" id="4_iro6b"]
 [ext_resource type="PackedScene" uid="uid://cua07jkkaxfta" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_server_detail_form.tscn" id="5_psehr"]
+[ext_resource type="PackedScene" uid="uid://cn0ls2tkehl34" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_tag_detail_form.tscn" id="6_psehr"]
 
 [node name="ConnectionDialog" unique_id=425608285 instance=ExtResource("1_e1spn")]
 size = Vector2i(750, 450)
@@ -33,7 +34,12 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "+ Group"
 
-[node name="RemoveButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="2" unique_id=522511859]
+[node name="AddTagButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="2" unique_id=285862953]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+ Tag"
+
+[node name="RemoveButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="3" unique_id=522511859]
 unique_name_in_owner = true
 layout_mode = 2
 text = "- Remove"
@@ -62,6 +68,11 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
+[node name="TagDetailForm" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="3" unique_id=1142122031 instance=ExtResource("6_psehr")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
 [node name="Footer" type="HBoxContainer" parent="Panel/MarginContainer/VBox" index="1" unique_id=1844605241]
 layout_mode = 2
 
@@ -84,7 +95,12 @@ text = "Status"
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CloseButton" type="Button" parent="Panel/MarginContainer/VBox/Footer" index="4" unique_id=1413755498]
+[node name="ConfirmButton" type="Button" parent="Panel/MarginContainer/VBox/Footer" index="4" unique_id=1433666973]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"
+
+[node name="CloseButton" type="Button" parent="Panel/MarginContainer/VBox/Footer" index="5" unique_id=1413755498]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Close"

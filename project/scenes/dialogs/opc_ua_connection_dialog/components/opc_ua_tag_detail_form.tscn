@@ -1,0 +1,86 @@
+[gd_scene format=3 uid="uid://cn0ls2tkehl34"]
+
+[ext_resource type="Script" uid="uid://cwt7illansfb1" path="res://scenes/dialogs/opc_ua_connection_dialog/components/opc_ua_tag_detail_form.gd" id="1_3l8t2"]
+
+[node name="OpcUaTagDetailForm" type="VBoxContainer" unique_id=1142122031]
+script = ExtResource("1_3l8t2")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="." unique_id=1212369982]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer" unique_id=1025119044]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Node ID:"
+
+[node name="NodeIdEdit" type="LineEdit" parent="HBoxContainer" unique_id=867813671]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BrowseTagButton" type="Button" parent="HBoxContainer" unique_id=1326138972]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Browse"
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="." unique_id=1618446062]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer2" unique_id=1593398562]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Tag name:"
+
+[node name="TagNameEdit" type="LineEdit" parent="HBoxContainer2" unique_id=1438147581]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="." unique_id=558085284]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer3" unique_id=718145881]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Active:"
+
+[node name="IsActiveCheck" type="CheckBox" parent="HBoxContainer3" unique_id=1764957740]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer4" type="HBoxContainer" parent="." unique_id=1398753975]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer4" unique_id=2004120041]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Sampling rate:"
+
+[node name="SamplingSpin" type="SpinBox" parent="HBoxContainer4" unique_id=1399421037]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+step = 10.0
+value = 100.0
+rounded = true
+allow_greater = true
+allow_lesser = true
+
+[node name="HBoxContainer5" type="HBoxContainer" parent="." unique_id=589750766]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer5" unique_id=477797816]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Deadband"
+
+[node name="DeadbandSpin" type="SpinBox" parent="HBoxContainer5" unique_id=949363451]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+step = 10.0
+value = 100.0
+rounded = true
+allow_greater = true
+allow_lesser = true

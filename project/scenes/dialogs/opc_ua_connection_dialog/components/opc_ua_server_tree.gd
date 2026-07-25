@@ -10,6 +10,10 @@ signal server_selected(server_id: String)
 ## programmatically via select_group()).
 signal group_selected(server_id: String, group_id: String)
 
+## Emitted when a tag row is selected (by user click or programmatically
+## via select_tag()).
+signal tag_selected(server_id: String, group_id: String, tag_id: String)
+
 ## Emitted when the selection becomes invalid or is explicitly cleared.
 signal selection_cleared
 
@@ -18,10 +22,15 @@ signal selection_cleared
 const STATUS_CONNECTED    :String = "● "
 const STATUS_DISCONNECTED :String = "○ "
 
+const INACTIVE_TAG_COLOR: Color = Color(0.6, 0.6, 0.6)
+
+enum _SelectionKind { NONE, SERVER, GROUP, TAG }
+
 var _servers:            Array[ReactiveOpcUaServer] = []
 var _selected_server_id: String = ""
 var _selected_group_id:  String = ""
-var _has_group_selected:  bool   = false
+var _selected_tag_id:    String = ""
+var _selection_kind:     _SelectionKind = _SelectionKind.NONE
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -30,7 +39,7 @@ func _ready() -> void:
     column_titles_visible      = true
     hide_root                  = true
     set_column_title(0, "Name")
-    set_column_title(1, "Interval")
+    set_column_title(1, "Info")
     set_column_expand(1, false)
     set_column_custom_minimum_width(1, 90)
 
@@ -76,9 +85,10 @@ func select_server(server_id: String) -> void:
     if item == null:
         return
     item.select(0)
-    _selected_server_id  = server_id
-    _selected_group_id   = ""
-    _has_group_selected  = false
+    _selected_server_id = server_id
+    _selected_group_id  = ""
+    _selected_tag_id    = ""
+    _selection_kind     = _SelectionKind.SERVER
     server_selected.emit(server_id)
 
 
@@ -88,19 +98,34 @@ func select_group(server_id: String, group_id: String) -> void:
     if item == null:
         return
     item.select(0)
-    _selected_server_id  = server_id
-    _selected_group_id   = group_id
-    _has_group_selected  = true
+    _selected_server_id = server_id
+    _selected_group_id  = group_id
+    _selected_tag_id    = ""
+    _selection_kind     = _SelectionKind.GROUP
     group_selected.emit(server_id, group_id)
 
 
+## Selects a tag row programmatically and emits tag_selected.
+func select_tag(server_id: String, group_id: String, tag_id: String) -> void:
+    var item: TreeItem = _find_tag_item(server_id, group_id, tag_id)
+    if item == null:
+        return
+    item.select(0)
+    _selected_server_id = server_id
+    _selected_group_id  = group_id
+    _selected_tag_id    = tag_id
+    _selection_kind     = _SelectionKind.TAG
+    tag_selected.emit(server_id, group_id, tag_id)
+
+
 ## Clears the current selection without emitting server_selected /
-## group_selected. Emits selection_cleared.
+## group_selected / tag_selected. Emits selection_cleared.
 func clear_selection() -> void:
     deselect_all()
     _selected_server_id = ""
     _selected_group_id  = ""
-    _has_group_selected = false
+    _selected_tag_id    = ""
+    _selection_kind     = _SelectionKind.NONE
     selection_cleared.emit()
 
 
@@ -112,8 +137,16 @@ func get_selected_group_id() -> String:
     return _selected_group_id
 
 
+func get_selected_tag_id() -> String:
+    return _selected_tag_id
+
+
 func has_group_selected() -> bool:
-    return _has_group_selected
+    return _selection_kind == _SelectionKind.GROUP
+
+
+func has_tag_selected() -> bool:
+    return _selection_kind == _SelectionKind.TAG
 
 # ── Internal build ────────────────────────────────────────────────────────
 
@@ -139,6 +172,21 @@ func _rebuild() -> void:
                 "group_id":  group.id.value
             })
 
+            for tag: ReactiveOpcUaTag in group.tags.value:
+                var tag_item: TreeItem = create_item(group_item)
+                tag_item.set_text(0, "    " + tag.display_name.value)
+                tag_item.set_text(1, tag.node_id.value)
+                tag_item.set_metadata(0, {
+                    "type":      "tag",
+                    "server_id": cfg.id.value,
+                    "group_id":  group.id.value,
+                    "tag_id":    tag.id.value
+                })
+
+                if not tag.is_active.value:
+                    tag_item.set_custom_color(0, INACTIVE_TAG_COLOR)
+                    tag_item.set_custom_color(1, INACTIVE_TAG_COLOR)
+
     _restore_selection()
 
 
@@ -146,21 +194,32 @@ func _restore_selection() -> void:
     if _selected_server_id == "":
         return
 
-    if _has_group_selected:
-        var group_item: TreeItem = _find_group_item(_selected_server_id, _selected_group_id)
-        if group_item != null:
-            group_item.select(0)
-            return
-    else:
-        var server_item: TreeItem = _find_server_item(_selected_server_id)
-        if server_item != null:
-            server_item.select(0)
-            return
+    match _selection_kind:
+        _SelectionKind.TAG:
+            var tag_item: TreeItem = _find_tag_item(
+                _selected_server_id, _selected_group_id, _selected_tag_id
+            )
+            if tag_item != null:
+                tag_item.select(0)
+                return
+
+        _SelectionKind.GROUP:
+            var group_item: TreeItem = _find_group_item(_selected_server_id, _selected_group_id)
+            if group_item != null:
+                group_item.select(0)
+                return
+
+        _SelectionKind.SERVER:
+            var server_item: TreeItem = _find_server_item(_selected_server_id)
+            if server_item != null:
+                server_item.select(0)
+                return
 
     # Previously selected item no longer exists.
     _selected_server_id = ""
     _selected_group_id  = ""
-    _has_group_selected = false
+    _selected_tag_id    = ""
+    _selection_kind     = _SelectionKind.NONE
     selection_cleared.emit()
 
 # ── Lookup helpers ────────────────────────────────────────────────────────
@@ -198,6 +257,19 @@ func _find_group_item(server_id: String, group_id: String) -> TreeItem:
     return null
 
 
+func _find_tag_item(server_id: String, group_id: String, tag_id: String) -> TreeItem:
+    var group_item: TreeItem = _find_group_item(server_id, group_id)
+    if group_item == null:
+        return null
+    var tag_item: TreeItem = group_item.get_first_child()
+    while tag_item != null:
+        var meta: Dictionary = tag_item.get_metadata(0)
+        if meta.get("tag_id") == tag_id:
+            return tag_item
+        tag_item = tag_item.get_next()
+    return null
+
+
 func _status_prefix(server_id: String) -> String:
     return STATUS_CONNECTED if OpcUaManager.is_server_connected(server_id) \
                             else STATUS_DISCONNECTED
@@ -212,17 +284,27 @@ func _on_item_selected() -> void:
     var meta: Dictionary = item.get_metadata(0)
     var type: String     = meta.get("type", "")
 
-    if type == "server":
-        _selected_server_id = meta.get("server_id", "")
-        _selected_group_id  = ""
-        _has_group_selected = false
-        server_selected.emit(_selected_server_id)
+    match type:
+        "server":
+            _selected_server_id = meta.get("server_id", "")
+            _selected_group_id  = ""
+            _selected_tag_id    = ""
+            _selection_kind     = _SelectionKind.SERVER
+            server_selected.emit(_selected_server_id)
 
-    elif type == "group":
-        _selected_server_id = meta.get("server_id", "")
-        _selected_group_id  = meta.get("group_id",  "")
-        _has_group_selected = true
-        group_selected.emit(_selected_server_id, _selected_group_id)
+        "group":
+            _selected_server_id = meta.get("server_id", "")
+            _selected_group_id  = meta.get("group_id",  "")
+            _selected_tag_id    = ""
+            _selection_kind     = _SelectionKind.GROUP
+            group_selected.emit(_selected_server_id, _selected_group_id)
+
+        "tag":
+            _selected_server_id = meta.get("server_id", "")
+            _selected_group_id  = meta.get("group_id",  "")
+            _selected_tag_id    = meta.get("tag_id",    "")
+            _selection_kind     = _SelectionKind.TAG
+            tag_selected.emit(_selected_server_id, _selected_group_id, _selected_tag_id)
 
 
 func _on_connection_state_changed() -> void:

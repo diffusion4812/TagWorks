@@ -164,13 +164,13 @@ Sampling:       %.0f ms
 Deadband:       %.2f
 Group Interval: %.0f ms
 Connected:      %s" % [
-                        entry_cfg.node_id.to_string(),
-                        entry_cfg.display_name,
+                        entry_cfg.node_id.value,
+                        entry_cfg.display_name.value,
                         value_display,
                         str(is_active),
-                        entry_cfg.sampling_ms,
-                        entry_cfg.deadband,
-                        group_cfg.pub_interval_ms,
+                        entry_cfg.sampling_ms.value,
+                        entry_cfg.deadband.value,
+                        group_cfg.pub_interval_ms.value,
                         str(live_entry != null)
                     ]
                 )

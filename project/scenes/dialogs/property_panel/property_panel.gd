@@ -2,7 +2,7 @@
 class_name PropertyPanel
 extends PanelContainer
 
-@onready var node_browser:    BrowseNodes     = $"../../../../../Dialogs/BrowseNodes"
+@onready var opc_ua_connection_dialog:    OpcUaConnectionDialog     = $"../../../../../Dialogs/OpcUaConnectionDialog"
 var script_editor:   Node            = null
 var _current_target: ReactiveWidget  = null
 var _current_widget_node: BaseWidget = null
@@ -98,38 +98,38 @@ func _open_script_editor(_prop: String) -> void:
     script_editor.show()
 
 
-func _open_browser_for_server(server_id: String, on_selected: Callable) -> void:
-    if not is_instance_valid(node_browser):
-        push_warning("PropertyPanel: node_browser is not assigned.")
-        return
-
-    if OpcUaManager.is_server_connected(server_id):
-        node_browser.request_node_id(OpcUaManager, server_id, on_selected)
-        return
-
-    var cfg: ReactiveOpcUaServer = _find_server_config(server_id)
-    if cfg == null:
-        OS.alert("Server configuration not found.", "Browse Unavailable")
-        return
-
-    var temp_client: GodotOpcUa = GodotOpcUa.new()
-    var ok: bool
-    if cfg.username.value.is_empty():
-        ok = temp_client.connect_to_server(cfg.endpoint_url.value)
-    else:
-        ok = temp_client.connect_with_credentials(
-            cfg.endpoint_url.value, cfg.username.value, cfg.password.value
-        )
-
-    if not ok:
-        OS.alert(
-            "Could not connect to '%s' for browsing.\nCheck the endpoint and credentials in the server configuration." \
-                % cfg.display_name.value,
-			"Browse Failed"
-        )
-        return
-
-    node_browser.request_node_id_temporary(temp_client, on_selected)
+#func _open_browser_for_server(server_id: String, on_selected: Callable) -> void:
+    #if not is_instance_valid(node_browser):
+        #push_warning("PropertyPanel: node_browser is not assigned.")
+        #return
+#
+    #if OpcUaManager.is_server_connected(server_id):
+        #node_browser.request_node_id(OpcUaManager, server_id, on_selected)
+        #return
+#
+    #var cfg: ReactiveOpcUaServer = _find_server_config(server_id)
+    #if cfg == null:
+        #OS.alert("Server configuration not found.", "Browse Unavailable")
+        #return
+#
+    #var temp_client: GodotOpcUa = GodotOpcUa.new()
+    #var ok: bool
+    #if cfg.username.value.is_empty():
+        #ok = temp_client.connect_to_server(cfg.endpoint_url.value)
+    #else:
+        #ok = temp_client.connect_with_credentials(
+            #cfg.endpoint_url.value, cfg.username.value, cfg.password.value
+        #)
+#
+    #if not ok:
+        #OS.alert(
+            #"Could not connect to '%s' for browsing.\nCheck the endpoint and credentials in the server configuration." \
+                #% cfg.display_name.value,
+            #"Browse Failed"
+        #)
+        #return
+#
+    #node_browser.request_node_id_temporary(temp_client, on_selected)
 
 
 ## Looks up a ReactiveOpcUaServer by id within the current project.

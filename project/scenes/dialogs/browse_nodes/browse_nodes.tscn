@@ -50,12 +50,7 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Confirm"
 
-[node name="Control" type="Control" parent="Panel/MarginContainer/VBoxContainer" index="3" unique_id=1513537844]
-visible = false
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="CloseButton" type="Button" parent="Panel/MarginContainer/VBoxContainer" index="4" unique_id=38629062]
+[node name="CloseButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" index="2" unique_id=38629062]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Close"

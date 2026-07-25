@@ -4,6 +4,11 @@ extends BaseDialog
 ## Emitted when the user confirms a selection.
 signal node_id_selected(node_id: OpcUaNodeId)
 
+## Emitted when the connection attempt to the target server fails.
+## BrowseNodes itself shows an inline status message; this signal exists
+## for callers that want to react separately (logging, telemetry, etc.).
+signal connect_failed(reason: String)
+
 # ── Scene references ──────────────────────────────────────────────────────────
 @onready var search_bar:            LineEdit = %SearchBar
 @onready var refresh_button:        Button   = %RefreshButton
@@ -14,12 +19,12 @@ signal node_id_selected(node_id: OpcUaNodeId)
 @onready var _hide_internal_toggle: CheckBox = %HideInternalCheckBox
 
 # ── State ─────────────────────────────────────────────────────────────────────
-var _client:      GodotOpcUa = null
-var _owns_client: bool       = false
+var _client:      GodotOpcUa          = null
+var _last_server: ReactiveOpcUaServer = null
 
-var _browse_thread: Thread = Thread.new()
-var _thread_busy: bool = false
-var _thread_mutex: Mutex = Mutex.new()
+var _worker_thread: Thread = Thread.new()
+var _thread_busy:   bool   = false
+var _thread_mutex:  Mutex  = Mutex.new()
 
 ## When true, internal OPC UA namespace-0 infrastructure nodes are hidden.
 var _hide_internal_nodes: bool = true
@@ -69,7 +74,7 @@ func _ready() -> void:
     search_bar.text_changed.connect(_on_search_changed)
     _hide_internal_toggle.button_pressed = _hide_internal_nodes
     _hide_internal_toggle.toggled.connect(_on_hide_internal_toggled)
-    refresh_button.pressed.connect(_refresh)
+    refresh_button.pressed.connect(_on_refresh_pressed)
     confirm_button.pressed.connect(_on_confirm)
     close_button.pressed.connect(_on_close_pressed)
 
@@ -77,72 +82,78 @@ func _ready() -> void:
 # Public API
 # =============================================================================
 
-## Opens the browser in browse-only mode using a live managed connection.
-## The confirm button is hidden — no selection is returned.
-func open_managed(manager: Node, server_id: String) -> void:
-    _client               = manager.get_raw_client(server_id)
-    _owns_client          = false
-    confirm_button.visible = false
-    _reset()
-    popup_centered(Vector2i(700, 500))
-
-
-## Opens the browser in browse-only mode using a temporary client.
-## BrowseNodes takes ownership and disconnects the client on close.
-func open_temporary(client: GodotOpcUa) -> void:
-    _client               = client
-    _owns_client          = true
-    confirm_button.visible = false
-    _reset()
-    popup_centered(Vector2i(700, 500))
-
-
-## Opens the browser in selection mode using a live managed connection.
-## The confirm button is shown. on_selected is called once with the chosen
-## OpcUaNodeId then automatically disconnected (CONNECT_ONE_SHOT).
+## Opens the browser and connects to the given server using a temporary
+## client that BrowseNodes owns exclusively — a new session is always
+## created, even if the server is already connected elsewhere (e.g. via
+## a live subscription manager). This trades a minor connection overhead
+## for full decoupling from any external connection manager.
 ##
-## Example:
-##   browse_nodes.request_node_id(OpcUaManager, server_id,
-##       func(node_id: OpcUaNodeId) -> void:
-##           my_edit.text = node_id.to_tag_name()
-##   )
-func request_node_id(
-    manager:     Node,
-    server_id:   String,
-    on_selected: Callable
+## If enable_selection is true, the confirm button is shown and, once the
+## user confirms, on_selected is called once with the chosen OpcUaNodeId
+## (connected CONNECT_ONE_SHOT). If enable_selection is false, this behaves
+## as a read-only browse/test session — no confirm button, no callback.
+func browse(
+    server:           ReactiveOpcUaServer,
+    on_selected:      Callable = Callable()
 ) -> void:
-    _client               = manager.get_raw_client(server_id)
-    _owns_client          = false
-    confirm_button.visible = true
-    _reset()
-    node_id_selected.connect(on_selected, CONNECT_ONE_SHOT)
+    _teardown_client()
+
+    _last_server           = server
+    confirm_button.visible = false
+
+    if on_selected.is_valid():
+        confirm_button.visible = true
+        node_id_selected.connect(on_selected, CONNECT_ONE_SHOT)
+
+    search_bar.text         = ""
+    selected_label.text     = "Connecting…"
+    confirm_button.disabled = true
+    tree.clear()
+    refresh_button.disabled = true
+
     popup_centered(Vector2i(700, 500))
 
+    _connect_async(server)
 
-## Opens the browser in selection mode using a temporary client.
-## BrowseNodes takes ownership and disconnects the client on close.
-func request_node_id_temporary(
-    client:      GodotOpcUa,
-    on_selected: Callable
-) -> void:
-    _client               = client
-    _owns_client          = true
-    confirm_button.visible = true
-    _reset()
-    node_id_selected.connect(on_selected, CONNECT_ONE_SHOT)
-    popup_centered(Vector2i(700, 500))
+# =============================================================================
+# Connection handling
+# =============================================================================
+
+func _connect_async(server: ReactiveOpcUaServer) -> void:
+    _run_async(func() -> Dictionary:
+        var client: GodotOpcUa = GodotOpcUa.new()
+        var ok: bool
+        if server.username.value.is_empty():
+            ok = client.connect_to_server(server.endpoint_url.value)
+        else:
+            ok = client.connect_with_credentials(
+                server.endpoint_url.value, server.username.value, server.password.value
+            )
+        return { "ok": ok, "client": client }
+    , _on_connect_finished)
+
+
+func _on_connect_finished(result: Dictionary) -> void:
+    refresh_button.disabled = false
+
+    if not result.get("ok", false):
+        var reason: String = "Could not connect to %s." % _last_server.endpoint_url.value
+        selected_label.text = "⚠ %s" % reason
+        connect_failed.emit(reason)
+        return
+
+    _client = result.get("client")
+    _refresh()
+
+
+func _teardown_client() -> void:
+    if _client != null:
+        _client.disconnect_server()
+    _client = null
 
 # =============================================================================
 # Refresh / root browse
 # =============================================================================
-
-## Resets UI state and begins a fresh browse from the root node.
-func _reset() -> void:
-    search_bar.text         = ""
-    selected_label.text     = TEXT_NO_SELECTION
-    confirm_button.disabled = true
-    _refresh()
-
 
 func _refresh() -> void:
     if _client == null:
@@ -168,34 +179,45 @@ func _on_root_loaded(results: Array) -> void:
     confirm_button.disabled = true
 
 # =============================================================================
-# Async browse helper
+# Generic async worker
 # =============================================================================
 
-func _browse_async(node_id: OpcUaNodeId, on_complete: Callable) -> void:
+## Runs `work` on a background thread, then calls `on_complete` on the main
+## thread with its return value. Used for both the initial connect and
+## subsequent browse_children calls — only one worker may run at a time.
+func _run_async(work: Callable, on_complete: Callable) -> void:
     _thread_mutex.lock()
     var busy: bool = _thread_busy
     _thread_mutex.unlock()
 
     if busy:
-        push_warning("BrowseNodes: browse already in progress; request ignored.")
+        push_warning("BrowseNodes: operation already in progress; request ignored.")
         return
 
-    if _browse_thread.is_started():
-        _browse_thread.wait_to_finish()
+    if _worker_thread.is_started():
+        _worker_thread.wait_to_finish()
 
     _set_busy(true)
-    refresh_button.disabled = true
 
-    _browse_thread.start(func() -> void:
-        var results: Array = _client.browse_children(node_id)
-        call_deferred("_browse_finished", on_complete, results)
+    _worker_thread.start(func() -> void:
+        var result: Variant = work.call()
+        call_deferred("_async_finished", on_complete, result)
     )
 
 
-func _browse_finished(on_complete: Callable, results: Array) -> void:
+func _async_finished(on_complete: Callable, result: Variant) -> void:
     _set_busy(false)
-    refresh_button.disabled = false
-    on_complete.call(results)
+    on_complete.call(result)
+
+
+func _browse_async(node_id: OpcUaNodeId, on_complete: Callable) -> void:
+    refresh_button.disabled = true
+    _run_async(func() -> Array:
+        return _client.browse_children(node_id)
+    , func(results: Array) -> void:
+        refresh_button.disabled = false
+        on_complete.call(results)
+    )
 
 
 func _set_busy(value: bool) -> void:
@@ -275,10 +297,7 @@ func _clear_pending_selection_callback() -> void:
 
 
 func _close() -> void:
-    if _owns_client and _client != null:
-        _client.disconnect_server()
-    _client      = null
-    _owns_client = false
+    _teardown_client()
     hide()
 
 # =============================================================================
@@ -342,6 +361,18 @@ func _on_confirm() -> void:
     _close()
 
 
+func _on_refresh_pressed() -> void:
+    if _client == null and _last_server != null:
+        # Acts as an implicit "Retry" when the initial connection failed.
+        selected_label.text     = "Connecting…"
+        confirm_button.disabled = true
+        refresh_button.disabled = true
+        _connect_async(_last_server)
+        return
+
+    _refresh()
+
+
 func _on_close_pressed() -> void:
     _clear_pending_selection_callback()
     _close()
@@ -382,10 +413,11 @@ func _filter_subtree(item: TreeItem, search: String) -> bool:
     item.visible = name_matches or child_matches
     return item.visible
 
+
 func _on_hide_internal_toggled(pressed: bool) -> void:
     _hide_internal_nodes = pressed
     _refresh()
-    
+
 # =============================================================================
 # Filter Predicate
 # =============================================================================
@@ -435,5 +467,5 @@ func _is_internal_node(entry: Dictionary) -> bool:
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_PREDELETE:
-        if _browse_thread.is_started():
-            _browse_thread.wait_to_finish()
+        if _worker_thread.is_started():
+            _worker_thread.wait_to_finish()

@@ -2,6 +2,7 @@
 class_name ReactiveOpcUaTag
 extends Reactive
 
+var id: ReactiveString
 var node_id: ReactiveString
 var display_name: ReactiveString
 var is_active: ReactiveBool
@@ -11,6 +12,7 @@ var deadband: ReactiveFloat
 func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveOpcUaTag") -> void:
     super._init(initial_owner, label)
 
+    id = ReactiveString.new("", self, "id")
     node_id = ReactiveString.new("", self, "node_id")
     display_name = ReactiveString.new("", self, "display_name")
     is_active = ReactiveBool.new(true, self, "is_active")
@@ -24,6 +26,7 @@ func _describe_value() -> String:
     return ""
 
 func from_data(data: Dictionary) -> void:
+    id.value = data.get("id", "")
     node_id.value = data.get("node_id", "")
     display_name.value = data.get("display_name", "")
     is_active.value = data.get("is_active", true)
@@ -32,6 +35,7 @@ func from_data(data: Dictionary) -> void:
 
 func to_data() -> Dictionary:
     return {
+        "id": id.value,
         "node_id": node_id.value,
         "display_name": display_name.value,
         "is_active": is_active.value,
