@@ -6,7 +6,6 @@ extends Control
 @onready var file_menu:           PopupMenu             = %FileMenu
 @onready var edit_menu:           PopupMenu             = %EditMenu
 @onready var server_menu:         PopupMenu             = %ServerMenu
-@onready var server_status_timer: Timer                 = %ServerStatusTimer
 @onready var edit_mode_toggle:    Button                = %EditModeButton
 
 @onready var canvas_container:    TabContainer          = %CanvasContainer
@@ -15,7 +14,6 @@ extends Control
 @onready var property_panel:      PropertyPanel         = $SafeAreaContainer/RootLayout/WorkArea/InspectorContainer/PropertyPanel
 @onready var connection_dialog:   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
 @onready var file_dialog:         FileDialog            = $Dialogs/FileDialog
-@onready var status_dialog:       OpcUaStatusDialog     = $Dialogs/OpcUaStatusDialog
 
 var active_theme: Theme
 @onready var base_theme: Theme = preload("res://resources/base_theme.tres")
@@ -33,6 +31,11 @@ const SERVER_MENU_FIXED_ITEM_COUNT: int = 1
 ## Tracks dynamically created server submenus keyed by server_id.
 ## Enables clean teardown and rebuild when the server list changes.
 var _server_submenus: Dictionary = {}
+
+## Tracks per-server connection_status bindings keyed by server_id, so each
+## can be individually connected/disconnected as the server menu is rebuilt.
+## { server_id: { "cfg": ReactiveOpcUaServer, "callable": Callable } }
+var _status_bindings: Dictionary = {}
 
 ## Tracks the actual ReactiveProject we're currently bound to, so we can
 ## unbind cleanly (and avoid dangling references) when the project changes.
@@ -62,17 +65,11 @@ func _connect_signals() -> void:
     file_menu.id_pressed.connect(_on_file_menu_pressed)
     edit_menu.id_pressed.connect(_on_edit_menu_pressed)
     server_menu.id_pressed.connect(_on_server_menu_pressed)
-    server_status_timer.timeout.connect(_on_server_status_timeout)
     edit_mode_toggle.toggled.connect(_on_mode_toggled)
 
-    # ── Server registry (now sourced from the reactive project) ──────────────
+    # ── Server registry (sourced from the reactive project) ───────────────────
     _bind_project_servers()
     _rebuild_server_menu()
-
-    # ── OPC UA connection state ───────────────────────────────────────────────
-    OpcUaManager.connected.connect(_on_connection_state_changed.unbind(1))
-    OpcUaManager.connection_lost.connect(_on_connection_state_changed.unbind(1))
-    OpcUaManager.connection_failed.connect(_on_connection_state_changed.unbind(1))
 
     # ── File dialog ───────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
@@ -140,13 +137,14 @@ func _on_server_menu_pressed(id: int) -> void:
 
 # ── Server Menu — Reactive Binding ─────────────────────────────────────────────
 
-## Rebinds to the current project's `servers` array, so that any structural
-## change (add/remove/reorder) triggers a menu rebuild, even though
-## AppState.current_project.value itself did not change. Explicitly unbinds
-## from the previously bound project first to avoid dangling references.
+## Rebinds to the current project's `opc_ua_servers` array, so that any
+## structural change (add/remove/reorder) triggers a menu rebuild, even
+## though AppState.current_project.value itself did not change. Explicitly
+## unbinds from the previously bound project first to avoid dangling
+## references.
 func _bind_project_servers() -> void:
     if _bound_project != null and _servers_changed_callable.is_valid():
-        _bound_project.servers.disconnect_self_changed(_servers_changed_callable)
+        _bound_project.opc_ua_servers.reactive_changed.disconnect(_servers_changed_callable)
 
     _bound_project = null
     _servers_changed_callable = Callable()
@@ -155,17 +153,20 @@ func _bind_project_servers() -> void:
     if project == null:
         return
 
-    _servers_changed_callable = func(_origin: ReactiveArray) -> void:
+    _servers_changed_callable = func(_origin: Reactive) -> void:
         _rebuild_server_menu()
 
     project.opc_ua_servers.connect_self_changed(_servers_changed_callable)
     _bound_project = project
 
 
-## Tears down all dynamic server menu entries and rebuilds them from
-## the current project's server list. Called when the server list changes
-## structurally, or when the bound project itself changes.
+## Tears down all dynamic server menu entries (and their status bindings)
+## and rebuilds them from the current project's server list. Called when
+## the server list changes structurally, or when the bound project itself
+## changes.
 func _rebuild_server_menu() -> void:
+    _unbind_all_status()
+
     for submenu: PopupMenu in _server_submenus.values():
         if is_instance_valid(submenu):
             submenu.free()
@@ -193,57 +194,67 @@ func _rebuild_server_menu() -> void:
         submenu.add_item("Disconnect", 1)
         submenu.add_item("Status",     2)
         submenu.id_pressed.connect(
-            func(id: int) -> void: _on_server_submenu_pressed(server_id, id)
+            func(id: int) -> void:
+                match id:
+                    0: OpcUaManager.connect_server(server_id)
+                    1: OpcUaManager.disconnect_server(server_id)
         )
         server_menu.add_child(submenu)
         _server_submenus[server_id] = submenu
 
-        var prefix: String = "● " if OpcUaManager.is_server_connected(server_id) else "○ "
-        server_menu.add_submenu_node_item(prefix + cfg.display_name.value, submenu)
+        var menu_item_index: int = server_menu.item_count
+        server_menu.add_submenu_node_item(_status_prefix(cfg) + cfg.display_name.value, submenu)
 
-    _on_server_status_timeout()
-
-
-func _on_server_submenu_pressed(server_id: String, id: int) -> void:
-    match id:
-        0: OpcUaManager.connect_server(server_id)
-        1: OpcUaManager.disconnect_server(server_id)
-        2:
-            status_dialog.focus_server(server_id)
-            status_dialog.show()
+        _bind_status(cfg, menu_item_index, submenu)
+        _apply_submenu_state(submenu, cfg)
 
 
-## Refreshes server menu dot indicators and submenu item states
-## without triggering a full structural rebuild.
-func _on_server_status_timeout() -> void:
-    var project: ReactiveProject = _bound_project
-    if project == null:
-        return
+# ── Per-server status binding ────────────────────────────────────────────────
 
-    var servers: Array = project.opc_ua_servers.value
+## Binds directly to a server's reactive connection_status field, updating
+## its menu row prefix and submenu item states immediately on any
+## transition — no polling required.
+func _bind_status(cfg: ReactiveOpcUaServer, menu_item_index: int, submenu: PopupMenu) -> void:
+    var server_id: String = cfg.id.value
 
-    for i: int in servers.size():
-        var cfg: ReactiveOpcUaServer = servers[i]
-        var server_id: String        = cfg.id.value
-        var menu_index: int          = SERVER_MENU_FIXED_ITEM_COUNT + i + 1
+    var callback: Callable = func(_origin: Reactive) -> void:
+        _on_server_status_changed(cfg, menu_item_index, submenu)
 
-        if menu_index >= server_menu.item_count:
-            break
-
-        var connected: bool = OpcUaManager.is_server_connected(server_id)
-        var prefix: String  = "● " if connected else "○ "
-        server_menu.set_item_text(menu_index, prefix + cfg.display_name.value)
-
-        var submenu: PopupMenu = _server_submenus.get(server_id, null)
-        if submenu == null:
-            continue
-
-        submenu.set_item_disabled(0, connected)
-        submenu.set_item_disabled(1, not connected)
+    cfg.connection_status.connect_self_changed(callback)
+    _status_bindings[server_id] = { "cfg": cfg, "callable": callback }
 
 
-func _on_connection_state_changed() -> void:
-    _on_server_status_timeout()
+func _unbind_all_status() -> void:
+    for binding: Dictionary in _status_bindings.values():
+        var cfg: ReactiveOpcUaServer = binding.get("cfg")
+        var callback: Callable = binding.get("callable")
+        if cfg != null and callback.is_valid():
+            cfg.connection_status.reactive_changed.disconnect(callback)
+    _status_bindings.clear()
+
+
+func _on_server_status_changed(cfg: ReactiveOpcUaServer, menu_item_index: int, submenu: PopupMenu) -> void:
+    if menu_item_index < server_menu.item_count:
+        server_menu.set_item_text(menu_item_index, _status_prefix(cfg) + cfg.display_name.value)
+    _apply_submenu_state(submenu, cfg)
+
+
+func _apply_submenu_state(submenu: PopupMenu, cfg: ReactiveOpcUaServer) -> void:
+    var connected: bool = cfg.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTED
+    submenu.set_item_disabled(0, connected)
+    submenu.set_item_disabled(1, not connected)
+
+
+func _status_prefix(cfg: ReactiveOpcUaServer) -> String:
+    match cfg.connection_status.value:
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTED:
+            return "● "
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTING:
+            return "◐ "
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTION_FAILED:
+            return "✕ "
+        _:
+            return "○ "
 
 # ── Project Management ────────────────────────────────────────────────────────
 

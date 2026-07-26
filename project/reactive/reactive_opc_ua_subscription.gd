@@ -1,5 +1,4 @@
-# data/reactive_opc_ua_group.gd
-class_name ReactiveOpcUaGroup
+class_name ReactiveOpcUaSubscription
 extends Reactive
 
 var id: ReactiveString
@@ -7,7 +6,7 @@ var display_name: ReactiveString
 var pub_interval_ms: ReactiveFloat
 var tags: ReactiveArray   # ReactiveArray of ReactiveOpcUaTag
 
-func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveOpcUaGroup") -> void:
+func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveOpcUaSubscription") -> void:
     super._init(initial_owner, label)
 
     id = ReactiveString.new("", self, "id")
@@ -36,7 +35,7 @@ func to_data() -> Dictionary:
         if item is ReactiveOpcUaTag:
             result.append(item.to_data())
         else:
-            push_warning("ReactiveOpcUaGroup: item in tags is not a ReactiveOpcUaTag — skipping.")
+            push_warning("ReactiveOpcUaSubscription: item in tags is not a ReactiveOpcUaTag — skipping.")
 
     return {
         "id": id.value,

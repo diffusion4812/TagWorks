@@ -1,6 +1,16 @@
 class_name ReactiveOpcUaServer
 extends Reactive
 
+## Connection lifecycle states for UI display (status icons, badges, etc.).
+## Mirrors the signals emitted by OpcUaServerConnection.
+enum ConnectionStatus {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    CONNECTION_FAILED,
+}
+
+## ── Persisted configuration ────────────────────────────────────────────────
 var id: ReactiveString
 var display_name: ReactiveString
 var endpoint_url: ReactiveString
@@ -12,7 +22,16 @@ var pub_interval_ms: ReactiveFloat
 var poll_interval_sec: ReactiveFloat
 var reconnect_interval_sec: ReactiveFloat
 var max_reconnect_attempts: ReactiveInt
-var groups: ReactiveArray   # ReactiveArray of ReactiveOpcUaGroup
+var subscriptions: ReactiveArray   # ReactiveArray of ReactiveOpcUaSubscription
+
+## ── Runtime-only state ──────────────────────────────────────────────────────
+## NOT persisted (excluded from to_data()/from_data()) and NOT propagated to
+## the parent's self_changed signal — driven by OpcUaServerConnection /
+## OpcUaManager as connection state changes. UI binds directly to these via
+## connect_self_changed() for live status indicators, exactly as it would
+## bind to any other Reactive field.
+var connection_status: ReactiveInt      # stores a ConnectionStatus enum value
+var last_error: ReactiveString          # human-readable reason for last failure/loss
 
 func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveOpcUaServer") -> void:
     super._init(initial_owner, label)
@@ -28,7 +47,16 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     poll_interval_sec = ReactiveFloat.new(0.01, self, "poll_interval_sec")
     reconnect_interval_sec = ReactiveFloat.new(3.0, self, "reconnect_interval_sec")
     max_reconnect_attempts = ReactiveInt.new(10, self, "max_reconnect_attempts")
-    groups = ReactiveArray.new([], self, "groups")
+    subscriptions = ReactiveArray.new([], self, "subscriptions")
+
+    # Runtime-only fields: constructed WITHOUT `self` as owner so they never
+    # bubble into this server's (or any ancestor's) self_changed signal, and
+    # are never touched by to_data()/from_data().
+    # TODO: confirm this matches your Reactive base class's actual
+    # no-propagation constructor signature/flag — same open item noted for
+    # ReactiveOpcUaTag's runtime fields.
+    connection_status = ReactiveInt.new(ConnectionStatus.DISCONNECTED, null, "connection_status")
+    last_error = ReactiveString.new("", null, "last_error")
 
     if not data.is_empty():
         from_data(data)
@@ -49,18 +77,18 @@ func from_data(data: Dictionary) -> void:
     reconnect_interval_sec.value = data.get("reconnect_interval_sec", 3.0)
     max_reconnect_attempts.value = data.get("max_reconnect_attempts", 10)
 
-    groups.clear()
-    for group_data: Dictionary in data.get("groups", []):
-        var group: ReactiveOpcUaGroup = ReactiveOpcUaGroup.new(group_data, self, "group")
-        groups.append(group)
+    subscriptions.clear()
+    for subscription_data: Dictionary in data.get("subscriptions", []):
+        var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new(subscription_data, self, "subscription")
+        subscriptions.append(subscription)
 
 func to_data() -> Dictionary:
-    var group_results: Array = []
-    for item: Variant in groups.values():
-        if item is ReactiveOpcUaGroup:
-            group_results.append(item.to_data())
+    var serialised_subscriptions: Array = []
+    for item: Variant in subscriptions.values():
+        if item is ReactiveOpcUaSubscription:
+            serialised_subscriptions.append(item.to_data())
         else:
-            push_warning("ReactiveOpcUaServer: item in groups is not a ReactiveOpcUaGroup — skipping.")
+            push_warning("ReactiveOpcUaServer: item in subscriptions is not a ReactiveOpcUaSubscription — skipping.")
 
     return {
         "id": id.value,
@@ -74,5 +102,25 @@ func to_data() -> Dictionary:
         "poll_interval_sec": poll_interval_sec.value,
         "reconnect_interval_sec": reconnect_interval_sec.value,
         "max_reconnect_attempts": max_reconnect_attempts.value,
-        "groups": group_results,
+        "subscriptions": serialised_subscriptions,
     }
+
+## ── Runtime update helpers ──────────────────────────────────────────────────
+## Called by OpcUaServerConnection (via OpcUaManager, which owns the
+## server_id -> ReactiveOpcUaServer / OpcUaServerConnection association) as
+## connection lifecycle events occur. Centralizing these here — rather than
+## having callers set connection_status.value directly — keeps "what counts
+## as a status transition" logic in one place.
+func set_connected() -> void:
+    connection_status.value = ConnectionStatus.CONNECTED
+    last_error.value = ""
+
+func set_disconnected() -> void:
+    connection_status.value = ConnectionStatus.DISCONNECTED
+
+func set_connecting() -> void:
+    connection_status.value = ConnectionStatus.CONNECTING
+
+func set_connection_failed(reason: String = "") -> void:
+    connection_status.value = ConnectionStatus.CONNECTION_FAILED
+    last_error.value = reason

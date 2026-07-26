@@ -1,5 +1,5 @@
 # ui/components/opc_ua_group_detail_form.gd
-class_name OpcUaGroupDetailForm
+class_name OpcUaSubscriptionDetailForm
 extends VBoxContainer
 
 signal edited
@@ -21,13 +21,13 @@ func _emit_edited() -> void:
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
-func load_config(group: ReactiveOpcUaGroup) -> void:
+func load_config(group: ReactiveOpcUaSubscription) -> void:
     _loading = true
     group_name_edit.text      = group.display_name.value
     group_interval_spin.value = group.pub_interval_ms.value
     _loading = false
 
 
-func commit_to(group: ReactiveOpcUaGroup) -> void:
+func commit_to(group: ReactiveOpcUaSubscription) -> void:
     group.display_name.value    = group_name_edit.text.strip_edges()
     group.pub_interval_ms.value = group_interval_spin.value

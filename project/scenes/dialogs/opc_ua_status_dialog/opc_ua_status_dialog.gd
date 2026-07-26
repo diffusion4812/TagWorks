@@ -109,13 +109,13 @@ func _refresh() -> void:
             empty.set_text(0, "  (no groups configured)")
             continue
 
-        for group_cfg: ReactiveOpcUaGroup in configured_groups:
+        for group_cfg: ReactiveOpcUaSubscription in configured_groups:
             group_count += 1
 
             # Live group lookup — may be null if server/group not connected yet
-            var live_group: OpcUaGroup = null
+            var live_group: OpcUaSubscription = null
             if conn != null:
-                live_group = conn.get_group(group_cfg.group_id)
+                live_group = conn.get_group(group_cfg.id.value)
 
             # ── Group row ─────────────────────────────────────────────────────
             var group_item: TreeItem = _tree.create_item(server_item)
@@ -138,7 +138,7 @@ func _refresh() -> void:
                 tag_count += 1
 
                 # Live value lookup — fall back to config-only if not connected
-                var live_entry: OpcUaGroup.TagEntry = null
+                var live_entry: ReactiveOpcUaTag = null
                 if live_group != null:
                     live_entry = live_group.get_entry(entry_cfg.node_id)
 

@@ -29,10 +29,10 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "+ Server"
 
-[node name="AddGroupButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="1" unique_id=1829999538]
+[node name="AddSubscriptionButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="1" unique_id=1829999538]
 unique_name_in_owner = true
 layout_mode = 2
-text = "+ Group"
+text = "+ Subscription"
 
 [node name="AddTagButton" type="Button" parent="Panel/MarginContainer/VBox/HSplitContainer/LeftSide/HBoxContainer" index="2" unique_id=285862953]
 unique_name_in_owner = true
@@ -58,7 +58,7 @@ visible = false
 layout_mode = 2
 text = "No server selected"
 
-[node name="GroupDetailForm" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="1" unique_id=56569965 instance=ExtResource("4_iro6b")]
+[node name="SubscriptionDetailForm" parent="Panel/MarginContainer/VBox/HSplitContainer/RightSide" index="1" unique_id=56569965 instance=ExtResource("4_iro6b")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2

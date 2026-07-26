@@ -32,10 +32,10 @@ func _test_construction_chain() -> void:
     assert(server.id.value == "server_01", "Server id was not set correctly.")
 
     server.groups.append(
-        ReactiveOpcUaGroup.new({}, server.groups, "ReactiveOpcUaGroup")
+        ReactiveOpcUaSubscription.new({}, server.groups, "ReactiveOpcUaSubscription")
     )
 
-    var group: ReactiveOpcUaGroup = server.groups.value[0]
+    var group: ReactiveOpcUaSubscription = server.groups.value[0]
     group.id.value = "group_fast"
     group.pub_interval_ms.value = 100.0
 

@@ -354,8 +354,8 @@ func _ensure_tag_registered(server_id: String, group_id: String, node_id: OpcUaN
         push_warning("_ensure_tag_registered: server '%s' not found." % server_id)
         return
 
-    var group: ReactiveOpcUaGroup = null
-    for g: ReactiveOpcUaGroup in server.groups.value:
+    var group: ReactiveOpcUaSubscription = null
+    for g: ReactiveOpcUaSubscription in server.groups.value:
         if g.id.value == group_id:
             group = g
             break
@@ -410,7 +410,7 @@ func _populate_group_option(option: OptionButton, server_id: String) -> void:
     if cfg == null:
         return
 
-    for group: ReactiveOpcUaGroup in cfg.groups.values():
+    for group: ReactiveOpcUaSubscription in cfg.groups.values():
         var item_label: String = "%s  —  %.0f ms" % [group.id.value, group.pub_interval_ms.value]
         option.add_item(item_label)
         option.set_item_metadata(option.item_count - 1, group.id.value)

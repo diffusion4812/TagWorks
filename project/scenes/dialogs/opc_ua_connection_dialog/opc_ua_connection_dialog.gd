@@ -3,17 +3,17 @@ class_name OpcUaConnectionDialog
 extends Window
 
 # ── Tree ──────────────────────────────────────────────────────────────────────
-@onready var server_tree:             OpcUaServerTree       = %ServerTree
-@onready var add_server_button:       Button                = %AddServerButton
-@onready var add_group_button:        Button                = %AddGroupButton
-@onready var add_tag_button:          Button                = %AddTagButton
-@onready var remove_button:           Button                = %RemoveButton
+@onready var server_tree:              OpcUaServerTree              = %ServerTree
+@onready var add_server_button:        Button                       = %AddServerButton
+@onready var add_subscription_button:  Button                       = %AddSubscriptionButton
+@onready var add_tag_button:           Button                       = %AddTagButton
+@onready var remove_button:            Button                       = %RemoveButton
 
 # ── Right panel ───────────────────────────────────────────────────────────────
-@onready var no_selection_label:      Label                 = %NoSelectionLabel
-@onready var server_detail_form:      OpcUaServerDetailForm = %ServerDetailForm
-@onready var group_detail_form:       OpcUaGroupDetailForm  = %GroupDetailForm
-@onready var tag_detail_form:         OpcUaTagDetailForm    = %TagDetailForm
+@onready var no_selection_label:       Label                        = %NoSelectionLabel
+@onready var server_detail_form:       OpcUaServerDetailForm        = %ServerDetailForm
+@onready var subscription_detail_form: OpcUaSubscriptionDetailForm  = %SubscriptionDetailForm
+@onready var tag_detail_form:          OpcUaTagDetailForm           = %TagDetailForm
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 @onready var test_button:              Button        = %TestButton
@@ -24,17 +24,23 @@ extends Window
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
-enum SelectionType { NONE, SERVER, GROUP, TAG }
+enum SelectionType { NONE, SERVER, SUBSCRIPTION, TAG }
 
-var _selection_type:       SelectionType   = SelectionType.NONE
-var _selected_server_id:   String          = ""
-var _selected_group_id:    String          = ""
-var _selected_tag_id:      String          = ""
-var _form_dirty:           bool            = false
-var _commit_pending:       bool            = false
-var _bound_project:        ReactiveProject = null
-var _picker_active:   bool     = false
-var _picker_callback: Callable = Callable()
+var _selection_type:          SelectionType   = SelectionType.NONE
+var _selected_server_id:      String          = ""
+var _selected_subscription_id: String         = ""
+var _selected_tag_id:         String          = ""
+var _form_dirty:              bool            = false
+var _commit_pending:          bool            = false
+var _bound_project:           ReactiveProject = null
+var _picker_active:           bool            = false
+var _picker_callback:         Callable        = Callable()
+
+## Tracks the connection_status binding for whichever server is currently
+## selected, so a "connection failed" alert can be shown while its detail
+## form is open. Cleaned up on every selection change / dialog close.
+var _status_watch_cfg:      ReactiveOpcUaServer = null
+var _status_watch_callable: Callable            = Callable()
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -47,12 +53,12 @@ func _ready() -> void:
 
 func _connect_signals() -> void:
     add_server_button.pressed.connect(_on_add_server_pressed)
-    add_group_button.pressed.connect(_on_add_group_pressed)
+    add_subscription_button.pressed.connect(_on_add_subscription_pressed)
     add_tag_button.pressed.connect(_on_add_tag_pressed)
     remove_button.pressed.connect(_on_remove_pressed)
 
     server_tree.server_selected.connect(_on_server_selected)
-    server_tree.group_selected.connect(_on_group_selected)
+    server_tree.subscription_selected.connect(_on_subscription_selected)
     server_tree.tag_selected.connect(_on_tag_selected)
     server_tree.selection_cleared.connect(_on_selection_cleared)
 
@@ -64,11 +70,9 @@ func _connect_signals() -> void:
     close_requested.connect(_on_close_pressed)
 
     server_detail_form.edited.connect(_on_form_edited)
-    group_detail_form.edited.connect(_on_form_edited)
+    subscription_detail_form.edited.connect(_on_form_edited)
     tag_detail_form.edited.connect(_on_form_edited)
     tag_detail_form.browse_requested.connect(_on_tag_browse_requested)
-
-    OpcUaManager.connection_failed.connect(_on_server_connection_failed)
 
     AppState.current_project.connect_self_changed(_on_current_project_changed)
 
@@ -101,19 +105,19 @@ func _get_server(server_id: String) -> ReactiveOpcUaServer:
     return null
 
 
-func _get_group(server: ReactiveOpcUaServer, group_id: String) -> ReactiveOpcUaGroup:
-    if server == null or group_id == "":
+func _get_subscription(server: ReactiveOpcUaServer, subscription_id: String) -> ReactiveOpcUaSubscription:
+    if server == null or subscription_id == "":
         return null
-    for group: ReactiveOpcUaGroup in server.groups.value:
-        if group.id.value == group_id:
-            return group
+    for subscription: ReactiveOpcUaSubscription in server.subscriptions.value:
+        if subscription.id.value == subscription_id:
+            return subscription
     return null
 
 
-func _get_tag(group: ReactiveOpcUaGroup, tag_id: String) -> ReactiveOpcUaTag:
-    if group == null or tag_id == "":
+func _get_tag(subscription: ReactiveOpcUaSubscription, tag_id: String) -> ReactiveOpcUaTag:
+    if subscription == null or tag_id == "":
         return null
-    for tag: ReactiveOpcUaTag in group.tags.value:
+    for tag: ReactiveOpcUaTag in subscription.tags.value:
         if tag.id.value == tag_id:
             return tag
     return null
@@ -125,6 +129,9 @@ func _add_server(cfg: ReactiveOpcUaServer) -> void:
     _project().opc_ua_servers.append(cfg)
 
 
+## Removes the server from project data. OpcUaManager is not called
+## directly — it watches AppState.current_project reactively and will
+## rebuild its live connections automatically as a result of this mutation.
 func _remove_server(server_id: String) -> void:
     if not _has_project():
         return
@@ -134,15 +141,27 @@ func _remove_server(server_id: String) -> void:
             servers.remove_at(i)
             break
 
+
+func _remove_subscription(cfg: ReactiveOpcUaServer, subscription_id: String) -> void:
+    if cfg == null:
+        return
+    for i: int in cfg.subscriptions.value.size():
+        var subscription: ReactiveOpcUaSubscription = cfg.subscriptions.value[i]
+        if subscription.id.value == subscription_id:
+            cfg.subscriptions.remove_at(i)
+            return
+    push_warning("Delete: selected subscription '%s' not found on server '%s'." % [subscription_id, cfg.id.value])
+
 # ── Project (re)binding ───────────────────────────────────────────────────────
 
 func _on_current_project_changed(_origin: ReactiveVariant) -> void:
     _rebind_project_signal()
+    _unwatch_server_status()
 
-    _selection_type     = SelectionType.NONE
-    _selected_server_id = ""
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
+    _selection_type            = SelectionType.NONE
+    _selected_server_id        = ""
+    _selected_subscription_id  = ""
+    _selected_tag_id           = ""
     server_tree.clear_selection()
     _set_panel(SelectionType.NONE)
 
@@ -180,22 +199,22 @@ func _refresh_tree() -> void:
 # ── Panel switching ───────────────────────────────────────────────────────────
 
 func _set_panel(type: SelectionType) -> void:
-    no_selection_label.visible = (type == SelectionType.NONE)
-    server_detail_form.visible = (type == SelectionType.SERVER)
-    group_detail_form.visible  = (type == SelectionType.GROUP)
-    tag_detail_form.visible    = (type == SelectionType.TAG)
+    no_selection_label.visible      = (type == SelectionType.NONE)
+    server_detail_form.visible      = (type == SelectionType.SERVER)
+    subscription_detail_form.visible = (type == SelectionType.SUBSCRIPTION)
+    tag_detail_form.visible         = (type == SelectionType.TAG)
 
-    add_group_button.disabled  = (not _has_project()) or (_selected_server_id == "")
-    add_tag_button.disabled    = (not _has_project()) or (_selected_group_id == "")
-    remove_button.disabled     = (type == SelectionType.NONE)
+    add_subscription_button.disabled = (not _has_project()) or (_selected_server_id == "")
+    add_tag_button.disabled          = (not _has_project()) or (_selected_subscription_id == "")
+    remove_button.disabled           = (type == SelectionType.NONE)
 
     match type:
         SelectionType.NONE:
             remove_button.text = "Remove"
         SelectionType.SERVER:
             remove_button.text = "Remove Server"
-        SelectionType.GROUP:
-            remove_button.text = "Remove Group"
+        SelectionType.SUBSCRIPTION:
+            remove_button.text = "Remove Subscription"
         SelectionType.TAG:
             remove_button.text = "Remove Tag"
 
@@ -218,21 +237,21 @@ func _load_server_form(server_id: String) -> void:
     _form_dirty = false
 
 
-func _load_group_form(server_id: String, group_id: String) -> void:
+func _load_subscription_form(server_id: String, subscription_id: String) -> void:
     var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    var group: ReactiveOpcUaGroup = _get_group(cfg, group_id) if cfg else null
-    if group == null:
+    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, subscription_id) if cfg else null
+    if subscription == null:
         return
 
     _form_dirty = false
-    group_detail_form.load_config(group)
+    subscription_detail_form.load_config(subscription)
     _form_dirty = false
 
 
-func _load_tag_form(server_id: String, group_id: String, tag_id: String) -> void:
+func _load_tag_form(server_id: String, subscription_id: String, tag_id: String) -> void:
     var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    var group: ReactiveOpcUaGroup = _get_group(cfg, group_id) if cfg else null
-    var tag: ReactiveOpcUaTag = _get_tag(group, tag_id) if group else null
+    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, subscription_id) if cfg else null
+    var tag: ReactiveOpcUaTag = _get_tag(subscription, tag_id) if subscription else null
     if tag == null:
         return
 
@@ -252,8 +271,8 @@ func _commit_form() -> void:
     match _selection_type:
         SelectionType.SERVER:
             _commit_server_form()
-        SelectionType.GROUP:
-            _commit_group_form()
+        SelectionType.SUBSCRIPTION:
+            _commit_subscription_form()
         SelectionType.TAG:
             _commit_tag_form()
 
@@ -269,19 +288,19 @@ func _commit_server_form() -> void:
     server_detail_form.commit_to(cfg)
 
 
-func _commit_group_form() -> void:
+func _commit_subscription_form() -> void:
     var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var group: ReactiveOpcUaGroup = _get_group(cfg, _selected_group_id) if cfg else null
-    if group == null:
+    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+    if subscription == null:
         return
 
-    group_detail_form.commit_to(group)
+    subscription_detail_form.commit_to(subscription)
 
 
 func _commit_tag_form() -> void:
     var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var group: ReactiveOpcUaGroup = _get_group(cfg, _selected_group_id) if cfg else null
-    var tag: ReactiveOpcUaTag = _get_tag(group, _selected_tag_id) if group else null
+    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+    var tag: ReactiveOpcUaTag = _get_tag(subscription, _selected_tag_id) if subscription else null
     if tag == null:
         return
 
@@ -291,40 +310,44 @@ func _commit_tag_form() -> void:
 
 func _on_server_selected(server_id: String) -> void:
     _commit_form()
-    _selection_type     = SelectionType.SERVER
-    _selected_server_id = server_id
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
+    _selection_type           = SelectionType.SERVER
+    _selected_server_id       = server_id
+    _selected_subscription_id = ""
+    _selected_tag_id          = ""
     _load_server_form(server_id)
+    _watch_server_status(server_id)
     _set_panel(SelectionType.SERVER)
 
 
-func _on_group_selected(server_id: String, group_id: String) -> void:
+func _on_subscription_selected(server_id: String, subscription_id: String) -> void:
     _commit_form()
-    _selection_type     = SelectionType.GROUP
-    _selected_server_id = server_id
-    _selected_group_id  = group_id
-    _selected_tag_id    = ""
-    _load_group_form(server_id, group_id)
-    _set_panel(SelectionType.GROUP)
+    _selection_type           = SelectionType.SUBSCRIPTION
+    _selected_server_id       = server_id
+    _selected_subscription_id = subscription_id
+    _selected_tag_id          = ""
+    _load_subscription_form(server_id, subscription_id)
+    _unwatch_server_status()
+    _set_panel(SelectionType.SUBSCRIPTION)
 
 
-func _on_tag_selected(server_id: String, group_id: String, tag_id: String) -> void:
+func _on_tag_selected(server_id: String, subscription_id: String, tag_id: String) -> void:
     _commit_form()
-    _selection_type     = SelectionType.TAG
-    _selected_server_id = server_id
-    _selected_group_id  = group_id
-    _selected_tag_id    = tag_id
-    _load_tag_form(server_id, group_id, tag_id)
+    _selection_type           = SelectionType.TAG
+    _selected_server_id       = server_id
+    _selected_subscription_id = subscription_id
+    _selected_tag_id          = tag_id
+    _load_tag_form(server_id, subscription_id, tag_id)
+    _unwatch_server_status()
     _set_panel(SelectionType.TAG)
 
 
 func _on_selection_cleared() -> void:
     _commit_form()
-    _selection_type     = SelectionType.NONE
-    _selected_server_id = ""
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
+    _selection_type           = SelectionType.NONE
+    _selected_server_id       = ""
+    _selected_subscription_id = ""
+    _selected_tag_id          = ""
+    _unwatch_server_status()
     _set_panel(SelectionType.NONE)
 
 # ── Add / Remove ──────────────────────────────────────────────────────────────
@@ -348,7 +371,7 @@ func _on_add_server_pressed() -> void:
     server_tree.select_server(cfg.id.value)
 
 
-func _on_add_group_pressed() -> void:
+func _on_add_subscription_pressed() -> void:
     if not _has_project() or _selected_server_id == "":
         return
 
@@ -358,38 +381,38 @@ func _on_add_group_pressed() -> void:
     if cfg == null:
         return
 
-    var id: String = "group_%d" % Time.get_ticks_msec()
-    var group: ReactiveOpcUaGroup = ReactiveOpcUaGroup.new({}, cfg, id)
-    group.id.value              = id
-    group.display_name.value    = "New Group"
-    group.pub_interval_ms.value = 500.0
-    cfg.groups.append(group)
+    var id: String = "subscription_%d" % Time.get_ticks_msec()
+    var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new({}, cfg, id)
+    subscription.id.value              = id
+    subscription.display_name.value    = "New Subscription"
+    subscription.pub_interval_ms.value = 500.0
+    cfg.subscriptions.append(subscription)
 
     server_tree.set_servers(_servers())
-    server_tree.select_group(_selected_server_id, group.id.value)
+    server_tree.select_subscription(_selected_server_id, subscription.id.value)
 
 
 func _on_add_tag_pressed() -> void:
-    if not _has_project() or _selected_server_id == "" or _selected_group_id == "":
+    if not _has_project() or _selected_server_id == "" or _selected_subscription_id == "":
         return
 
     _commit_form()
 
     var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var group: ReactiveOpcUaGroup = _get_group(cfg, _selected_group_id) if cfg else null
-    if group == null:
+    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+    if subscription == null:
         return
 
     var id: String = "tag_%d" % Time.get_ticks_msec()
-    var tag: ReactiveOpcUaTag = ReactiveOpcUaTag.new({}, group, id)
+    var tag: ReactiveOpcUaTag = ReactiveOpcUaTag.new({}, subscription, id)
     tag.id.value           = id
     tag.node_id.value      = ""
     tag.display_name.value = "New Tag"
 
-    group.tags.append(tag)
+    subscription.tags.append(tag)
 
     server_tree.set_servers(_servers())
-    server_tree.select_tag(_selected_server_id, _selected_group_id, tag.id.value)
+    server_tree.select_tag(_selected_server_id, _selected_subscription_id, tag.id.value)
 
 
 func _on_remove_pressed() -> void:
@@ -400,36 +423,46 @@ func _on_remove_pressed() -> void:
 
     match _selection_type:
         SelectionType.SERVER:
-            OpcUaManager.remove_server(_selected_server_id)
             _remove_server(_selected_server_id)
-            _selected_server_id = ""
-            _selected_group_id  = ""
-            _selected_tag_id    = ""
-            _selection_type     = SelectionType.NONE
+            _selected_server_id       = ""
+            _selected_subscription_id = ""
+            _selected_tag_id          = ""
+            _selection_type           = SelectionType.NONE
 
-        SelectionType.GROUP:
+        SelectionType.SUBSCRIPTION:
             var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
             if cfg:
-                cfg.remove_group(_selected_group_id)
-            _selected_group_id = ""
-            _selected_tag_id   = ""
-            _selection_type    = SelectionType.SERVER
+                _remove_subscription(cfg, _selected_subscription_id)
+            _selected_subscription_id = ""
+            _selected_tag_id          = ""
+            _selection_type           = SelectionType.SERVER
 
         SelectionType.TAG:
-            var cfg2: ReactiveOpcUaServer = _get_server(_selected_server_id)
-            var group: ReactiveOpcUaGroup = _get_group(cfg2, _selected_group_id) if cfg2 else null
-            if group:
-                group.remove_tag(_selected_tag_id)
+            var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
+            var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+            if subscription:
+                var tag_index: int = -1
+                for i: int in subscription.tags.value.size():
+                    var tag: ReactiveOpcUaTag = subscription.tags.value[i]
+                    if tag.id.value == _selected_tag_id:
+                        tag_index = i
+                        break
+
+                if tag_index != -1:
+                    subscription.tags.remove_at(tag_index)
+                else:
+                    push_warning("Delete: selected tag '%s' not found in subscription '%s'." % [_selected_tag_id, _selected_subscription_id])
+
             _selected_tag_id = ""
-            _selection_type  = SelectionType.GROUP
+            _selection_type  = SelectionType.SUBSCRIPTION
 
     server_tree.set_servers(_servers())
 
     match _selection_type:
         SelectionType.SERVER:
             server_tree.select_server(_selected_server_id)
-        SelectionType.GROUP:
-            server_tree.select_group(_selected_server_id, _selected_group_id)
+        SelectionType.SUBSCRIPTION:
+            server_tree.select_subscription(_selected_server_id, _selected_subscription_id)
         _:
             server_tree.clear_selection()
 
@@ -455,7 +488,7 @@ func _on_test_pressed() -> void:
 
     OS.alert(
         "Connection successful." if ok else "Connection failed.",
-        "Test Connection — %s" % cfg.display_name
+        "Test Connection — %s" % cfg.display_name.value
     )
 
 
@@ -484,13 +517,13 @@ func _on_confirm_pressed() -> void:
 
     if _picker_active and _selection_type == SelectionType.TAG:
         var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-        var group: ReactiveOpcUaGroup = _get_group(cfg, _selected_group_id) if cfg else null
-        var tag: ReactiveOpcUaTag = _get_tag(group, _selected_tag_id) if group else null
+        var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+        var tag: ReactiveOpcUaTag = _get_tag(subscription, _selected_tag_id) if subscription else null
 
         if tag != null:
             var result: OpcUaTagBinding = OpcUaTagBinding.new(
                 _selected_server_id,
-                _selected_group_id,
+                _selected_subscription_id,
                 OpcUaNodeId.parse(tag.node_id.value) if tag.node_id.value != "" else null
             )
             var callback: Callable = _picker_callback
@@ -520,7 +553,7 @@ func _end_picker_session() -> void:
 # ── Tag node picking (Browse) ─────────────────────────────────────────────────
 
 func _on_tag_browse_requested() -> void:
-    if _selected_server_id == "" or _selected_group_id == "" or _selected_tag_id == "":
+    if _selected_server_id == "" or _selected_subscription_id == "" or _selected_tag_id == "":
         return
 
     _open_browser_for_server(_selected_server_id, func(node_id: OpcUaNodeId) -> void:
@@ -550,13 +583,38 @@ func _deferred_commit() -> void:
     _commit_pending = false
     _commit_form()
 
-# ── OpcUaManager signals ──────────────────────────────────────────────────────
+# ── Server connection-status watch (for the selected server only) ────────────
 
-func _on_server_connection_failed(server_id: String) -> void:
-    if server_id == _selected_server_id:
+## Binds to the currently selected server's connection_status field so a
+## "connection failed" alert can be shown while its detail form is open —
+## replaces the old global OpcUaManager.connection_failed signal, which no
+## longer exists now that status is conveyed purely via the reactive field.
+func _watch_server_status(server_id: String) -> void:
+    _unwatch_server_status()
+
+    var cfg: ReactiveOpcUaServer = _get_server(server_id)
+    if cfg == null:
+        return
+
+    _status_watch_callable = func(_origin: Reactive) -> void:
+        _on_watched_server_status_changed(cfg)
+
+    cfg.connection_status.connect_self_changed(_status_watch_callable)
+    _status_watch_cfg = cfg
+
+
+func _unwatch_server_status() -> void:
+    if _status_watch_cfg != null and _status_watch_callable.is_valid():
+        _status_watch_cfg.connection_status.reactive_changed.disconnect(_status_watch_callable)
+    _status_watch_cfg = null
+    _status_watch_callable = Callable()
+
+
+func _on_watched_server_status_changed(cfg: ReactiveOpcUaServer) -> void:
+    if cfg.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTION_FAILED:
         OS.alert(
-            "Could not reconnect after maximum attempts.",
-            "Connection Failed — %s" % _selected_server_id
+            "Could not reconnect after maximum attempts.\n%s" % cfg.last_error.value,
+            "Connection Failed — %s" % cfg.display_name.value
         )
 
 

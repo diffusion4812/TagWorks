@@ -24,7 +24,7 @@ signal delete_server_requested(server: ReactiveOpcUaServer)
 @warning_ignore("unused_signal")
 signal add_group_requested()
 @warning_ignore("unused_signal")
-signal delete_group_requested(server: ReactiveOpcUaGroup)
+signal delete_group_requested(server: ReactiveOpcUaSubscription)
 
 # ── Project ───────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")

@@ -1,72 +1,43 @@
-# opcua/opc_ua_server_connection.gd
 class_name OpcUaServerConnection
 extends Node
 
-signal connected(server_id: String)
-signal connection_lost(server_id: String)
-signal connection_failed(server_id: String)
-signal tag_value_changed(server_id: String, group_id: String, node_id: OpcUaNodeId, value: Variant)
+## No more connected/connection_lost/connection_failed signals — status is
+## now conveyed exclusively via config.connection_status /
+## config.last_error, which UI binds to directly. This class still emits
+## tag_value_changed for now (see note below on whether to drop that too).
+signal tag_value_changed(subscription_id: String, node_id: OpcUaNodeId, value: Variant)
 
-var server_id: String
 var config: ReactiveOpcUaServer
 
 var _client: GodotOpcUa
-var _connected: bool = false
 var _last_tick_ms: int = 0
 var _poll_accum_sec: float = 0.0
-
-## True once the user explicitly calls disconnect_from_server() (e.g. via the
-## server menu). While set, apply_config() will NOT auto-reconnect on
-## structural project changes — the user must explicitly reconnect. Cleared
-## whenever connect_to_server() is called again.
-var _manually_disconnected: bool = false
-
-## group_id (String) -> OpcUaGroup
-var _groups: Dictionary = {}
-
-var _bound_groups: ReactiveArray = null
-var _groups_changed_callable: Callable = Callable()
+var _subscriptions: Dictionary = {}
+var _bound_subscriptions: ReactiveArray = null
+var _subscriptions_changed_callable: Callable = Callable()
 
 var client: GodotOpcUa:
-    get:
-        return _client
+    get: return _client
 
-# ── Init ──────────────────────────────────────────────────────────────────
-
-func _init(p_server_id: String) -> void:
-    server_id = p_server_id
-    name = "OpcUaServerConnection_%s" % p_server_id
+func _init() -> void:
     _client = GodotOpcUa.new()
 
-# ── Per-frame polling ───────────────────────────────────────────────────────
-
 func _process(delta: float) -> void:
-    if config == null:
+    if config == null or not _is_connected():
         return
-
     _poll_accum_sec += delta
     var interval: float = maxf(config.poll_interval_sec.value, 0.001)
     if _poll_accum_sec < interval:
         return
-
     _poll_accum_sec = 0.0
     poll()
 
-
 func _exit_tree() -> void:
-    if _connected:
+    if _is_connected():
         disconnect_from_server()
 
-# ── Config application ──────────────────────────────────────────────────────
-
-## Applies (or re-applies) the reactive config. Safe to call repeatedly
-## whenever the project's server layout changes. Respects a prior manual
-## disconnect — connection-parameter changes still reconnect (since the
-## server identity itself changed), but unrelated config changes (e.g. group
-## edits) will NOT resurrect a connection the user explicitly closed.
 func apply_config(cfg: ReactiveOpcUaServer) -> void:
     var is_initial: bool = config == null
-
     var connection_params_changed: bool = is_initial \
         or config.endpoint_url.value != cfg.endpoint_url.value \
         or config.security_policy.value != cfg.security_policy.value \
@@ -75,93 +46,102 @@ func apply_config(cfg: ReactiveOpcUaServer) -> void:
         or config.password.value != cfg.password.value
 
     config = cfg
-    server_id = cfg.id.value
-
-    _client.set_reconnect_interval(cfg.reconnect_interval_sec.value)
-    _client.set_max_reconnect_attempts(cfg.max_reconnect_attempts.value)
-
-    _bind_groups(cfg.groups)
-    _reconcile_groups()
+    name = "OpcUaServerConnection_%s" % cfg.id.value
 
     if connection_params_changed:
-        if _connected:
-            disconnect_from_server()
-        _manually_disconnected = false
-        connect_to_server()
-    elif not _connected and not _manually_disconnected:
-        connect_to_server()
+        _client.set_reconnect_interval(cfg.reconnect_interval_sec.value)
+        _client.set_max_reconnect_attempts(cfg.max_reconnect_attempts.value)
+
+    _bind_subscriptions(cfg.subscriptions)
+    _reconcile_subscriptions()
+
+    if connection_params_changed and _is_connected():
+        disconnect_from_server()
 
 # ── Binding ─────────────────────────────────────────────────────────────────
 
-func _bind_groups(groups: ReactiveArray) -> void:
-    if _bound_groups != null and _groups_changed_callable.is_valid():
-        _bound_groups.disconnect_self_changed(_groups_changed_callable)
+func _bind_subscriptions(subscriptions: ReactiveArray) -> void:
+    if _bound_subscriptions != null and _subscriptions_changed_callable.is_valid():
+        _bound_subscriptions.reactive_changed.disconnect(_subscriptions_changed_callable)
 
-    _bound_groups = null
-    _groups_changed_callable = Callable()
+    _bound_subscriptions = null
+    _subscriptions_changed_callable = Callable()
 
-    if groups == null:
+    if subscriptions == null:
         return
 
-    _groups_changed_callable = func(_origin: Reactive) -> void:
-        _reconcile_groups()
+    _subscriptions_changed_callable = func(_origin: Reactive) -> void:
+        _reconcile_subscriptions()
 
-    groups.connect_self_changed(_groups_changed_callable)
-    _bound_groups = groups
+    subscriptions.connect_self_changed(_subscriptions_changed_callable)
+    _bound_subscriptions = subscriptions
 
 # ── Reconciliation ──────────────────────────────────────────────────────────
 
-func _reconcile_groups() -> void:
+func _reconcile_subscriptions() -> void:
     if config == null:
         return
 
     var configured_ids: Dictionary = {}
 
-    for group_cfg: ReactiveOpcUaGroup in config.groups.values():
-        var group_id: String = group_cfg.id.value
-        configured_ids[group_id] = true
+    for sub_cfg: ReactiveOpcUaSubscription in config.subscriptions.values():
+        var subscription_id: String = sub_cfg.id.value
 
-        if _groups.has(group_id):
-            var group: OpcUaGroup = _groups[group_id]
-            group.apply_config(group_cfg)
+        if configured_ids.has(subscription_id):
+            push_warning("OpcUaServerConnection [%s]: duplicate subscription id '%s' — skipping duplicate." % [config.id.value, subscription_id])
+            continue
+        configured_ids[subscription_id] = true
+
+        if _subscriptions.has(subscription_id):
+            var subscription: OpcUaSubscription = _subscriptions[subscription_id]
+            subscription.apply_config(sub_cfg)
         else:
-            _spawn_group(group_cfg)
+            _spawn_subscription(sub_cfg)
 
-    for group_id: String in _groups.keys().duplicate():
-        if not configured_ids.has(group_id):
-            _teardown_group(group_id)
+    for subscription_id: String in _subscriptions.keys().duplicate():
+        if not configured_ids.has(subscription_id):
+            _teardown_subscription(subscription_id)
 
 
-func _spawn_group(group_cfg: ReactiveOpcUaGroup) -> void:
-    var group_id: String = group_cfg.id.value
-    var group: OpcUaGroup = OpcUaGroup.new(group_id)
+func _spawn_subscription(sub_cfg: ReactiveOpcUaSubscription) -> void:
+    var subscription_id: String = sub_cfg.id.value
+    var subscription: OpcUaSubscription = OpcUaSubscription.new(subscription_id)
 
-    group.tag_value_changed.connect(
+    subscription.tag_value_changed.connect(
         func(node_id: OpcUaNodeId, value: Variant) -> void:
-            tag_value_changed.emit(server_id, group_id, node_id, value)
+            tag_value_changed.emit(subscription_id, node_id, value)
     )
 
-    _groups[group_id] = group
-    group.apply_config(group_cfg)
+    _subscriptions[subscription_id] = subscription
+    subscription.apply_config(sub_cfg)
+
+    # If already connected when a new subscription is added at runtime,
+    # bring it live immediately rather than waiting for the next poll's
+    # dirty-check (apply_config() itself always marks new subscriptions
+    # dirty, so rebuild() here is what actually creates the OPC UA
+    # subscription without waiting a full poll interval).
+    if _is_connected() and subscription.is_dirty():
+        subscription.rebuild(_client)
 
 
-func _teardown_group(group_id: String) -> void:
-    var group: OpcUaGroup = _groups.get(group_id)
-    if group != null:
-        group.teardown(_client)
-    _groups.erase(group_id)
+func _teardown_subscription(subscription_id: String) -> void:
+    var subscription: OpcUaSubscription = _subscriptions.get(subscription_id)
+    if subscription != null:
+        subscription.teardown(_client)
+    _subscriptions.erase(subscription_id)
 
 # ── Connection ────────────────────────────────────────────────────────────
 
-## Explicitly (re)connects to the server. Clears any prior manual-disconnect
-## flag, since an explicit connect always represents user/system intent to
-## be connected going forward.
+## Explicitly connects to the server. This is the ONLY way a connection is
+## ever established — never called automatically by apply_config() or
+## reconciliation. Callers (typically OpcUaManager, on behalf of the UI or
+## an explicit app-level policy) decide when this should happen.
 func connect_to_server() -> bool:
     if config == null:
-        push_warning("OpcUaServerConnection [%s]: connect attempted before apply_config()." % server_id)
+        push_warning("OpcUaServerConnection: connect attempted before apply_config().")
         return false
 
-    _manually_disconnected = false
+    config.set_connecting()
 
     var ok: bool
     if config.username.value.is_empty():
@@ -172,119 +152,116 @@ func connect_to_server() -> bool:
         )
 
     if not ok:
-        push_warning("OpcUaServerConnection [%s]: connection failed." % server_id)
+        push_warning("OpcUaServerConnection [%s]: connection failed." % config.id.value)
+        config.set_connection_failed("Connection attempt failed")
         return false
 
-    _rebuild_all_groups()
+    _rebuild_all_subscriptions()
     _last_tick_ms = Time.get_ticks_msec()
+    config.set_connected()
     return true
 
 
-## Disconnects from the server. Does NOT set _manually_disconnected —
-## callers that want the disconnect to "stick" against future reconciliation
-## (e.g. the server menu) should call disconnect_manually() instead.
+## Explicitly disconnects from the server. Connection will not resume
+## automatically under any circumstance — connect_to_server() must be
+## called again explicitly.
 func disconnect_from_server() -> void:
-    for group: OpcUaGroup in _groups.values():
-        group.delete(_client)
+    for subscription: OpcUaSubscription in _subscriptions.values():
+        subscription.delete(_client)
     _client.disconnect_server()
-    _connected = false
-
-
-## Disconnects and marks this connection as manually disconnected, so
-## apply_config() will not silently reconnect it on unrelated config changes
-## (e.g. editing a different server, or this server's groups/tags) until the
-## user explicitly reconnects via connect_to_server().
-func disconnect_manually() -> void:
-    disconnect_from_server()
-    _manually_disconnected = true
+    config.set_disconnected()
 
 
 func teardown() -> void:
     disconnect_from_server()
 
-    for group_id: String in _groups.keys().duplicate():
-        _teardown_group(group_id)
+    for subscription_id: String in _subscriptions.keys().duplicate():
+        _teardown_subscription(subscription_id)
 
-    if _bound_groups != null and _groups_changed_callable.is_valid():
-        _bound_groups.disconnect_self_changed(_groups_changed_callable)
+    if _bound_subscriptions != null and _subscriptions_changed_callable.is_valid():
+        _bound_subscriptions.reactive_changed.disconnect(_subscriptions_changed_callable)
 
-    _bound_groups = null
-    _groups_changed_callable = Callable()
+    _bound_subscriptions = null
+    _subscriptions_changed_callable = Callable()
 
     queue_free()
 
 # ── Poll ─────────────────────────────────────────────────────────────────────
 
+## Only ever called while connected (see _process() guard above).
+## Handles: detecting the underlying client-level connection dropping
+## (e.g. network loss) and applying incoming tag updates. Does NOT attempt
+## to reconnect — that remains an explicit, external decision.
 func poll() -> void:
-    if _client.has_connection_failed():
-        push_warning("OpcUaServerConnection [%s]: reconnection exhausted." % server_id)
-        _connected = false
-        connection_failed.emit(server_id)
+    var a = _client.has_connection_failed()
+    var b = _client.is_server_connected()
+    if _client.has_connection_failed() or not _client.is_server_connected():
+        _poll_accum_sec = 0.0
+        for subscription: OpcUaSubscription in _subscriptions.values():
+            subscription.delete(_client)
+        config.set_disconnected()
         return
 
-    var now_connected: bool = _client.is_server_connected()
-    if now_connected != _connected:
-        _connected = now_connected
-        if _connected:
-            _rebuild_all_groups()
-            _last_tick_ms = Time.get_ticks_msec()
-            connected.emit(server_id)
-        else:
-            connection_lost.emit(server_id)
+    for subscription: OpcUaSubscription in _subscriptions.values():
+        if subscription.is_dirty():
+            subscription.rebuild(_client)
 
-    if not _connected:
-        return
-
-    for group: OpcUaGroup in _groups.values():
-        if group.is_dirty():
-            group.rebuild(_client)
-
-    ## Assumes GodotOpcUa now returns changed tags keyed by OpcUaNodeId.
-    ## If it still returns String keys, change this loop to parse each key
-    ## via OpcUaNodeId.parse(key) before calling apply_update().
     var changed: Dictionary = _client.get_changed_tags_since(_last_tick_ms)
     _last_tick_ms = Time.get_ticks_msec()
 
     for node_id: OpcUaNodeId in changed:
-        var group: OpcUaGroup = find_group_for_tag(node_id)
-        if group != null:
-            group.apply_update(node_id, changed[node_id])
+        var subscription: OpcUaSubscription = find_subscription_for_tag(node_id)
+        if subscription != null:
+            subscription.apply_update(node_id, changed[node_id])
 
 # ── Write ─────────────────────────────────────────────────────────────────
 
 func write_tag(node_id: OpcUaNodeId, value: Variant) -> bool:
-    var group: OpcUaGroup = find_group_for_tag(node_id)
-    if group == null:
-        push_warning("OpcUaServerConnection [%s]: write on unregistered tag '%s'." % [server_id, node_id.to_string()])
+    var subscription: OpcUaSubscription = find_subscription_for_tag(node_id)
+    if subscription == null:
+        push_warning("OpcUaServerConnection [%s]: write on unregistered tag '%s'." % [config.id.value, node_id.to_string()])
         return false
-    return group.write_tag(node_id, value, _client)
+    return subscription.write_tag(node_id, value, _client)
 
+# ── Tag / subscription lookup ────────────────────────────────────────────────
 
-## Public — used by OpcUaManager.get_tag_value() and internally by poll()/write_tag().
-func find_group_for_tag(node_id: OpcUaNodeId) -> OpcUaGroup:
-    for group: OpcUaGroup in _groups.values():
-        if group.has_tag(node_id):
-            return group
+func find_subscription_for_tag(node_id: OpcUaNodeId) -> OpcUaSubscription:
+    for subscription: OpcUaSubscription in _subscriptions.values():
+        if subscription.has_tag(node_id):
+            return subscription
     return null
+
+
+func get_tag(node_id: OpcUaNodeId) -> ReactiveOpcUaTag:
+    var subscription: OpcUaSubscription = find_subscription_for_tag(node_id)
+    return subscription.get_tag(node_id) if subscription != null else null
 
 # ── Accessors ─────────────────────────────────────────────────────────────
 
 func is_server_connected() -> bool:
-    return _connected
+    return _is_connected()
 
 
-func get_active_group_count() -> int:
-    return _groups.size()
+func get_active_subscription_count() -> int:
+    return _subscriptions.size()
 
 
-func get_group_ids() -> Array:
-    return _groups.keys()
+func get_subscription_ids() -> Array:
+    return _subscriptions.keys()
 
 
-func get_group(group_id: String) -> OpcUaGroup:
-    return _groups.get(group_id, null)
+func get_subscription(subscription_id: String) -> OpcUaSubscription:
+    return _subscriptions.get(subscription_id, null)
 
 
-func _rebuild_all_groups() -> void:
-    for group: OpcUaGroup in _groups.values():
-        group.rebuild(_client)
+func _rebuild_all_subscriptions() -> void:
+    for subscription: OpcUaSubscription in _subscriptions.values():
+        subscription.rebuild(_client)
+
+# ── Internal helpers ──────────────────────────────────────────────────────
+
+## Single source of truth for "are we connected", derived from
+## config.connection_status rather than any internally tracked flag.
+func _is_connected() -> bool:
+    return config != null \
+        and config.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTED

@@ -10,7 +10,6 @@
 [ext_resource type="PackedScene" uid="uid://dg1rxoysdt2ry" path="res://scenes/dialogs/property_panel/property_panel.tscn" id="5_o6xl0"]
 [ext_resource type="PackedScene" uid="uid://dmlg5i5n4rxtw" path="res://scenes/dialogs/opc_ua_connection_dialog/opc_ua_connection_dialog.tscn" id="6_tefeu"]
 [ext_resource type="PackedScene" uid="uid://dakwhsxj2tr72" path="res://scenes/dialogs/browse_nodes/browse_nodes.tscn" id="8_tipki"]
-[ext_resource type="PackedScene" uid="uid://6w82ilq1u7j6" path="res://scenes/dialogs/opc_ua_status_dialog/opc_ua_status_dialog.tscn" id="10_choun"]
 
 [node name="Main" type="Control" unique_id=1699472879]
 layout_mode = 3
@@ -178,6 +177,3 @@ initial_position = 2
 force_native = true
 display_mode = 1
 access = 2
-
-[node name="OpcUaStatusDialog" parent="Dialogs" unique_id=74023926 instance=ExtResource("10_choun")]
-visible = false

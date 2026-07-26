@@ -6,31 +6,36 @@ extends Tree
 ## via select_server()).
 signal server_selected(server_id: String)
 
-## Emitted when a subscription-group row is selected (by user click or
-## programmatically via select_group()).
-signal group_selected(server_id: String, group_id: String)
+## Emitted when a subscription row is selected (by user click or
+## programmatically via select_subscription()).
+signal subscription_selected(server_id: String, subscription_id: String)
 
 ## Emitted when a tag row is selected (by user click or programmatically
 ## via select_tag()).
-signal tag_selected(server_id: String, group_id: String, tag_id: String)
+signal tag_selected(server_id: String, subscription_id: String, tag_id: String)
 
 ## Emitted when the selection becomes invalid or is explicitly cleared.
 signal selection_cleared
 
-@onready var _status_refresh_timer: Timer = $StatusRefreshTimer
-
-const STATUS_CONNECTED    :String = "● "
-const STATUS_DISCONNECTED :String = "○ "
+const STATUS_CONNECTED       :String = "● "
+const STATUS_DISCONNECTED    :String = "○ "
+const STATUS_CONNECTING      :String = "◐ "
+const STATUS_CONNECTION_FAILED :String = "✕ "
 
 const INACTIVE_TAG_COLOR: Color = Color(0.6, 0.6, 0.6)
 
-enum _SelectionKind { NONE, SERVER, GROUP, TAG }
+enum _SelectionKind { NONE, SERVER, SUBSCRIPTION, TAG }
 
-var _servers:            Array[ReactiveOpcUaServer] = []
-var _selected_server_id: String = ""
-var _selected_group_id:  String = ""
-var _selected_tag_id:    String = ""
-var _selection_kind:     _SelectionKind = _SelectionKind.NONE
+var _servers:               Array[ReactiveOpcUaServer] = []
+var _selected_server_id:      String = ""
+var _selected_subscription_id: String = ""
+var _selected_tag_id:         String = ""
+var _selection_kind:          _SelectionKind = _SelectionKind.NONE
+
+## server_id (String) -> Callable, so each server's connection_status
+## binding can be cleanly disconnected when the tree is rebuilt or a
+## server is removed.
+var _status_bindings: Dictionary = {}
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -45,11 +50,9 @@ func _ready() -> void:
 
     item_selected.connect(_on_item_selected)
 
-    _status_refresh_timer.timeout.connect(_on_status_refresh_timeout)
 
-    OpcUaManager.connected.connect(_on_connection_state_changed.unbind(1))
-    OpcUaManager.connection_lost.connect(_on_connection_state_changed.unbind(1))
-    OpcUaManager.connection_failed.connect(_on_connection_state_changed.unbind(1))
+func _exit_tree() -> void:
+    _unbind_all_status()
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -60,72 +63,53 @@ func set_servers(servers: Array[ReactiveOpcUaServer]) -> void:
     _rebuild()
 
 
-## Refreshes only the connection-status prefixes, without rebuilding the
-## tree structure. Cheaper than set_servers() when only status may have
-## changed.
-func refresh_status_icons() -> void:
-    var root: TreeItem = get_root()
-    if root == null:
-        return
-
-    var server_item: TreeItem = root.get_first_child()
-    while server_item != null:
-        var meta: Dictionary = server_item.get_metadata(0)
-        if meta.get("type") == "server":
-            var server_id: String = meta.get("server_id", "")
-            var cfg: ReactiveOpcUaServer = _find_server(server_id)
-            if cfg != null:
-                server_item.set_text(0, _status_prefix(server_id) + cfg.display_name.value)
-        server_item = server_item.get_next()
-
-
 ## Selects a server row programmatically and emits server_selected.
 func select_server(server_id: String) -> void:
     var item: TreeItem = _find_server_item(server_id)
     if item == null:
         return
     item.select(0)
-    _selected_server_id = server_id
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
-    _selection_kind     = _SelectionKind.SERVER
+    _selected_server_id       = server_id
+    _selected_subscription_id = ""
+    _selected_tag_id          = ""
+    _selection_kind           = _SelectionKind.SERVER
     server_selected.emit(server_id)
 
 
-## Selects a group row programmatically and emits group_selected.
-func select_group(server_id: String, group_id: String) -> void:
-    var item: TreeItem = _find_group_item(server_id, group_id)
+## Selects a subscription row programmatically and emits subscription_selected.
+func select_subscription(server_id: String, subscription_id: String) -> void:
+    var item: TreeItem = _find_subscription_item(server_id, subscription_id)
     if item == null:
         return
     item.select(0)
-    _selected_server_id = server_id
-    _selected_group_id  = group_id
-    _selected_tag_id    = ""
-    _selection_kind     = _SelectionKind.GROUP
-    group_selected.emit(server_id, group_id)
+    _selected_server_id       = server_id
+    _selected_subscription_id = subscription_id
+    _selected_tag_id          = ""
+    _selection_kind           = _SelectionKind.SUBSCRIPTION
+    subscription_selected.emit(server_id, subscription_id)
 
 
 ## Selects a tag row programmatically and emits tag_selected.
-func select_tag(server_id: String, group_id: String, tag_id: String) -> void:
-    var item: TreeItem = _find_tag_item(server_id, group_id, tag_id)
+func select_tag(server_id: String, subscription_id: String, tag_id: String) -> void:
+    var item: TreeItem = _find_tag_item(server_id, subscription_id, tag_id)
     if item == null:
         return
     item.select(0)
-    _selected_server_id = server_id
-    _selected_group_id  = group_id
-    _selected_tag_id    = tag_id
-    _selection_kind     = _SelectionKind.TAG
-    tag_selected.emit(server_id, group_id, tag_id)
+    _selected_server_id       = server_id
+    _selected_subscription_id = subscription_id
+    _selected_tag_id          = tag_id
+    _selection_kind           = _SelectionKind.TAG
+    tag_selected.emit(server_id, subscription_id, tag_id)
 
 
 ## Clears the current selection without emitting server_selected /
-## group_selected / tag_selected. Emits selection_cleared.
+## subscription_selected / tag_selected. Emits selection_cleared.
 func clear_selection() -> void:
     deselect_all()
-    _selected_server_id = ""
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
-    _selection_kind     = _SelectionKind.NONE
+    _selected_server_id       = ""
+    _selected_subscription_id = ""
+    _selected_tag_id          = ""
+    _selection_kind           = _SelectionKind.NONE
     selection_cleared.emit()
 
 
@@ -133,16 +117,16 @@ func get_selected_server_id() -> String:
     return _selected_server_id
 
 
-func get_selected_group_id() -> String:
-    return _selected_group_id
+func get_selected_subscription_id() -> String:
+    return _selected_subscription_id
 
 
 func get_selected_tag_id() -> String:
     return _selected_tag_id
 
 
-func has_group_selected() -> bool:
-    return _selection_kind == _SelectionKind.GROUP
+func has_subscription_selected() -> bool:
+    return _selection_kind == _SelectionKind.SUBSCRIPTION
 
 
 func has_tag_selected() -> bool:
@@ -151,6 +135,7 @@ func has_tag_selected() -> bool:
 # ── Internal build ────────────────────────────────────────────────────────
 
 func _rebuild() -> void:
+    _unbind_all_status()
     clear()
     var root: TreeItem = create_item()
     if root == null:
@@ -158,29 +143,31 @@ func _rebuild() -> void:
 
     for cfg: ReactiveOpcUaServer in _servers:
         var server_item: TreeItem = create_item(root)
-        server_item.set_text(0, _status_prefix(cfg.id.value) + cfg.display_name.value)
+        server_item.set_text(0, _status_prefix(cfg) + cfg.display_name.value)
         server_item.set_text(1, "")
         server_item.set_metadata(0, { "type": "server", "server_id": cfg.id.value })
 
-        for group: ReactiveOpcUaGroup in cfg.groups.value:
-            var group_item: TreeItem = create_item(server_item)
-            group_item.set_text(0, "  " + group.display_name.value)
-            group_item.set_text(1, "%d ms" % group.pub_interval_ms.value)
-            group_item.set_metadata(0, {
-                "type":      "group",
-                "server_id": cfg.id.value,
-                "group_id":  group.id.value
+        _bind_status(cfg)
+
+        for subscription: ReactiveOpcUaSubscription in cfg.subscriptions.value:
+            var subscription_item: TreeItem = create_item(server_item)
+            subscription_item.set_text(0, "  " + subscription.display_name.value)
+            subscription_item.set_text(1, "%d ms" % subscription.pub_interval_ms.value)
+            subscription_item.set_metadata(0, {
+                "type":            "subscription",
+                "server_id":       cfg.id.value,
+                "subscription_id": subscription.id.value
             })
 
-            for tag: ReactiveOpcUaTag in group.tags.value:
-                var tag_item: TreeItem = create_item(group_item)
+            for tag: ReactiveOpcUaTag in subscription.tags.value:
+                var tag_item: TreeItem = create_item(subscription_item)
                 tag_item.set_text(0, "    " + tag.display_name.value)
                 tag_item.set_text(1, tag.node_id.value)
                 tag_item.set_metadata(0, {
-                    "type":      "tag",
-                    "server_id": cfg.id.value,
-                    "group_id":  group.id.value,
-                    "tag_id":    tag.id.value
+                    "type":            "tag",
+                    "server_id":       cfg.id.value,
+                    "subscription_id": subscription.id.value,
+                    "tag_id":          tag.id.value
                 })
 
                 if not tag.is_active.value:
@@ -197,16 +184,16 @@ func _restore_selection() -> void:
     match _selection_kind:
         _SelectionKind.TAG:
             var tag_item: TreeItem = _find_tag_item(
-                _selected_server_id, _selected_group_id, _selected_tag_id
+                _selected_server_id, _selected_subscription_id, _selected_tag_id
             )
             if tag_item != null:
                 tag_item.select(0)
                 return
 
-        _SelectionKind.GROUP:
-            var group_item: TreeItem = _find_group_item(_selected_server_id, _selected_group_id)
-            if group_item != null:
-                group_item.select(0)
+        _SelectionKind.SUBSCRIPTION:
+            var subscription_item: TreeItem = _find_subscription_item(_selected_server_id, _selected_subscription_id)
+            if subscription_item != null:
+                subscription_item.select(0)
                 return
 
         _SelectionKind.SERVER:
@@ -216,11 +203,45 @@ func _restore_selection() -> void:
                 return
 
     # Previously selected item no longer exists.
-    _selected_server_id = ""
-    _selected_group_id  = ""
-    _selected_tag_id    = ""
-    _selection_kind     = _SelectionKind.NONE
+    _selected_server_id       = ""
+    _selected_subscription_id = ""
+    _selected_tag_id          = ""
+    _selection_kind           = _SelectionKind.NONE
     selection_cleared.emit()
+
+# ── Status binding ───────────────────────────────────────────────────────────
+
+## Binds directly to this server's reactive connection_status field, so the
+## row's status prefix updates immediately on any transition
+## (disconnected/connecting/connected/failed) without polling.
+func _bind_status(cfg: ReactiveOpcUaServer) -> void:
+    var server_id: String = cfg.id.value
+    var callback: Callable = func(_origin: Reactive) -> void:
+        _refresh_status_row(server_id)
+
+    cfg.connection_status.connect_self_changed(callback)
+    _status_bindings[server_id] = { "cfg": cfg, "callable": callback }
+
+
+func _unbind_all_status() -> void:
+    for binding: Dictionary in _status_bindings.values():
+        var cfg: ReactiveOpcUaServer = binding.get("cfg")
+        var callback: Callable = binding.get("callable")
+        if cfg != null and callback.is_valid():
+            cfg.connection_status.reactive_changed.disconnect(callback)
+    _status_bindings.clear()
+
+
+## Updates a single server row's status prefix in place, without touching
+## the rest of the tree structure.
+func _refresh_status_row(server_id: String) -> void:
+    var item: TreeItem = _find_server_item(server_id)
+    if item == null:
+        return
+    var cfg: ReactiveOpcUaServer = _find_server(server_id)
+    if cfg == null:
+        return
+    item.set_text(0, _status_prefix(cfg) + cfg.display_name.value)
 
 # ── Lookup helpers ────────────────────────────────────────────────────────
 
@@ -244,24 +265,24 @@ func _find_server_item(server_id: String) -> TreeItem:
     return null
 
 
-func _find_group_item(server_id: String, group_id: String) -> TreeItem:
+func _find_subscription_item(server_id: String, subscription_id: String) -> TreeItem:
     var server_item: TreeItem = _find_server_item(server_id)
     if server_item == null:
         return null
-    var group_item: TreeItem = server_item.get_first_child()
-    while group_item != null:
-        var meta: Dictionary = group_item.get_metadata(0)
-        if meta.get("group_id") == group_id:
-            return group_item
-        group_item = group_item.get_next()
+    var subscription_item: TreeItem = server_item.get_first_child()
+    while subscription_item != null:
+        var meta: Dictionary = subscription_item.get_metadata(0)
+        if meta.get("subscription_id") == subscription_id:
+            return subscription_item
+        subscription_item = subscription_item.get_next()
     return null
 
 
-func _find_tag_item(server_id: String, group_id: String, tag_id: String) -> TreeItem:
-    var group_item: TreeItem = _find_group_item(server_id, group_id)
-    if group_item == null:
+func _find_tag_item(server_id: String, subscription_id: String, tag_id: String) -> TreeItem:
+    var subscription_item: TreeItem = _find_subscription_item(server_id, subscription_id)
+    if subscription_item == null:
         return null
-    var tag_item: TreeItem = group_item.get_first_child()
+    var tag_item: TreeItem = subscription_item.get_first_child()
     while tag_item != null:
         var meta: Dictionary = tag_item.get_metadata(0)
         if meta.get("tag_id") == tag_id:
@@ -270,9 +291,16 @@ func _find_tag_item(server_id: String, group_id: String, tag_id: String) -> Tree
     return null
 
 
-func _status_prefix(server_id: String) -> String:
-    return STATUS_CONNECTED if OpcUaManager.is_server_connected(server_id) \
-                            else STATUS_DISCONNECTED
+func _status_prefix(cfg: ReactiveOpcUaServer) -> String:
+    match cfg.connection_status.value:
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTED:
+            return STATUS_CONNECTED
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTING:
+            return STATUS_CONNECTING
+        ReactiveOpcUaServer.ConnectionStatus.CONNECTION_FAILED:
+            return STATUS_CONNECTION_FAILED
+        _:
+            return STATUS_DISCONNECTED
 
 # ── Signal handlers ───────────────────────────────────────────────────────
 
@@ -286,30 +314,22 @@ func _on_item_selected() -> void:
 
     match type:
         "server":
-            _selected_server_id = meta.get("server_id", "")
-            _selected_group_id  = ""
-            _selected_tag_id    = ""
-            _selection_kind     = _SelectionKind.SERVER
+            _selected_server_id       = meta.get("server_id", "")
+            _selected_subscription_id = ""
+            _selected_tag_id          = ""
+            _selection_kind           = _SelectionKind.SERVER
             server_selected.emit(_selected_server_id)
 
-        "group":
-            _selected_server_id = meta.get("server_id", "")
-            _selected_group_id  = meta.get("group_id",  "")
-            _selected_tag_id    = ""
-            _selection_kind     = _SelectionKind.GROUP
-            group_selected.emit(_selected_server_id, _selected_group_id)
+        "subscription":
+            _selected_server_id       = meta.get("server_id", "")
+            _selected_subscription_id = meta.get("subscription_id", "")
+            _selected_tag_id          = ""
+            _selection_kind           = _SelectionKind.SUBSCRIPTION
+            subscription_selected.emit(_selected_server_id, _selected_subscription_id)
 
         "tag":
-            _selected_server_id = meta.get("server_id", "")
-            _selected_group_id  = meta.get("group_id",  "")
-            _selected_tag_id    = meta.get("tag_id",    "")
-            _selection_kind     = _SelectionKind.TAG
-            tag_selected.emit(_selected_server_id, _selected_group_id, _selected_tag_id)
-
-
-func _on_connection_state_changed() -> void:
-    refresh_status_icons()
-
-
-func _on_status_refresh_timeout() -> void:
-    refresh_status_icons()
+            _selected_server_id       = meta.get("server_id", "")
+            _selected_subscription_id = meta.get("subscription_id", "")
+            _selected_tag_id          = meta.get("tag_id", "")
+            _selection_kind           = _SelectionKind.TAG
+            tag_selected.emit(_selected_server_id, _selected_subscription_id, _selected_tag_id)
