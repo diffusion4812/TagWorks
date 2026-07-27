@@ -158,6 +158,7 @@ func connect_to_server() -> bool:
 
     _rebuild_all_subscriptions()
     _last_tick_ms = Time.get_ticks_msec()
+    _client.start_polling(config.poll_interval_sec.value)
     config.set_connected()
     return true
 
@@ -209,10 +210,10 @@ func poll() -> void:
     var changed: Dictionary = _client.get_changed_tags_since(_last_tick_ms)
     _last_tick_ms = Time.get_ticks_msec()
 
-    for node_id: OpcUaNodeId in changed:
-        var subscription: OpcUaSubscription = find_subscription_for_tag(node_id)
+    for node_id: String in changed:
+        var subscription: OpcUaSubscription = find_subscription_for_tag(OpcUaNodeId.parse(node_id))
         if subscription != null:
-            subscription.apply_update(node_id, changed[node_id])
+            subscription.apply_update(OpcUaNodeId.parse(node_id), changed[node_id])
 
 # ── Write ─────────────────────────────────────────────────────────────────
 

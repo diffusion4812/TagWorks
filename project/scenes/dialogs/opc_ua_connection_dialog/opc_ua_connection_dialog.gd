@@ -32,7 +32,6 @@ var _selected_subscription_id: String         = ""
 var _selected_tag_id:         String          = ""
 var _form_dirty:              bool            = false
 var _commit_pending:          bool            = false
-var _bound_project:           ReactiveProject = null
 var _picker_active:           bool            = false
 var _picker_callback:         Callable        = Callable()
 
@@ -46,7 +45,6 @@ var _status_watch_callable: Callable            = Callable()
 
 func _ready() -> void:
     _connect_signals()
-    _rebind_project_signal()
     _refresh_tree()
     _set_panel(SelectionType.NONE)
 
@@ -64,7 +62,6 @@ func _connect_signals() -> void:
 
     test_button.pressed.connect(_on_test_pressed)
     browse_button.pressed.connect(_on_browse_pressed)
-    status_button.pressed.connect(_on_status_pressed)
     confirm_button.pressed.connect(_on_confirm_pressed)
     close_button.pressed.connect(_on_close_pressed)
     close_requested.connect(_on_close_pressed)
@@ -74,35 +71,30 @@ func _connect_signals() -> void:
     tag_detail_form.edited.connect(_on_form_edited)
     tag_detail_form.browse_requested.connect(_on_tag_browse_requested)
 
-    AppState.current_project.connect_self_changed(_on_current_project_changed)
+    # AppState.current_project is a permanent instance — bind once, forever.
+    # No rebinding needed on project load/close, since identity never changes.
+    AppState.current_project.changed.connect(_refresh_tree, CONNECT_DEFERRED)
+
+    # has_project toggles on load/new/close — this is what resets selection
+    # state and switches the panel, not a project "pointer" change.
+    AppState.has_project.connect_self_changed(_on_has_project_changed)
 
 # ── Project access helpers ────────────────────────────────────────────────────
 
 func _has_project() -> bool:
-    return AppState.current_project.value != null
-
-
-func _project() -> ReactiveProject:
-    return AppState.current_project.value
+    return AppState.has_project.value
 
 
 func _servers() -> Array[ReactiveOpcUaServer]:
-    var project: ReactiveProject = _project()
-    if project == null:
+    if not AppState.has_project.value:
         return []
-
-    var typed_servers: Array[ReactiveOpcUaServer] = []
-    typed_servers.assign(project.opc_ua_servers.value)
-    return typed_servers
+    return AppState.current_project.get_servers_sorted()
 
 
 func _get_server(server_id: String) -> ReactiveOpcUaServer:
     if server_id == "":
         return null
-    for cfg: ReactiveOpcUaServer in _servers():
-        if cfg.id.value == server_id:
-            return cfg
-    return null
+    return AppState.current_project.get_server(server_id)
 
 
 func _get_subscription(server: ReactiveOpcUaServer, subscription_id: String) -> ReactiveOpcUaSubscription:
@@ -123,25 +115,6 @@ func _get_tag(subscription: ReactiveOpcUaSubscription, tag_id: String) -> Reacti
     return null
 
 
-func _add_server(cfg: ReactiveOpcUaServer) -> void:
-    if not _has_project():
-        return
-    _project().opc_ua_servers.append(cfg)
-
-
-## Removes the server from project data. OpcUaManager is not called
-## directly — it watches AppState.current_project reactively and will
-## rebuild its live connections automatically as a result of this mutation.
-func _remove_server(server_id: String) -> void:
-    if not _has_project():
-        return
-    var servers: Array[ReactiveOpcUaServer] = _servers()
-    for i: int in servers.size():
-        if servers[i].id.value == server_id:
-            servers.remove_at(i)
-            break
-
-
 func _remove_subscription(cfg: ReactiveOpcUaServer, subscription_id: String) -> void:
     if cfg == null:
         return
@@ -152,10 +125,13 @@ func _remove_subscription(cfg: ReactiveOpcUaServer, subscription_id: String) -> 
             return
     push_warning("Delete: selected subscription '%s' not found on server '%s'." % [subscription_id, cfg.id.value])
 
-# ── Project (re)binding ───────────────────────────────────────────────────────
+# ── Project load / close handling ─────────────────────────────────────────────
 
-func _on_current_project_changed(_origin: ReactiveVariant) -> void:
-    _rebind_project_signal()
+## Fires when a project is loaded, created, or closed (has_project toggles).
+## Note: this does NOT fire on ordinary edits to the current project's
+## contents — those are covered by the permanent AppState.current_project.changed
+## connection above, which simply calls _refresh_tree().
+func _on_has_project_changed(_origin: ReactiveBool) -> void:
     _unwatch_server_status()
 
     _selection_type            = SelectionType.NONE
@@ -166,16 +142,6 @@ func _on_current_project_changed(_origin: ReactiveVariant) -> void:
     _set_panel(SelectionType.NONE)
 
     _refresh_tree()
-
-
-func _rebind_project_signal() -> void:
-    if _bound_project != null and _bound_project.changed.is_connected(_refresh_tree):
-        _bound_project.changed.disconnect(_refresh_tree)
-
-    _bound_project = _project()
-
-    if _bound_project != null:
-        _bound_project.changed.connect(_refresh_tree, CONNECT_DEFERRED)
 
 # ── Tree refresh ──────────────────────────────────────────────────────────────
 
@@ -360,12 +326,12 @@ func _on_add_server_pressed() -> void:
     _commit_form()
 
     var id: String = "server_%d" % Time.get_ticks_msec()
-    var cfg: ReactiveOpcUaServer = ReactiveOpcUaServer.new({}, _bound_project.opc_ua_servers, id)
+    var cfg: ReactiveOpcUaServer = ReactiveOpcUaServer.new({}, AppState.current_project.opc_ua_servers, id)
     cfg.id.value           = id
     cfg.display_name.value = "New Server"
     cfg.endpoint_url.value = "opc.tcp://127.0.0.1:4840"
 
-    _add_server(cfg)
+    AppState.current_project.add_server(cfg)
 
     server_tree.set_servers(_servers())
     server_tree.select_server(cfg.id.value)
@@ -423,7 +389,7 @@ func _on_remove_pressed() -> void:
 
     match _selection_type:
         SelectionType.SERVER:
-            _remove_server(_selected_server_id)
+            AppState.current_project.remove_server(_selected_server_id)
             _selected_server_id       = ""
             _selected_subscription_id = ""
             _selected_tag_id          = ""
@@ -500,17 +466,6 @@ func _on_browse_pressed() -> void:
 
     # Footer "Browse" is view-only — no callback needed on pick.
     _open_browser_for_server(_selected_server_id)
-
-func _on_status_pressed() -> void:
-    if _selected_server_id == "":
-        return
-
-    _commit_form()
-
-    var status_dialog: OpcUaStatusDialog = get_node("/root/Main/Dialogs/OpcUaStatusDialog")
-
-    status_dialog.focus_server(_selected_server_id)
-    status_dialog.show()
 
 func _on_confirm_pressed() -> void:
     _commit_form()

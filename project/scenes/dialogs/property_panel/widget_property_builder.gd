@@ -255,7 +255,6 @@ func add_node_field(
     tag_row.add_child(tag_label)
     tag_row.add_child(tag_edit)
     tag_row.add_child(browse_btn)
-    tag_row.add_child(_make_script_button(prop))
     col.add_child(tag_row)
 
     # ── Reactive → UI (binding_prop changes update the widgets) ──────────────
@@ -387,8 +386,7 @@ func _populate_server_option(option: OptionButton) -> void:
         return
 
     for cfg: ReactiveOpcUaServer in project.opc_ua_servers.values():
-        var prefix: String = "● " if OpcUaManager.is_server_connected(cfg.id.value) else "○ "
-        option.add_item(prefix + cfg.display_name.value)
+        option.add_item(cfg.display_name.value)
         option.set_item_metadata(option.item_count - 1, cfg.id.value)
 
 

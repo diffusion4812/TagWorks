@@ -37,11 +37,6 @@ var _server_submenus: Dictionary = {}
 ## { server_id: { "cfg": ReactiveOpcUaServer, "callable": Callable } }
 var _status_bindings: Dictionary = {}
 
-## Tracks the actual ReactiveProject we're currently bound to, so we can
-## unbind cleanly (and avoid dangling references) when the project changes.
-var _bound_project: ReactiveProject = null
-var _servers_changed_callable: Callable = Callable()
-
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -68,14 +63,24 @@ func _connect_signals() -> void:
     edit_mode_toggle.toggled.connect(_on_mode_toggled)
 
     # ── Server registry (sourced from the reactive project) ───────────────────
-    _bind_project_servers()
+    # AppState.current_project is a permanent instance — bind once, forever.
+    # Structural changes to opc_ua_servers (add/remove/reorder) always
+    # trigger a menu rebuild, with no rebinding needed on project load/close.
+    AppState.current_project.opc_ua_servers.connect_self_changed(
+        func(_origin: Reactive) -> void:
+            _rebuild_server_menu()
+    )
     _rebuild_server_menu()
 
     # ── File dialog ───────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
     # ── AppState ──────────────────────────────────────────────────────────────
-    AppState.current_project.connect_self_changed(_on_current_project_changed)
+    # has_project toggles on load/new/close — this is what drives canvas
+    # visibility, not a project "pointer" change.
+    AppState.has_project.connect_self_changed(_on_has_project_changed)
+    _on_has_project_changed(AppState.has_project)
+
     AppState.edit_mode.connect_self_changed(
         func(edit_mode: ReactiveBool) -> void:
             edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
@@ -135,35 +140,11 @@ func _on_server_menu_pressed(id: int) -> void:
     match id:
         0: connection_dialog.popup_centered(Vector2i(800, 520))
 
-# ── Server Menu — Reactive Binding ─────────────────────────────────────────────
-
-## Rebinds to the current project's `opc_ua_servers` array, so that any
-## structural change (add/remove/reorder) triggers a menu rebuild, even
-## though AppState.current_project.value itself did not change. Explicitly
-## unbinds from the previously bound project first to avoid dangling
-## references.
-func _bind_project_servers() -> void:
-    if _bound_project != null and _servers_changed_callable.is_valid():
-        _bound_project.opc_ua_servers.reactive_changed.disconnect(_servers_changed_callable)
-
-    _bound_project = null
-    _servers_changed_callable = Callable()
-
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
-        return
-
-    _servers_changed_callable = func(_origin: Reactive) -> void:
-        _rebuild_server_menu()
-
-    project.opc_ua_servers.connect_self_changed(_servers_changed_callable)
-    _bound_project = project
-
+# ── Server Menu — Reactive Rebuild ────────────────────────────────────────────
 
 ## Tears down all dynamic server menu entries (and their status bindings)
-## and rebuilds them from the current project's server list. Called when
-## the server list changes structurally, or when the bound project itself
-## changes.
+## and rebuilds them from the current project's server list. Called on
+## any structural change to opc_ua_servers (add/remove/reorder).
 func _rebuild_server_menu() -> void:
     _unbind_all_status()
 
@@ -175,17 +156,12 @@ func _rebuild_server_menu() -> void:
     while server_menu.item_count > SERVER_MENU_FIXED_ITEM_COUNT:
         server_menu.remove_item(server_menu.item_count - 1)
 
-    var project: ReactiveProject = _bound_project
-    if project == null:
-        return
-
-    var servers: Array = project.opc_ua_servers.value
-    if servers.is_empty():
+    if AppState.current_project.opc_ua_servers.value.is_empty():
         return
 
     server_menu.add_separator()
 
-    for cfg: ReactiveOpcUaServer in servers:
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.value:
         var server_id: String = cfg.id.value
 
         var submenu: PopupMenu = PopupMenu.new()
@@ -293,17 +269,12 @@ func _on_file_dialog_selected(path: String) -> void:
 
 # ── AppState — Project Handlers ───────────────────────────────────────────────
 
-## Fires whenever AppState.current_project changes.
-## An empty name and path indicates a closed or unloaded project.
-func _on_current_project_changed(_project: ReactiveVariant) -> void:
-    _bind_project_servers()
-    _rebuild_server_menu()
-
-    var project: ReactiveProject = AppState.current_project.value
-    var is_open: bool = project != null and (
-        not project.file_path.value.is_empty() \
-        or not project.project_name.value.is_empty()
-    )
+## Fires whenever a project is loaded, created, or closed (has_project
+## toggles). Note: this does NOT fire on ordinary edits to the current
+## project's contents — the server menu's own reactive binding (set up
+## once in _connect_signals) handles server list changes independently.
+func _on_has_project_changed(_origin: ReactiveBool) -> void:
+    var is_open: bool = AppState.has_project.value
 
     if is_open:
         inspector_container.show()

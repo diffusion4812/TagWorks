@@ -1,68 +1,46 @@
 # autoloads/opc_ua_manager.gd
 ## Autoload singleton. Derives its set of live OpcUaServerConnection instances
-## purely from AppState.current_project.value.opc_ua_servers.
+## purely from AppState.current_project.opc_ua_servers.
 ##
-## SIMPLE MODE: no per-server diffing/reconciliation. Any change to the
-## current project, or to its `opc_ua_servers` array, tears down ALL
-## existing connections and rebuilds the full set from scratch. This is
-## intentionally coarse for MVP simplicity — revisit with the diff-based
-## reconciliation approach (match by server id, apply_config() on existing
-## connections, only spawn/teardown what actually changed) once the basic
-## flow is validated end-to-end.
+## SIMPLE MODE: no per-server diffing/reconciliation. Any structural change
+## to opc_ua_servers (add/remove/reorder) tears down ALL existing connections
+## and rebuilds the full set from scratch. This is intentionally coarse for
+## MVP simplicity — revisit with the diff-based reconciliation approach
+## (match by server id, apply_config() on existing connections, only
+## spawn/teardown what actually changed) once the basic flow is validated
+## end-to-end.
 extends Node
 
 signal tag_value_changed(server_id: String, subscription_id: String, node_id: OpcUaNodeId, value: Variant)
 
 var _connections: Dictionary = {}   # server_id (String) -> OpcUaServerConnection
 
-var _bound_project: ReactiveProject = null
-var _servers_changed_callable: Callable = Callable()
-
 
 func _ready() -> void:
-    AppState.current_project.connect_self_changed(_on_current_project_changed)
-    _bind_project()
+    # AppState.current_project is a permanent instance — bind once, forever.
+    # Structural changes to opc_ua_servers (add/remove/reorder) always
+    # trigger a rebuild; no rebinding needed on project load/close, since
+    # has_project toggling doesn't change instance identity either.
+    AppState.current_project.opc_ua_servers.connect_self_changed(
+        func(_origin: Reactive) -> void:
+            _rebuild_all()
+    )
     _rebuild_all()
-
-
-func _on_current_project_changed(_origin: ReactiveVariant) -> void:
-    _bind_project()
-    _rebuild_all()
-
-
-# ── Binding ────────────────────────────────────────────────────────────────
-
-func _bind_project() -> void:
-    if _bound_project != null and _servers_changed_callable.is_valid():
-        _bound_project.opc_ua_servers.reactive_changed.disconnect(_servers_changed_callable)
-
-    _bound_project = null
-    _servers_changed_callable = Callable()
-
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
-        return
-
-    _servers_changed_callable = func(_origin: Reactive) -> void:
-        _rebuild_all()
-
-    project.opc_ua_servers.connect_self_changed(_servers_changed_callable)
-    _bound_project = project
 
 
 # ── Rebuild (no reconciliation) ─────────────────────────────────────────────
 
 ## Tears down every existing connection and spawns fresh ones from the
 ## current project state. Called on initial load and on any subsequent
-## change to the bound project's servers array.
+## structural change to opc_ua_servers.
 func _rebuild_all() -> void:
     _teardown_all()
 
-    if _bound_project == null:
+    if not AppState.has_project.value:
         return
 
     var seen_ids: Dictionary = {}
-    for cfg: ReactiveOpcUaServer in _bound_project.opc_ua_servers.value:
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
         var server_id: String = cfg.id.value
         if seen_ids.has(server_id):
             push_warning("OpcUaManager: duplicate server id '%s' — skipping duplicate." % server_id)

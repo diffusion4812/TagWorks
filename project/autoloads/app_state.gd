@@ -3,8 +3,16 @@ extends Node
 
 # ── Project State ─────────────────────────────────────────────────────────────
 
-## The currently active project.
-var current_project : ReactiveVariant
+## The active project. Always a valid, non-null ReactiveProject instance —
+## never reassigned after _ready(). Loading/closing a project mutates this
+## instance's contents in place (see ReactiveProject.load_from_dict /
+## reset_to_default), so anything bound to current_project or its children
+## (pages, opc_ua_servers, etc.) never needs to rebind due to a project swap.
+var current_project : ReactiveProject
+
+## Whether a project has actually been loaded/created, as opposed to the
+## default empty state. Use this instead of null-checking current_project.
+var has_project     : ReactiveBool
 
 # ── Page State ────────────────────────────────────────────────────────────────
 
@@ -40,23 +48,50 @@ var last_saved_path : ReactiveString
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-    current_project = ReactiveVariant.new(null, null, "app_state.current_project")
-    focused_page    = ReactiveVariant.new(null, null, "app_state.focused_page")
-    active_page     = ReactiveVariant.new(null, null, "app_state.active_page")
-    selected_widget = ReactiveVariant.new(null, null, "app_state.selected_widget")
-    edit_mode       = ReactiveBool.new(false, null,   "app_state.edit_mode")
-    last_error      = ReactiveString.new("", null,    "app_state.last_error")
-    last_saved_path = ReactiveString.new("", null,    "app_state.last_saved_path")
-
-    current_project.connect_self_changed(
-        func(_current_project: ReactiveVariant) -> void:
-            focused_page.value    = null
-            active_page.value     = null
-            selected_widget.value = null
-            edit_mode.value        = false
-    )
+    current_project = ReactiveProject.new(null, "app_state.current_project")
+    has_project      = ReactiveBool.new(false, null, "app_state.has_project")
+    focused_page     = ReactiveVariant.new(null, null, "app_state.focused_page")
+    active_page      = ReactiveVariant.new(null, null, "app_state.active_page")
+    selected_widget  = ReactiveVariant.new(null, null, "app_state.selected_widget")
+    edit_mode        = ReactiveBool.new(false, null,   "app_state.edit_mode")
+    last_error       = ReactiveString.new("", null,    "app_state.last_error")
+    last_saved_path  = ReactiveString.new("", null,    "app_state.last_saved_path")
 
     active_page.connect_self_changed(
         func(_active_page: ReactiveVariant) -> void:
             edit_mode.value = false
     )
+
+# ── Project Lifecycle ─────────────────────────────────────────────────────────
+
+## Loads project data into the existing current_project instance in place.
+## Returns false (and leaves current_project untouched) if payload is invalid.
+func load_project(payload: Dictionary) -> bool:
+    if not ReactiveProject.validate_payload(payload):
+        last_error.value = "Invalid project file."
+        return false
+
+    current_project.load_from_dict(payload)
+    has_project.value = true
+    _reset_selection_state()
+    return true
+
+## Resets current_project to a fresh, empty project (e.g. "File > New").
+func new_project() -> void:
+    current_project.reset_to_default()
+    has_project.value = true
+    last_saved_path.value = ""
+    _reset_selection_state()
+
+## Closes the current project, returning to the default empty state.
+func close_project() -> void:
+    current_project.reset_to_default()
+    has_project.value = false
+    last_saved_path.value = ""
+    _reset_selection_state()
+
+func _reset_selection_state() -> void:
+    focused_page.value    = null
+    active_page.value     = null
+    selected_widget.value = null
+    edit_mode.value        = false

@@ -12,15 +12,26 @@ const META_PAGE_ID: String = "page_id"
 
 func _ready() -> void:
     AppState.active_page.connect_self_changed(_on_active_page_changed)
-    AppState.current_project.connect_self_changed(_on_current_project_changed)
+
+    # AppState.current_project is a permanent instance — bind to its pages
+    # array once, forever. _rebuild_tabs() reconciles against whatever
+    # pages currently contains, so this single binding naturally handles
+    # page add/remove/move AND project load/close (an empty pages array
+    # after reset_to_default() simply reconciles down to zero tabs).
+    AppState.current_project.pages.connect_self_changed(_on_pages_changed)
 
     tab_changed.connect(_on_tab_changed)
-    
+
     # Connect to the internal TabBar's signal instead of the TabContainer itself
     var tab_bar: TabBar = get_tab_bar()
     tab_bar.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ACTIVE_ONLY
     tab_bar.close_with_middle_mouse  = true
     tab_bar.tab_close_pressed.connect(_on_tab_close_pressed)
+
+    # Sync against whatever state current_project is already in — covers
+    # the case where a project was loaded before this node existed (e.g.
+    # scene reload), since connect_self_changed only captures future changes.
+    _rebuild_tabs()
 
 # ── Signal Handlers ───────────────────────────────────────────────────────────
 
@@ -36,7 +47,7 @@ func _on_tab_close_pressed(tab_index: int) -> void:
     # Retrieve the page ID from metadata before destroying the node
     if tab_node.has_meta(META_PAGE_ID):
         var closed_page_id: String = tab_node.get_meta(META_PAGE_ID)
-        
+
         # If the closed tab was the active/focused one, update AppState
         if AppState.active_page.value != null and AppState.active_page.value.page_id.value == closed_page_id:
             AppState.active_page.value = null
@@ -45,21 +56,9 @@ func _on_tab_close_pressed(tab_index: int) -> void:
 
     # Safely destroy the tab
     tab_node.queue_free()
-    
+
     # Update visibility dynamically based on remaining active children
     _update_visibility_deferred()
-
-
-func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
-    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
-    var is_open: bool = project != null and not project.project_name.value.is_empty()
-
-    if is_open:
-        if project.pages.reactive_changed.is_connected(_on_pages_changed):
-            project.pages.reactive_changed.disconnect(_on_pages_changed)
-        project.pages.connect_self_changed(_on_pages_changed)
-
-    _close_all_tabs()
 
 
 func _on_pages_changed(_reactive: ReactiveArray) -> void:
@@ -85,21 +84,15 @@ func _on_tab_changed(_tab: int) -> void:
     var page_id: String = _get_current_page_id()
     if page_id.is_empty():
         return
-    var page: ReactivePage = AppState.current_project.value.find_page_id(page_id)
+    var page: ReactivePage = AppState.current_project.find_page_id(page_id)
     if page != null:
         AppState.active_page.value = page
 
 # ── Tab Management ────────────────────────────────────────────────────────────
 
-func _close_all_tabs() -> void:
-    for tab: Node in get_children():
-        tab.queue_free()
-    hide()
-
-
 func _rebuild_tabs() -> void:
     var current_ids: Dictionary = {}
-    for item: Variant in AppState.current_project.value.pages.values():
+    for item: Variant in AppState.current_project.pages.values():
         var page: ReactivePage = item as ReactivePage
         if page != null:
             current_ids[page.page_id.value] = page
@@ -140,7 +133,7 @@ func _create_tab_for_page(page: ReactivePage) -> void:
     var tab_index: int = get_tab_count() - 1
     set_tab_title(tab_index, page.page_name.value)
 
-    var reactive_page: ReactivePage = AppState.current_project.value.find_page_id(page.page_id.value)
+    var reactive_page: ReactivePage = AppState.current_project.find_page_id(page.page_id.value)
     if reactive_page != null:
         reactive_page.canvas.is_dirty.changed.connect(
             func() -> void: _on_canvas_dirty_changed(tab_index, reactive_page.canvas.is_dirty.value)

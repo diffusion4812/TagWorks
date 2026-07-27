@@ -1,4 +1,3 @@
-# reactive/reactive_project.gd
 class_name ReactiveProject
 extends ReactiveObject
 
@@ -10,7 +9,7 @@ const FILE_VERSION: int = 2
 
 var project_name   : ReactiveString
 var file_path      : ReactiveString
-var opc_ua_servers : ReactiveArray
+var opc_ua_servers : ReactiveDictionary  # key: String (server id), value: ReactiveOpcUaServer
 var pages          : ReactiveArray
 
 # ── Init ──────────────────────────────────────────────────────────────────────
@@ -18,54 +17,44 @@ var pages          : ReactiveArray
 func _init(initial_owner: Reactive = null, label: String = "") -> void:
     super._init(null, initial_owner, label)
 
-    project_name   = ReactiveString.new("",     self, "project_name")
-    file_path      = ReactiveString.new("",     self, "file_path")
-    opc_ua_servers = ReactiveArray.new([],      self, "opc_ua_servers")
-    pages          = ReactiveArray.new([],      self, "pages")
+    project_name   = ReactiveString.new("", self, "project_name")
+    file_path      = ReactiveString.new("", self, "file_path")
+    opc_ua_servers = ReactiveDictionary.new(
+        {}, self, "opc_ua_servers",
+        TYPE_STRING, &"", null,
+        TYPE_OBJECT, &"ReactiveOpcUaServer", ReactiveOpcUaServer
+    )
+    pages          = ReactiveArray.new([], self, "pages")
 
 func _describe_value() -> String:
     if project_name == null:
         return ""
     return project_name.value
 
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+## Resets this project to a fresh, empty state in place. Preserves instance
+## identity, so anything bound to this ReactiveProject or its children never
+## needs to rebind.
+func reset_to_default() -> void:
+    project_name.value = ""
+    file_path.value    = ""
+    opc_ua_servers.clear()
+    pages.clear()
+
 # ── Factory ───────────────────────────────────────────────────────────────────
+
+static func validate_payload(payload: Dictionary) -> bool:
+    return _validate(payload)
+
 ## Deserialises a ReactiveProject from a Dictionary.
 ## Returns null if the payload is invalid.
 static func from_dict(payload: Dictionary) -> ReactiveProject:
     if not _validate(payload):
         return null
     var p: ReactiveProject = ReactiveProject.new()
-    p._deserialize(payload)
+    p.load_from_dict(payload)
     return p
-
-# ── Serialise ─────────────────────────────────────────────────────────────────
-
-func serialize() -> Dictionary:
-    var serialised_pages: Array = []
-    for item: Variant in pages.values():
-        var page: ReactivePage = item as ReactivePage
-        if page != null:
-            serialised_pages.append(page.serialize())
-
-    return {
-        "version":        FILE_VERSION,
-        "project_name":   project_name.value,
-        "opc_ua_servers": opc_ua_servers.value.duplicate(),
-        "pages":          serialised_pages,
-    }
-
-# ── Deserialise ───────────────────────────────────────────────────────────────
-
-func _deserialize(payload: Dictionary) -> void:
-    project_name.value   = payload.get("project_name",   "")
-    opc_ua_servers.value = payload.get("opc_ua_servers", {})
-
-    pages.clear()
-    for page_dict: Dictionary in payload.get("pages", []):
-        var page: ReactivePage = ReactivePage.from_dict(page_dict, self)
-        if page != null:
-            pages.append(page)
-
 
 static func _validate(payload: Dictionary) -> bool:
     if payload.is_empty():
@@ -76,6 +65,63 @@ static func _validate(payload: Dictionary) -> bool:
         push_warning("ReactiveProject: Unsupported file version %d." % v)
         return false
     return true
+
+# ── Serialise ─────────────────────────────────────────────────────────────────
+
+func serialize() -> Dictionary:
+    var serialised_pages: Array = []
+    for item: Variant in pages.values():
+        var page: ReactivePage = item as ReactivePage
+        if page != null:
+            serialised_pages.append(page.serialize())
+
+    var serialised_servers: Array = []
+    for server: ReactiveOpcUaServer in opc_ua_servers.values():
+        serialised_servers.append(server.serialize())
+
+    return {
+        "version":        FILE_VERSION,
+        "project_name":   project_name.value,
+        "opc_ua_servers": serialised_servers,
+        "pages":          serialised_pages,
+    }
+
+# ── Deserialise ───────────────────────────────────────────────────────────────
+
+## Replaces this project's contents in place, without changing identity.
+## Anything bound to this instance or its children (pages, opc_ua_servers)
+## simply observes a "changed" signal — no rebinding required anywhere.
+func load_from_dict(payload: Dictionary) -> void:
+    project_name.value = payload.get("project_name", "")
+    file_path.value    = payload.get("file_path", "")
+
+    opc_ua_servers.clear()
+    for server_dict: Dictionary in payload.get("opc_ua_servers", []):
+        var server: ReactiveOpcUaServer = ReactiveOpcUaServer.new(server_dict, self, "server")
+        add_server(server)
+
+    pages.clear()
+    for page_dict: Dictionary in payload.get("pages", []):
+        var page: ReactivePage = ReactivePage.from_dict(page_dict, self)
+        if page != null:
+            pages.append(page)
+
+# ── Server Management ─────────────────────────────────────────────────────────
+
+func get_server(server_id: String) -> ReactiveOpcUaServer:
+    return opc_ua_servers.get_entry(server_id, null)
+
+func has_server(server_id: String) -> bool:
+    return opc_ua_servers.has_entry(server_id)
+
+func remove_server(server_id: String) -> bool:
+    return opc_ua_servers.erase_entry(server_id)
+
+func add_server(server: ReactiveOpcUaServer) -> void:
+    var key: String = server.id.value
+    if opc_ua_servers.has_entry(key):
+        push_warning("ReactiveProject: duplicate opc_ua_server id '%s' — overwriting." % key)
+    opc_ua_servers.set_entry(key, server)
 
 # ── Page Management ───────────────────────────────────────────────────────────
 

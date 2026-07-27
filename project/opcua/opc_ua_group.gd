@@ -30,7 +30,7 @@ var _entries: Dictionary = {}   # tag key (String) -> SubscriptionEntry
 var _sub_handle: int = -1
 var _dirty: bool = false
 
-var _bound_tags: ReactiveArray = null
+var _bound_tags: ReactiveDictionary = null
 var _tags_changed_callable: Callable = Callable()
 
 # ── Init ──────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ func apply_config(cfg: ReactiveOpcUaSubscription) -> void:
 
 # ── Binding ─────────────────────────────────────────────────────────────────
 
-func _bind_tags(tags: ReactiveArray) -> void:
+func _bind_tags(tags: ReactiveDictionary) -> void:
     if _bound_tags != null and _tags_changed_callable.is_valid():
         _bound_tags.reactive_changed.disconnect(_tags_changed_callable)
 
@@ -116,7 +116,11 @@ func is_empty() -> bool:
 
 
 func has_tag(node_id: OpcUaNodeId) -> bool:
-    return _entries.has(_key(node_id))
+    var key: String = node_id.to_tag_name()
+    for tag : ReactiveOpcUaTag in _bound_tags.value:
+        if tag.node_id.value == key:
+            return true
+    return false
 
 # ── Subscription lifecycle ────────────────────────────────────────────────────
 
@@ -128,13 +132,11 @@ func rebuild(client: GodotOpcUa) -> void:
         _sub_handle = -1
 
     var specs: Array = []
-    for entry: SubscriptionEntry in _entries.values():
-        if entry.tag.is_active.value:
+    for entry: ReactiveOpcUaTag in _bound_tags.value:
+        var node_id : OpcUaNodeId = OpcUaNodeId.parse(entry.node_id.value)
+        if entry.is_active.value:
             specs.append({
-                "node_id": entry.node_id,
-                "display_name": entry.tag.display_name.value,
-                "sampling_ms": entry.tag.sampling_ms.value,
-                "deadband": entry.tag.deadband.value,
+                "node_id": node_id
             })
 
     if specs.is_empty():

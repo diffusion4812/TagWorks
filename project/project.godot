@@ -50,6 +50,9 @@ window/handheld/orientation=1
 
 folder_colors={
 "res://reactive/": "orange",
+"res://scenes/dialogs/": "red",
+"res://tests/": "green",
+"res://widgets/": "purple",
 "res://widgets/components/": "teal"
 }
 

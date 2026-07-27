@@ -89,8 +89,15 @@ func _connect_signals() -> void:
     IntentBus.create_page_requested.connect(_on_create_page_requested)
     IntentBus.delete_page_requested.connect(_on_delete_page_requested)
 
-    # React to project being loaded or cleared
-    AppState.current_project.connect_self_changed(_on_current_project_changed)
+    # AppState.current_project is a permanent instance — bind to its pages
+    # array once, forever. Structural changes (add/remove/move) always
+    # trigger a tree rebuild; no rebinding needed on project load/close.
+    AppState.current_project.pages.connect_self_changed(_on_page_hierarchy_changed)
+
+    # has_project toggles on load/new/close — this drives panel visibility
+    # and the initial tree build, not a project "pointer" change.
+    AppState.has_project.connect_self_changed(_on_has_project_changed)
+    _on_has_project_changed(AppState.has_project)
 
     # React to confirmed page selection
     AppState.active_page.connect_self_changed(_on_active_page_changed)
@@ -107,11 +114,10 @@ func _rebuild_tree() -> void:
     _tree_root.set_text(0, _get_project_name())
     _tree_root.set_selectable(0, true)
 
-    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
-    if project == null or project.project_name.value.is_empty():
+    if not AppState.has_project.value:
         return
 
-    for item: Variant in project.pages.values():
+    for item: Variant in AppState.current_project.pages.values():
         var page: ReactivePage = item as ReactivePage
         if page != null:
             _build_item(_tree_root, page)
@@ -142,10 +148,9 @@ func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
 
 
 func _get_project_name() -> String:
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
+    if not AppState.has_project.value:
         return DEFAULT_ROOT_NAME
-    var project_name: String = project.project_name.value
+    var project_name: String = AppState.current_project.project_name.value
     return project_name if not project_name.is_empty() else DEFAULT_ROOT_NAME
 
 # ─────────────────────────────────────────────
@@ -153,10 +158,11 @@ func _get_project_name() -> String:
 # ─────────────────────────────────────────────
 
 func _on_create_page_requested(page_name: String) -> void:
-    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
-    if project == null or project.project_name.value.is_empty():
+    if not AppState.has_project.value:
         push_warning("PagePanel: No active project.")
         return
+
+    var project: ReactiveProject = AppState.current_project
 
     # Resolve a unique name
     var resolved: String = page_name if not page_name.is_empty() else DEFAULT_PAGE_NAME
@@ -175,10 +181,11 @@ func _on_create_page_requested(page_name: String) -> void:
 
 
 func _on_delete_page_requested(page_id: String) -> void:
-    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
-    if project == null or project.project_name.value.is_empty():
+    if not AppState.has_project.value:
         push_warning("PagePanel: No active project.")
         return
+
+    var project: ReactiveProject = AppState.current_project
 
     if project.pages.values().size() == 1:
         push_warning("PagePanel: Cannot delete the last remaining page.")
@@ -303,19 +310,14 @@ func _update_button_states() -> void:
 # AppState Handlers
 # ─────────────────────────────────────────────
 
-## Fires when the active project is replaced or cleared.
-func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
-    var project: ReactiveProject = AppState.current_project.value as ReactiveProject
-    var is_open: bool = project != null and not project.project_name.value.is_empty()
-
-    if is_open:
-        if project.pages.reactive_changed.is_connected(_on_page_hierarchy_changed):
-            project.pages.reactive_changed.disconnect(_on_page_hierarchy_changed)
-        project.pages.connect_self_changed(_on_page_hierarchy_changed)
-
+## Fires when a project is loaded, created, or closed (has_project toggles).
+## Note: this does NOT fire on ordinary page-tree edits within the current
+## project — the permanent pages binding (set up once in _connect_signals)
+## handles structural changes independently.
+func _on_has_project_changed(_origin: ReactiveBool) -> void:
+    if AppState.has_project.value:
         _rebuild_tree()
         show()
-
     else:
         hide()
         page_tree.clear()
@@ -323,6 +325,9 @@ func _on_current_project_changed(_reactive: ReactiveVariant) -> void:
 
 ## Fires when the page hierarchy is structurally modified.
 func _on_page_hierarchy_changed(_pages: ReactiveArray) -> void:
+    if not AppState.has_project.value:
+        return
+
     var selected_id: String = _get_selected_page_id()
     _rebuild_tree()
     if not selected_id.is_empty():
@@ -348,7 +353,7 @@ func _get_drag_data(_position: Vector2) -> Variant:
     return { "page": page }
 
 
-func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
+func _can_drop_data(pos: Vector2, data: Variant) -> bool:
     page_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
 
     if not data is Dictionary or not data.has("page"):
@@ -358,7 +363,7 @@ func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
     if dragged == null:
         return false
 
-    var target: TreeItem = page_tree.get_item_at_position(position)
+    var target: TreeItem = page_tree.get_item_at_position(pos)
     if target == null:
         return false
 
@@ -384,33 +389,34 @@ func _drop_data(pos: Vector2, data: Variant) -> void:
     if target_item == null:
         return
 
+    var project: ReactiveProject = AppState.current_project
+
     if target_item == _tree_root:
         # Move to top level — detach and re-append to project root
-        var page: ReactivePage = AppState.current_project.value._detach_recursive(
+        var page: ReactivePage = project._detach_recursive(
             dragged.page_id.value,
-            AppState.current_project.value.pages
+            project.pages
         )
         if page != null:
             page.owner = null
-            AppState.current_project.value.pages.append(page)
+            project.pages.append(page)
         return
 
     var target_page: ReactivePage = target_item.get_metadata(0) as ReactivePage
     if target_page == null:
         return
 
-    var drop_mode: int = page_tree.get_drop_section_at_position(position)
-    AppState.current_project.value.move_page(dragged.page_id.value, target_page, drop_mode)
+    var drop_mode: int = page_tree.get_drop_section_at_position(pos)
+    project.move_page(dragged.page_id.value, target_page, drop_mode)
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
 
 func _select_first_page() -> void:
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
+    if not AppState.has_project.value:
         return
-    var all: Array = project.pages.values()
+    var all: Array = AppState.current_project.pages.values()
     if all.is_empty():
         return
     var first: ReactivePage = all[0] as ReactivePage
