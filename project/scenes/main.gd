@@ -8,10 +8,6 @@ extends Control
 @onready var server_menu:         PopupMenu             = %ServerMenu
 @onready var edit_mode_toggle:    Button                = %EditModeButton
 
-@onready var canvas_container:    TabContainer          = %CanvasContainer
-@onready var inspector_container: VSplitContainer       = %InspectorContainer
-@onready var widget_palette:      WidgetPalette         = $SafeAreaContainer/RootLayout/WorkArea/InspectorContainer/WidgetPalette
-@onready var property_panel:      PropertyPanel         = $SafeAreaContainer/RootLayout/WorkArea/InspectorContainer/PropertyPanel
 @onready var connection_dialog:   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
 @onready var file_dialog:         FileDialog            = $Dialogs/FileDialog
 
@@ -47,7 +43,7 @@ func _ready() -> void:
 ## across devices with different pixel densities.
 func _set_scaling() -> void:
     var screen_dpi: int = DisplayServer.screen_get_dpi()
-    var scale_factor: float = maxf(screen_dpi / 130.0, 1.0)
+    var scale_factor: float = maxf(screen_dpi / 120.0, 1.0)
     get_tree().root.content_scale_factor = scale_factor
 
 
@@ -70,21 +66,14 @@ func _connect_signals() -> void:
         func(_origin: Reactive) -> void:
             _rebuild_server_menu()
     )
-    _rebuild_server_menu()
 
     # ── File dialog ───────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
     # ── AppState ──────────────────────────────────────────────────────────────
-    # has_project toggles on load/new/close — this is what drives canvas
-    # visibility, not a project "pointer" change.
-    AppState.has_project.connect_self_changed(_on_has_project_changed)
-    _on_has_project_changed(AppState.has_project)
-
     AppState.edit_mode.connect_self_changed(
         func(edit_mode: ReactiveBool) -> void:
             edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
-            inspector_container.visible = edit_mode.value
     )
 
 # ── System ────────────────────────────────────────────────────────────────────
@@ -266,19 +255,3 @@ func _on_file_dialog_selected(path: String) -> void:
             IntentBus.save_project_as_requested.emit(path)
         FileDialog.FILE_MODE_OPEN_FILE:
             IntentBus.open_project_requested.emit(path)
-
-# ── AppState — Project Handlers ───────────────────────────────────────────────
-
-## Fires whenever a project is loaded, created, or closed (has_project
-## toggles). Note: this does NOT fire on ordinary edits to the current
-## project's contents — the server menu's own reactive binding (set up
-## once in _connect_signals) handles server list changes independently.
-func _on_has_project_changed(_origin: ReactiveBool) -> void:
-    var is_open: bool = AppState.has_project.value
-
-    if is_open:
-        inspector_container.show()
-        canvas_container.show()
-    else:
-        canvas_container.hide()
-        inspector_container.hide()

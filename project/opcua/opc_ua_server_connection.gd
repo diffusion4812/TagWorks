@@ -194,8 +194,6 @@ func teardown() -> void:
 ## (e.g. network loss) and applying incoming tag updates. Does NOT attempt
 ## to reconnect — that remains an explicit, external decision.
 func poll() -> void:
-    var a = _client.has_connection_failed()
-    var b = _client.is_server_connected()
     if _client.has_connection_failed() or not _client.is_server_connected():
         _poll_accum_sec = 0.0
         for subscription: OpcUaSubscription in _subscriptions.values():

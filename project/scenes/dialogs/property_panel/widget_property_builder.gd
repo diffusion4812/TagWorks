@@ -194,21 +194,10 @@ func add_node_field(
 ) -> void:
     var binding_prop: ReactiveOpcUaTagBinding = v.value[prop] as ReactiveOpcUaTagBinding
 
-    # Fundamental runtime type wrapping the three identity fields. Added as a
-    # child of `col` below so its lifecycle (and OpcUaManager signal cleanup
-    # in _exit_tree) is handled automatically when this field is torn down.
-    var binding: OpcUaBinding = OpcUaBinding.new()
-    binding.setup(
-        binding_prop.server_id.value,
-        binding_prop.group_id.value,
-        binding_prop.parsed_node_id()
-    )
-
     var col   : VBoxContainer = VBoxContainer.new()
     var label : Label = Label.new()
     label.text = lbl
     col.add_child(label)
-    col.add_child(binding)
 
     var server_row    : HBoxContainer = HBoxContainer.new()
     var server_label  : Label = Label.new()
@@ -266,31 +255,16 @@ func add_node_field(
         if is_instance_valid(group_option):
             _populate_group_option(group_option, binding_prop.server_id.value)
             _select_option_by_metadata(group_option, binding_prop.group_id.value)
-        binding.setup(
-            binding_prop.server_id.value,
-            binding_prop.group_id.value,
-            binding_prop.parsed_node_id()
-        )
 
     var on_group_changed: Callable = func(_new_value: String) -> void:
         if not is_instance_valid(group_option):
             return
         _select_option_by_metadata(group_option, binding_prop.group_id.value)
-        binding.setup(
-            binding_prop.server_id.value,
-            binding_prop.group_id.value,
-            binding_prop.parsed_node_id()
-        )
 
     var on_node_id_changed: Callable = func(_new_value: String) -> void:
         if not is_instance_valid(tag_edit):
             return
         tag_edit.text = binding_prop.node_id.value if binding_prop.node_id.value != "" else "(none)"
-        binding.setup(
-            binding_prop.server_id.value,
-            binding_prop.group_id.value,
-            binding_prop.parsed_node_id()
-        )
 
     binding_prop.server_id.changed.connect(on_server_changed)
     binding_prop.group_id.changed.connect(on_group_changed)

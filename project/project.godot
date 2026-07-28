@@ -49,6 +49,7 @@ window/handheld/orientation=1
 [file_customization]
 
 folder_colors={
+"res://autoloads/": "pink",
 "res://reactive/": "orange",
 "res://scenes/dialogs/": "red",
 "res://tests/": "green",

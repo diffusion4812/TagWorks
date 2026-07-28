@@ -1,4 +1,3 @@
-# ui/dialogs/opc_ua_connection_dialog.gd
 class_name OpcUaConnectionDialog
 extends Window
 
@@ -85,16 +84,10 @@ func _has_project() -> bool:
     return AppState.has_project.value
 
 
-func _servers() -> Array[ReactiveOpcUaServer]:
-    if not AppState.has_project.value:
-        return []
-    return AppState.current_project.get_servers_sorted()
-
-
 func _get_server(server_id: String) -> ReactiveOpcUaServer:
-    if server_id == "":
+    if server_id == "" or not _has_project():
         return null
-    return AppState.current_project.get_server(server_id)
+    return AppState.current_project.opc_ua_servers.value.get(server_id) as ReactiveOpcUaServer
 
 
 func _get_subscription(server: ReactiveOpcUaServer, subscription_id: String) -> ReactiveOpcUaSubscription:
@@ -158,9 +151,6 @@ func _refresh_tree() -> void:
     if not has_project:
         server_tree.clear_selection()
         _set_panel(SelectionType.NONE)
-        return
-
-    server_tree.set_servers(_servers())
 
 # ── Panel switching ───────────────────────────────────────────────────────────
 
@@ -243,7 +233,6 @@ func _commit_form() -> void:
             _commit_tag_form()
 
     _form_dirty = false
-    _refresh_tree()
 
 
 func _commit_server_form() -> void:
@@ -331,9 +320,8 @@ func _on_add_server_pressed() -> void:
     cfg.display_name.value = "New Server"
     cfg.endpoint_url.value = "opc.tcp://127.0.0.1:4840"
 
-    AppState.current_project.add_server(cfg)
+    AppState.current_project.opc_ua_servers.set(id, cfg)
 
-    server_tree.set_servers(_servers())
     server_tree.select_server(cfg.id.value)
 
 
@@ -354,7 +342,7 @@ func _on_add_subscription_pressed() -> void:
     subscription.pub_interval_ms.value = 500.0
     cfg.subscriptions.append(subscription)
 
-    server_tree.set_servers(_servers())
+    server_tree.refresh()
     server_tree.select_subscription(_selected_server_id, subscription.id.value)
 
 
@@ -377,7 +365,7 @@ func _on_add_tag_pressed() -> void:
 
     subscription.tags.append(tag)
 
-    server_tree.set_servers(_servers())
+    server_tree.refresh()
     server_tree.select_tag(_selected_server_id, _selected_subscription_id, tag.id.value)
 
 
@@ -389,7 +377,7 @@ func _on_remove_pressed() -> void:
 
     match _selection_type:
         SelectionType.SERVER:
-            AppState.current_project.remove_server(_selected_server_id)
+            AppState.current_project.opc_ua_servers.erase(_selected_server_id)
             _selected_server_id       = ""
             _selected_subscription_id = ""
             _selected_tag_id          = ""
@@ -422,7 +410,7 @@ func _on_remove_pressed() -> void:
             _selected_tag_id = ""
             _selection_type  = SelectionType.SUBSCRIPTION
 
-    server_tree.set_servers(_servers())
+    server_tree.refresh()
 
     match _selection_type:
         SelectionType.SERVER:

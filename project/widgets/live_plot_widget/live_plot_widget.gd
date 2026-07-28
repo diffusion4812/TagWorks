@@ -8,12 +8,6 @@ extends BaseWidget
 # Properties
 # ─────────────────────────────────────────────
 
-var node_id: OpcUaNodeId = null:
-    set(value):
-        node_id = value
-        if is_instance_valid(_binding):
-            _binding.node_id = value
-
 var signal_name: String = "Signal":
     set(value):
         signal_name = value
@@ -30,7 +24,6 @@ var signal_axis: int = 0:
         if is_node_ready():
             live_plot.set_signal_axis(signal_name, value)
 
-var _binding: OpcUaBinding
 
 # ─────────────────────────────────────────────
 # Lifecycle
@@ -40,13 +33,6 @@ func _ready() -> void:
     super._ready()
 
     live_plot.add_signal(signal_name, signal_color, signal_axis)
-
-    _binding = OpcUaBinding.new()
-    _binding.value_changed.connect(_on_value_changed)
-    add_child(_binding)
-
-    if node_id != null:
-        _binding.node_id = node_id
 
 # ─────────────────────────────────────────────
 # Signal Handlers
@@ -83,7 +69,6 @@ func build_properties(builder: WidgetPropertyBuilder) -> void:
 func serialize() -> Dictionary:
     var serialized_data: Dictionary = super.serialize()
     serialized_data["signal"] = {
-        "node_id":      node_id.to_tag_name() if node_id != null else "",
         "signal_name":  signal_name,
         "signal_color": {
             "r": signal_color.r,
@@ -98,7 +83,6 @@ func serialize() -> Dictionary:
 func deserialize(serialized_data: Dictionary) -> void:
     super.deserialize(serialized_data)
     var s: Dictionary = serialized_data.get("signal", {})
-    node_id      = OpcUaNodeId.parse(s["node_id"]) if s.get("node_id") != "" else null
     signal_name  = s.get("signal_name",  signal_name)
     signal_color = Color(
         s.get("signal_color", {}).get("r", 0.0),

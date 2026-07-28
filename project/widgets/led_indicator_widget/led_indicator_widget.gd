@@ -26,14 +26,6 @@ var color_off: Color = Color.DARK_GREEN:
         if is_node_ready():
             update_display(state)
 
-var node_id: OpcUaNodeId = null:
-    set(value):
-        node_id = value
-        if is_instance_valid(_binding):
-            _binding.node_id = value
-
-var _binding: OpcUaBinding
-
 # ─────────────────────────────────────────────
 # Lifecycle
 # ─────────────────────────────────────────────
@@ -41,12 +33,6 @@ var _binding: OpcUaBinding
 func _ready() -> void:
     super._ready()
     update_display(state)
-
-    _binding = OpcUaBinding.new()
-    _binding.value_changed.connect(_on_value_changed)
-
-    if node_id != null:
-        _binding.node_id = node_id
 
 # ─────────────────────────────────────────────
 # Display
@@ -85,18 +71,12 @@ func build_properties(builder: WidgetPropertyBuilder) -> void:
 
 func serialize() -> Dictionary:
     var data := super.serialize()
-    data["node_id"]   = node_id.serialize() if node_id != null else null
     data["color_on"]  = { "r": color_on.r,  "g": color_on.g,  "b": color_on.b,  "a": color_on.a  }
     data["color_off"] = { "r": color_off.r, "g": color_off.g, "b": color_off.b, "a": color_off.a }
     return data
 
 func deserialize(data: Dictionary) -> void:
     super.deserialize(data)
-
-    if data.has("node_id") and data["node_id"] != null:
-        var n := OpcUaNodeId.new()
-        n.deserialize(data["node_id"])
-        node_id = n
 
     if data.has("color_on"):
         var c: Dictionary = data["color_on"]

@@ -1,4 +1,3 @@
-# property_panel.gd
 class_name PropertyPanel
 extends PanelContainer
 

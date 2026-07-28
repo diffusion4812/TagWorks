@@ -19,7 +19,6 @@ var _unit:           String     = ""
 var _server_id:      String     = ""
 var _group_id:       String     = ""
 var _node_id:        OpcUaNodeId = null
-var _binding:        OpcUaBinding
 
 # ─────────────────────────────────────────────
 # Lifecycle
@@ -30,9 +29,6 @@ func _ready() -> void:
     line_edit.text_submitted.connect(_on_text_submitted)
     line_edit.focus_entered.connect(_on_focus_entered)
 
-    _binding = OpcUaBinding.new()
-    _binding.value_changed.connect(_on_value_changed)
-    add_child(_binding)
 
     _register_properties()
     _apply_binding()
@@ -78,12 +74,8 @@ func _set_node_id(value: OpcUaNodeId) -> void:
 func _apply_binding() -> void:
     if not is_node_ready():
         return
-    if not is_instance_valid(_binding):
-        return
     if _server_id == "" or _group_id == "" or _node_id == null:
         return
-
-    _binding.setup(_server_id, _group_id, _node_id)
 
 # ─────────────────────────────────────────────
 # Display
@@ -108,14 +100,9 @@ func _on_focus_entered() -> void:
         DisplayServer.KEYBOARD_TYPE_NUMBER_DECIMAL
     )
 
-
 func _on_text_submitted(text: String) -> void:
-    var parsed: float = float(text)
-    if is_instance_valid(_binding):
-        _binding.write_value(parsed)
     line_edit.release_focus()
     DisplayServer.virtual_keyboard_hide()
-
 
 func _on_value_changed(value: Variant) -> void:
     update_display(value)

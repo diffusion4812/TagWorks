@@ -1,4 +1,3 @@
-# autoloads/project_manager.gd
 extends Node
 
 const SAVE_DIR     :String = "user://projects/"
@@ -35,13 +34,7 @@ func get_current_project_path() -> String:
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_new_project_requested() -> void:
-    var new_project: ReactiveProject = ReactiveProject.new(null, "new_project")
-    new_project.project_name.value = "New Project"
-    var new_page: ReactivePage = ReactivePage.create("New Page", new_project.pages, "new_page")
-    new_project.pages.append(new_page)
-
-    AppState.current_project.value = new_project
-
+    AppState.new_project()
 
 func _on_save_project_requested() -> void:
     if AppState.current_project.value.file_path.value.is_empty():
@@ -59,7 +52,7 @@ func _on_open_project_requested(path: String) -> void:
 
 
 func _on_close_project_requested() -> void:
-    AppState.current_project.value = null
+    AppState.close_project()
 
 # ── Save ──────────────────────────────────────────────────────────────────────
 

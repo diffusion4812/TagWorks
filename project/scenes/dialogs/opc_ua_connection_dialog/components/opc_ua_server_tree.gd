@@ -1,4 +1,3 @@
-# ui/components/opc_ua_server_tree.gd
 class_name OpcUaServerTree
 extends Tree
 
@@ -26,7 +25,6 @@ const INACTIVE_TAG_COLOR: Color = Color(0.6, 0.6, 0.6)
 
 enum _SelectionKind { NONE, SERVER, SUBSCRIPTION, TAG }
 
-var _servers:               Array[ReactiveOpcUaServer] = []
 var _selected_server_id:      String = ""
 var _selected_subscription_id: String = ""
 var _selected_tag_id:         String = ""
@@ -36,6 +34,10 @@ var _selection_kind:          _SelectionKind = _SelectionKind.NONE
 ## binding can be cleanly disconnected when the tree is rebuilt or a
 ## server is removed.
 var _status_bindings: Dictionary = {}
+
+## Callable bound to AppState.current_project.opc_ua_servers so the tree
+## rebuilds whenever a server is added/removed from the project.
+var _servers_changed_callback: Callable = Callable()
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -50,18 +52,15 @@ func _ready() -> void:
 
     item_selected.connect(_on_item_selected)
 
+    _bind_servers_dictionary()
+    _rebuild()
+
 
 func _exit_tree() -> void:
+    _unbind_servers_dictionary()
     _unbind_all_status()
 
 # ── Public API ─────────────────────────────────────────────────────────────
-
-## Rebuilds the tree from the given server list, preserving the current
-## selection if it still exists.
-func set_servers(servers: Array[ReactiveOpcUaServer]) -> void:
-    _servers = servers
-    _rebuild()
-
 
 ## Selects a server row programmatically and emits server_selected.
 func select_server(server_id: String) -> void:
@@ -132,6 +131,32 @@ func has_subscription_selected() -> bool:
 func has_tag_selected() -> bool:
     return _selection_kind == _SelectionKind.TAG
 
+# ── Servers dictionary binding ────────────────────────────────────────────
+
+## Binds directly to AppState.current_project.opc_ua_servers so the tree
+## rebuilds immediately whenever a server is added or removed from the
+## project, without polling.
+func _bind_servers_dictionary() -> void:
+    if AppState.current_project == null:
+        return
+    _servers_changed_callback = func(_origin: Reactive) -> void:
+        _rebuild()
+    AppState.current_project.opc_ua_servers.connect_self_changed(_servers_changed_callback)
+
+
+func _unbind_servers_dictionary() -> void:
+    if AppState.current_project != null and _servers_changed_callback.is_valid():
+        AppState.current_project.opc_ua_servers.reactive_changed.disconnect(_servers_changed_callback)
+    _servers_changed_callback = Callable()
+
+
+## Convenience accessor for the current project's server dictionary
+## (server_id -> ReactiveOpcUaServer).
+func _servers_dict() -> Dictionary:
+    if AppState.current_project == null:
+        return {}
+    return AppState.current_project.opc_ua_servers.value
+
 # ── Internal build ────────────────────────────────────────────────────────
 
 func _rebuild() -> void:
@@ -141,7 +166,7 @@ func _rebuild() -> void:
     if root == null:
         return
 
-    for cfg: ReactiveOpcUaServer in _servers:
+    for cfg: ReactiveOpcUaServer in _servers_dict().values():
         var server_item: TreeItem = create_item(root)
         server_item.set_text(0, _status_prefix(cfg) + cfg.display_name.value)
         server_item.set_text(1, "")
@@ -246,10 +271,7 @@ func _refresh_status_row(server_id: String) -> void:
 # ── Lookup helpers ────────────────────────────────────────────────────────
 
 func _find_server(server_id: String) -> ReactiveOpcUaServer:
-    for cfg: ReactiveOpcUaServer in _servers:
-        if cfg.id.value == server_id:
-            return cfg
-    return null
+    return _servers_dict().get(server_id) as ReactiveOpcUaServer
 
 
 func _find_server_item(server_id: String) -> TreeItem:

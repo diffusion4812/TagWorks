@@ -83,7 +83,7 @@ func _is_active_canvas() -> bool:
 
 
 func _get_reactive_page() -> ReactivePage:
-    return AppState.current_project.value.find_page_id(_page_id)
+    return AppState.current_project.find_page_id(_page_id)
 
 # ── Dirty State ───────────────────────────────────────────────────────────────
 
