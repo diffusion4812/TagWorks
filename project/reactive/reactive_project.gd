@@ -12,7 +12,7 @@ var file_path      : ReactiveString
 var opc_ua_servers : ReactiveDictionary  # key: String (server id), value: ReactiveOpcUaServer
 var pages          : ReactiveArray
 
-# ── Init ──────────────────────────────────────────────────────────────────────
+    # ── Init ──────────────────────────────────────────────────────────────────────
 
 func _init(initial_owner: Reactive = null, label: String = "") -> void:
     super._init(null, initial_owner, label)
@@ -22,7 +22,7 @@ func _init(initial_owner: Reactive = null, label: String = "") -> void:
     opc_ua_servers = ReactiveDictionary.new(
         {}, self, "opc_ua_servers",
         TYPE_STRING, &"", null,
-        TYPE_OBJECT, &"ReactiveOpcUaServer", ReactiveOpcUaServer
+        TYPE_OBJECT, &"Resource", null   # no script constraint
     )
     pages          = ReactiveArray.new([], self, "pages")
 

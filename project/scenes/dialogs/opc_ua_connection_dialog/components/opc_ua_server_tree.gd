@@ -139,7 +139,7 @@ func has_tag_selected() -> bool:
 func _bind_servers_dictionary() -> void:
     if AppState.current_project == null:
         return
-    _servers_changed_callback = func(_origin: Reactive) -> void:
+    _servers_changed_callback = func(_origin: ReactiveDictionary) -> void:
         _rebuild()
     AppState.current_project.opc_ua_servers.connect_self_changed(_servers_changed_callback)
 

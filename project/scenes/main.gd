@@ -150,7 +150,7 @@ func _rebuild_server_menu() -> void:
 
     server_menu.add_separator()
 
-    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.value:
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
         var server_id: String = cfg.id.value
 
         var submenu: PopupMenu = PopupMenu.new()

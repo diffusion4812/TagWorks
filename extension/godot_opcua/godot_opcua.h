@@ -1,33 +1,42 @@
 // =============================================================================
-// godot_opcua.h  (v3)
+// godot_opcua.h  (v4)
 //
-// Threading model — unchanged from v2
-// ─────────────────────────────────────
-// _ua_mutex   serialises every UA_Client_* call (poll thread + main thread).
-// _values_mutex guards _latest_values independently so GDScript can read
-// cached values without waiting on UA network I/O.
+// Architecture change from v3
+// ────────────────────────────
+// The internal poll thread has been removed entirely.  The GDScript manager
+// now calls iterate() from _process(), which drives UA_Client_run_iterate()
+// on the main thread.  This eliminates all cross-thread Godot API calls,
+// all mutexes, and all atomics.  _on_data_change() fires synchronously on
+// the main thread inside iterate(), so registered Callables can be invoked
+// directly without any deferred queuing.
 //
-// Breaking changes from v2
+// Breaking changes from v3
 // ─────────────────────────
-// • read_node / write_node now accept Ref<OpcUaNodeId> instead of (int, int).
-// • browse_children now accepts Ref<OpcUaNodeId>.
-// • tag_updated signal now carries a Dictionary entry (value/timestamp/quality)
-//   instead of a bare Variant.
-// • Multiple subscriptions are supported; create_subscription returns an int
-//   handle instead of a bool.
+// • start_polling / stop_polling / set_reconnect_interval /
+//   set_max_reconnect_attempts removed — reconnection logic moves to GDScript.
+// • is_server_connected / has_connection_failed removed.
+// • create_subscription no longer takes a node_specs Array — it only creates
+//   the OPC UA subscription and returns a handle.  Use subscribe() to add tags.
+// • add_monitored_item / remove_monitored_item replaced by subscribe() /
+//   unsubscribe() which accept a Callable and support multiple subscribers
+//   per tag with automatic fan-out.
+// • All signals removed — the C++ layer emits nothing.  GDScript owns state.
+// • disconnect_server() resets server-side IDs but preserves all subscription
+//   configs and Callables so replay_subscriptions() can restore them cleanly.
 // =============================================================================
 
 #pragma once
 
+#include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
-#include <godot_cpp/classes/thread.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
-#include <atomic>
-#include <mutex>
+#include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -39,22 +48,27 @@ extern "C" {
 
 namespace godot {
 
-// ── Internal subscription bookkeeping (not exposed to GDScript) ───────────────
+// ── Internal types (not exposed to GDScript) ──────────────────────────────────
 
-/// Per-item state inside a live subscription.
-struct MonitoredItemEntry {
-    UA_UInt32        mon_id      = 0;        ///< Server-assigned monitored-item ID
-    String          *tag_ctx     = nullptr;   ///< Heap String owned here; freed on removal
-    Ref<OpcUaNodeId> node_id;               ///< Kept for subscription replay after reconnect
-    float            sampling_ms = 250.0f;
-    float            deadband    = 0.0f;     ///< 0 = disabled
+/// Heap-allocated context for one monitored node.
+/// A raw pointer to this struct is passed to open62541 as monitoredItemContext.
+/// GodotOpcUa owns all instances via unique_ptr in _item_registry, which
+/// guarantees a stable address even when the registry map rehashes.
+struct MonitoredItemContext {
+    String                tag_name;
+    Ref<OpcUaNodeId>      node_id;
+    UA_UInt32             mon_id      = 0;   ///< Server-assigned; 0 when not active
+    int                   sub_handle  = -1;  ///< Which subscription this belongs to
+    float                 sampling_ms = 250.0f;
+    float                 deadband    = 0.0f;
+    std::vector<Callable> callbacks;         ///< Fan-out list; called in order on change
 };
 
-/// State for one OPC UA Subscription (one handle → one SubscriptionEntry).
+/// Lightweight subscription record — just enough to recreate the server-side
+/// subscription after a reconnect.
 struct SubscriptionEntry {
-    UA_UInt32                       sub_id      = 0;
-    float                           interval_ms = 1000.0f;
-    std::vector<MonitoredItemEntry> items;
+    UA_UInt32 sub_id      = 0;       ///< Server-assigned; 0 when not active
+    float     interval_ms = 1000.0f;
 };
 
 // =============================================================================
@@ -64,7 +78,7 @@ class GodotOpcUa : public RefCounted {
     GDCLASS(GodotOpcUa, RefCounted)
 
 private:
-    // ── Authentication mode ───────────────────────────────────────────────────
+    // ── Authentication ────────────────────────────────────────────────────────
     enum class AuthMode { Anonymous, Username };
     AuthMode _auth_mode = AuthMode::Anonymous;
     String   _auth_username;
@@ -73,114 +87,59 @@ private:
     // ── OPC UA client ─────────────────────────────────────────────────────────
     UA_Client *_client   = nullptr;
     String     _last_url;
-    /// True while the OPC UA session is activated.
-    /// Written by the poll thread and by disconnect_server() on the main thread
-    /// (polling is always stopped before disconnect_server touches it, so there
-    /// is no concurrent write).  std::atomic gives the main thread a tear-free
-    /// read via is_server_connected() without any lock.
-    std::atomic<bool> _connected{false};
 
-    /// Set to true by the poll thread when max reconnect attempts is exhausted.
-    /// Read and atomically cleared by has_connection_failed() on the main thread.
-    std::atomic<bool> _connection_failed_flag{false};
-
-    // ── Mutex — ALL UA_Client_* calls must hold this ──────────────────────────
-    std::mutex _ua_mutex;
-
-    // ── Subscriptions (guarded by _ua_mutex) ──────────────────────────────────
+    // ── Subscriptions: handle → entry ─────────────────────────────────────────
     std::unordered_map<int, SubscriptionEntry> _subscriptions;
     int _next_sub_handle = 1;
 
-    // ── Value cache (guarded by _values_mutex) ────────────────────────────────
-    // Values are entry Dictionaries: {value, timestamp_ms, quality, quality_good, tick}
+    // ── Item registry: tag_name (utf8) → context (owned) ─────────────────────
+    // unique_ptr gives stable heap addresses for the open62541 context pointer.
+    std::unordered_map<std::string, std::unique_ptr<MonitoredItemContext>> _item_registry;
+
+    // ── Value cache: tag_name → entry Dictionary ──────────────────────────────
+    // {value, timestamp_ms, quality, quality_good, tick}
+    // Written from _on_data_change (main thread only — no mutex needed).
     Dictionary _latest_values;
-    std::mutex _values_mutex;
-
-    // ── Background polling ────────────────────────────────────────────────────
-    Ref<Thread>       _poll_thread;
-    std::atomic<bool> _polling{false};
-    float             _poll_interval_sec      = 0.1f;
-    float             _reconnect_base_sec     = 5.0f;   ///< Base reconnect interval (doubles each attempt)
-    int               _reconnect_attempt      = 0;
-    int               _max_reconnect_attempts = -1;      ///< -1 = unlimited
-
-    static constexpr float RECONNECT_MAX_INTERVAL_SEC = 60.0f;
 
     // ── Browse ────────────────────────────────────────────────────────────────
     int _max_browse_depth = 5;
 
-    // =========================================================================
-    // Private helpers
-    // =========================================================================
-
     // ── Type conversion ───────────────────────────────────────────────────────
     Variant    _ua_variant_to_godot(const UA_Variant &ua_var) const;
     bool       _godot_to_ua_variant(const Variant &gd_var, UA_Variant &out) const;
-
-    /// Build a tag-cache entry Dictionary from a UA_DataValue.
     Dictionary _make_tag_entry(const UA_DataValue &dv) const;
+    static Error _map_ua_status_to_error(UA_StatusCode rs);
 
     // ── Node ID helpers ───────────────────────────────────────────────────────
     static String      _node_id_to_string(const UA_NodeId &id);
     static const char *_node_class_to_string(UA_NodeClass nc);
 
-    // ── Connection helpers ────────────────────────────────────────────────────
-
-    /// Issue UA_Client_connect or UA_Client_connect_username depending on _auth_mode.
-    /// Must be called with _ua_mutex held (or from a context where no other thread
-    /// touches _client).
+    // ── Connection ────────────────────────────────────────────────────────────
     UA_StatusCode _do_connect(UA_Client *client, const String &url);
 
-    /// Delete _client and allocate a fresh one with default config.
-    /// Resets server-side subscription IDs but preserves item config for replay.
-    /// Must be called with _ua_mutex held.
-    bool _rebuild_client_locked();
+    // ── Subscription internals ────────────────────────────────────────────────
 
-    // ── Subscription helpers (all require _ua_mutex held) ─────────────────────
+    /// Create a new UA_Client with default config; does not connect.
+    bool _init_client();
 
-    /// Create OPC UA Subscription + MonitoredItems for one SubscriptionEntry.
-    bool _create_subscription_entry_locked(SubscriptionEntry &entry);
+    /// Create/recreate the server-side OPC UA Subscription for one entry.
+    bool _create_subscription_server_side(int handle, SubscriptionEntry &entry);
 
-    /// Add one MonitoredItem to an existing live subscription entry.
-    bool _add_monitored_item_locked(SubscriptionEntry &entry,
-                                    Ref<OpcUaNodeId>   node_id,
-                                    float              sampling_ms,
-                                    float              deadband);
+    /// Create/recreate one server-side MonitoredItem for a context.
+    void _create_monitored_item(MonitoredItemContext &ctx, UA_UInt32 sub_id);
 
-    /// Remove a MonitoredItem from an entry by tag name; frees its tag_ctx.
-    void _remove_monitored_item_by_tag_locked(SubscriptionEntry &entry,
-                                              const String      &tag_name);
+    // ── Browse helpers ────────────────────────────────────────────────────────
+    bool _browse_with_continuation(const UA_NodeId &nodeId,
+                                   Array           &out_children,
+                                   int              depth);
+    void _process_browse_result(Array                &out_children,
+                                const UA_BrowseResult &result,
+                                int                    depth);
 
-    /// Tell the server to delete entry's subscription and free all tag_ctx strings.
-    void _delete_subscription_entry_locked(SubscriptionEntry &entry);
-
-    /// Delete every subscription; clears _subscriptions map.
-    void _delete_all_subscriptions_locked();
-
-    /// Re-create all subscriptions after a reconnect (server-side IDs are gone).
-    void _replay_subscriptions_locked();
-
-    // ── Browse helpers (require _ua_mutex held) ───────────────────────────────
-
-    /// Execute one browse request with full continuation-point loop.
-    /// Appends results to out_refs; caller owns memory via UA_BrowseResult.
-    /// Returns false on service error.
-    bool _browse_with_continuation_locked(const UA_NodeId &nodeId,
-                                          Array           &out_children,
-                                          int              depth);
-
-    /// Process one UA_BrowseResult's references into out_children Dicts,
-    /// recursing if depth < _max_browse_depth.
-    void _process_browse_result_locked(Array                &out_children,
-                                       const UA_BrowseResult &result,
-                                       int                    depth);
-
-    // ── Poll thread ───────────────────────────────────────────────────────────
-    void _poll_thread_func();
-
-    static void _on_data_change(UA_Client  *client,
-                                UA_UInt32   subId,  void *subContext,
-                                UA_UInt32   monId,  void *monContext,
+    // ── Data-change callback (fires on main thread inside iterate()) ──────────
+    static void _on_data_change(UA_Client    *client,
+                                UA_UInt32     subId,  void *subContext,
+                                UA_UInt32     monId,  void *monContext,
                                 UA_DataValue *value);
 
 protected:
@@ -192,123 +151,89 @@ public:
 
     // ── Connection ────────────────────────────────────────────────────────────
 
-    /// Connect anonymously.
-    bool connect_to_server(String url);
+    Error connect_to_server(String url);
+    Error connect_with_credentials(String url, String username, String password);
 
-    /// Connect with OPC UA username/password authentication.
-    bool connect_with_credentials(String url, String username, String password);
-
-    /// Stop polling, delete all subscriptions, disconnect, and free the client.
+    /// Reset server-side IDs and disconnect.  Subscription configs and all
+    /// registered Callables are preserved so replay_subscriptions() works.
     void disconnect_server();
 
-    // ── Synchronous read / write (main thread) ────────────────────────────────
+    // ── OPC UA network driver ─────────────────────────────────────────────────
 
-    /// Single-node read.  Returns the value Variant (NIL on error).
-    Variant read_node(Ref<OpcUaNodeId> node_id);
+    /// Call from GDScript _process().  Drives UA_Client_run_iterate(), which
+    /// processes incoming publish responses and fires _on_data_change for each
+    /// changed tag.  Everything runs synchronously on the calling (main) thread.
+    /// timeout_ms = 0 → non-blocking poll; 1 is a good default.
+    Error GodotOpcUa::iterate(int timeout_ms);
 
-    /// Batch read.  Returns Dictionary: tag_name → entry Dictionary.
+    /// Re-create all server-side subscriptions and monitored items after a
+    /// reconnect.  Call this from GDScript immediately after a successful
+    /// connect_to_server() / connect_with_credentials() following a drop.
+    void replay_subscriptions();
+
+    // ── Synchronous read / write ──────────────────────────────────────────────
+
+    Variant    read_node(Ref<OpcUaNodeId> node_id);
     Dictionary read_nodes(Array node_ids);
-
-    /// Single-node write.
-    bool write_node(Ref<OpcUaNodeId> node_id, const Variant &value);
-
-    /// Invoke an OPC UA Method node.
-    /// Returns {"success":bool, "output_args":Array, "error":String}.
+    bool       write_node(Ref<OpcUaNodeId> node_id, const Variant &value);
     Dictionary call_ua_method(Ref<OpcUaNodeId> object_id,
                               Ref<OpcUaNodeId> method_id,
                               Array            input_args);
 
     // ── Subscription management ───────────────────────────────────────────────
 
-    /// Create a subscription for a list of nodes.
-    ///
-    /// node_specs is an Array of Dictionaries, each with:
-    ///   "node_id"     : OpcUaNodeId (required)
-    ///   "sampling_ms" : float       (optional, default 250)
-    ///   "deadband"    : float       (optional, default 0 = disabled)
-    ///
-    /// Returns a subscription handle (>0) on success, or -1 on failure.
-    /// The handle is used by delete_subscription / add_monitored_item / remove_monitored_item.
-    int create_subscription(Array node_specs, float interval_ms);
-
-    /// Delete one subscription by handle.
+    /// Create a new OPC UA subscription with the given publishing interval.
+    /// Returns a handle (> 0) used by subscribe() / delete_subscription().
+    /// Safe to call before connect_to_server() — the server-side subscription
+    /// is created lazily on the next replay_subscriptions() call.
+    int  create_subscription(float interval_ms);
     void delete_subscription(int handle);
 
-    /// Delete all active subscriptions.
-    void delete_all_subscriptions();
+    /// Register a Callable to be invoked whenever node_id's value or quality
+    /// changes.  If node_id is already subscribed, the callable is simply
+    /// appended to the existing fan-out list — no extra MonitoredItem is
+    /// created on the server.  Safe to call before connect_to_server().
+    ///
+    /// Callable signature: func(entry: Dictionary) -> void
+    ///   entry keys: value, timestamp_ms, quality, quality_good, tick
+    bool subscribe(int              handle,
+                   Ref<OpcUaNodeId> node_id,
+                   Callable         callable,
+                   float            sampling_ms,
+                   float            deadband);
 
-    /// Add a single MonitoredItem to an existing subscription.
-    bool add_monitored_item(int              handle,
-                            Ref<OpcUaNodeId> node_id,
-                            float            sampling_ms,
-                            float            deadband);
+    /// Remove one Callable from a tag's fan-out list.  Deletes the server-side
+    /// MonitoredItem when the last Callable is removed.
+    void unsubscribe(Ref<OpcUaNodeId> node_id, Callable callable);
 
-    /// Remove a MonitoredItem from a subscription by node.
-    void remove_monitored_item(int handle, Ref<OpcUaNodeId> node_id);
-
-    // ── Polling & reconnection ────────────────────────────────────────────────
-
-    void start_polling(float interval_sec);
-    void stop_polling();
-
-    /// Set base reconnect interval.  Actual wait uses exponential backoff,
-    /// doubling each failed attempt up to 60 s.
-    void set_reconnect_interval(float seconds);
-
-    /// -1 = unlimited attempts (default).
-    void set_max_reconnect_attempts(int attempts);
+    /// Remove all subscriptions, monitored items, and registered Callables.
+    void clear_subscriptions();
 
     // ── Value cache ───────────────────────────────────────────────────────────
 
-    /// Just the value Variant (NIL if not yet received).
-    Variant get_tag_value(String tag_name);
+    /// Returns the cached value Variant, or NIL if no value received yet.
+    Variant    get_tag_value(String tag_name);
 
-    /// Full entry Dictionary: {value, timestamp_ms, quality, quality_good, tick}.
+    /// Returns the full cached entry: {value, timestamp_ms, quality,
+    /// quality_good, tick}.  Returns empty Dictionary if not yet received.
     Dictionary get_tag_entry(String tag_name);
 
-    /// All cached values: tag_name → Variant.
-    Dictionary get_all_tag_values();
-
-    /// All cached entries: tag_name → entry Dictionary.
+    /// Full cache snapshot: tag_name → entry Dictionary.
     Dictionary get_all_tag_entries();
 
-    /// Tags updated since since_tick_ms (as returned by Time.get_ticks_msec()).
-    /// Returns tag_name → entry Dictionary.
+    /// Returns entries whose tick > since_tick_ms.  Use with
+    /// Time.get_ticks_msec() for a pull-based update path alongside callbacks.
     Dictionary get_changed_tags_since(int64_t since_tick_ms);
 
     // ── Browsing ──────────────────────────────────────────────────────────────
 
-    /// Recursively browse from OPC UA Root (ns=0, i=84).
-    /// Supports continuation points; respects _max_browse_depth.
     Dictionary browse_server();
+    Array      browse_children(Ref<OpcUaNodeId> node_id);
 
-    /// Browse immediate children of node_id (no recursion).
-    Array browse_children(Ref<OpcUaNodeId> node_id);
+    // ── Discovery ─────────────────────────────────────────────────────────────
 
-    // ── Server discovery ──────────────────────────────────────────────────────
-
-    /// Discover OPC UA servers at a Local Discovery Server URL.
-    /// Returns Array of {"name":String, "url":String, "product_uri":String}.
-    /// Uses a temporary UA_Client; safe to call before connect_to_server.
     Array discover_servers(String discovery_url);
-
-    /// Enumerate endpoints advertised by a server.
-    /// Returns Array of {"url":String, "security_mode":String, "security_policy":String}.
     Array get_endpoints(String url);
-
-    // ── State polling (GDScript _process alternative to signals) ─────────────
-
-    /// Returns true if the OPC UA session is currently activated.
-    /// Thread-safe: reads an atomic bool — no lock, no Godot API overhead.
-    /// Call this from GDScript's _process() to detect connect/disconnect events
-    /// instead of relying on the connection_changed signal.
-    bool is_server_connected() const;
-
-    /// Returns true (exactly once per failure event) when the poll thread has
-    /// exhausted max_reconnect_attempts without success.  Atomically clears the
-    /// flag on read so subsequent calls return false until the next failure.
-    /// Call this from GDScript's _process().
-    bool has_connection_failed();
 };
 
 } // namespace godot

@@ -34,12 +34,6 @@ var _commit_pending:          bool            = false
 var _picker_active:           bool            = false
 var _picker_callback:         Callable        = Callable()
 
-## Tracks the connection_status binding for whichever server is currently
-## selected, so a "connection failed" alert can be shown while its detail
-## form is open. Cleaned up on every selection change / dialog close.
-var _status_watch_cfg:      ReactiveOpcUaServer = null
-var _status_watch_callable: Callable            = Callable()
-
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -125,8 +119,6 @@ func _remove_subscription(cfg: ReactiveOpcUaServer, subscription_id: String) -> 
 ## contents — those are covered by the permanent AppState.current_project.changed
 ## connection above, which simply calls _refresh_tree().
 func _on_has_project_changed(_origin: ReactiveBool) -> void:
-    _unwatch_server_status()
-
     _selection_type            = SelectionType.NONE
     _selected_server_id        = ""
     _selected_subscription_id  = ""
@@ -270,7 +262,6 @@ func _on_server_selected(server_id: String) -> void:
     _selected_subscription_id = ""
     _selected_tag_id          = ""
     _load_server_form(server_id)
-    _watch_server_status(server_id)
     _set_panel(SelectionType.SERVER)
 
 
@@ -281,7 +272,6 @@ func _on_subscription_selected(server_id: String, subscription_id: String) -> vo
     _selected_subscription_id = subscription_id
     _selected_tag_id          = ""
     _load_subscription_form(server_id, subscription_id)
-    _unwatch_server_status()
     _set_panel(SelectionType.SUBSCRIPTION)
 
 
@@ -292,7 +282,6 @@ func _on_tag_selected(server_id: String, subscription_id: String, tag_id: String
     _selected_subscription_id = subscription_id
     _selected_tag_id          = tag_id
     _load_tag_form(server_id, subscription_id, tag_id)
-    _unwatch_server_status()
     _set_panel(SelectionType.TAG)
 
 
@@ -302,7 +291,6 @@ func _on_selection_cleared() -> void:
     _selected_server_id       = ""
     _selected_subscription_id = ""
     _selected_tag_id          = ""
-    _unwatch_server_status()
     _set_panel(SelectionType.NONE)
 
 # ── Add / Remove ──────────────────────────────────────────────────────────────
@@ -320,7 +308,7 @@ func _on_add_server_pressed() -> void:
     cfg.display_name.value = "New Server"
     cfg.endpoint_url.value = "opc.tcp://127.0.0.1:4840"
 
-    AppState.current_project.opc_ua_servers.set(id, cfg)
+    AppState.current_project.opc_ua_servers.set_entry(id, cfg)
 
     server_tree.select_server(cfg.id.value)
 
@@ -342,7 +330,6 @@ func _on_add_subscription_pressed() -> void:
     subscription.pub_interval_ms.value = 500.0
     cfg.subscriptions.append(subscription)
 
-    server_tree.refresh()
     server_tree.select_subscription(_selected_server_id, subscription.id.value)
 
 
@@ -525,41 +512,6 @@ func _on_form_edited() -> void:
 func _deferred_commit() -> void:
     _commit_pending = false
     _commit_form()
-
-# ── Server connection-status watch (for the selected server only) ────────────
-
-## Binds to the currently selected server's connection_status field so a
-## "connection failed" alert can be shown while its detail form is open —
-## replaces the old global OpcUaManager.connection_failed signal, which no
-## longer exists now that status is conveyed purely via the reactive field.
-func _watch_server_status(server_id: String) -> void:
-    _unwatch_server_status()
-
-    var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    if cfg == null:
-        return
-
-    _status_watch_callable = func(_origin: Reactive) -> void:
-        _on_watched_server_status_changed(cfg)
-
-    cfg.connection_status.connect_self_changed(_status_watch_callable)
-    _status_watch_cfg = cfg
-
-
-func _unwatch_server_status() -> void:
-    if _status_watch_cfg != null and _status_watch_callable.is_valid():
-        _status_watch_cfg.connection_status.reactive_changed.disconnect(_status_watch_callable)
-    _status_watch_cfg = null
-    _status_watch_callable = Callable()
-
-
-func _on_watched_server_status_changed(cfg: ReactiveOpcUaServer) -> void:
-    if cfg.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTION_FAILED:
-        OS.alert(
-            "Could not reconnect after maximum attempts.\n%s" % cfg.last_error.value,
-            "Connection Failed — %s" % cfg.display_name.value
-        )
-
 
 # =============================================================================
 # Public API
