@@ -77,41 +77,6 @@ func _connect_signals() -> void:
 func _has_project() -> bool:
     return AppState.has_project.value
 
-
-func _get_server(server_id: String) -> ReactiveOpcUaServer:
-    if server_id == "" or not _has_project():
-        return null
-    return AppState.current_project.opc_ua_servers.value.get(server_id) as ReactiveOpcUaServer
-
-
-func _get_subscription(server: ReactiveOpcUaServer, subscription_id: String) -> ReactiveOpcUaSubscription:
-    if server == null or subscription_id == "":
-        return null
-    for subscription: ReactiveOpcUaSubscription in server.subscriptions.value:
-        if subscription.id.value == subscription_id:
-            return subscription
-    return null
-
-
-func _get_tag(subscription: ReactiveOpcUaSubscription, tag_id: String) -> ReactiveOpcUaTag:
-    if subscription == null or tag_id == "":
-        return null
-    for tag: ReactiveOpcUaTag in subscription.tags.value:
-        if tag.id.value == tag_id:
-            return tag
-    return null
-
-
-func _remove_subscription(cfg: ReactiveOpcUaServer, subscription_id: String) -> void:
-    if cfg == null:
-        return
-    for i: int in cfg.subscriptions.value.size():
-        var subscription: ReactiveOpcUaSubscription = cfg.subscriptions.value[i]
-        if subscription.id.value == subscription_id:
-            cfg.subscriptions.remove_at(i)
-            return
-    push_warning("Delete: selected subscription '%s' not found on server '%s'." % [subscription_id, cfg.id.value])
-
 # ── Project load / close handling ─────────────────────────────────────────────
 
 ## Fires when a project is loaded, created, or closed (has_project toggles).
@@ -176,18 +141,18 @@ func _set_panel(type: SelectionType) -> void:
 # ── Form loading ──────────────────────────────────────────────────────────────
 
 func _load_server_form(server_id: String) -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    if cfg == null:
+    var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(server_id)
+    if server == null:
         return
 
     _form_dirty = false
-    server_detail_form.load_config(cfg)
+    server_detail_form.load_config(server)
     _form_dirty = false
 
 
 func _load_subscription_form(server_id: String, subscription_id: String) -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, subscription_id) if cfg else null
+    var server: ReactiveOpcUaServer             = AppState.current_project.opc_ua_servers.get_entry(server_id)
+    var subscription: ReactiveOpcUaSubscription = server.subscriptions.get_entry(subscription_id)
     if subscription == null:
         return
 
@@ -197,9 +162,9 @@ func _load_subscription_form(server_id: String, subscription_id: String) -> void
 
 
 func _load_tag_form(server_id: String, subscription_id: String, tag_id: String) -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, subscription_id) if cfg else null
-    var tag: ReactiveOpcUaTag = _get_tag(subscription, tag_id) if subscription else null
+    var server: ReactiveOpcUaServer             = AppState.current_project.opc_ua_servers.get_entry(server_id)
+    var subscription: ReactiveOpcUaSubscription = server.subscriptions.get_entry(subscription_id)
+    var tag: ReactiveOpcUaTag = subscription.tags.get_entry(tag_id)
     if tag == null:
         return
 
@@ -228,16 +193,16 @@ func _commit_form() -> void:
 
 
 func _commit_server_form() -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    if cfg == null:
+    var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    if server == null:
         return
 
-    server_detail_form.commit_to(cfg)
+    server_detail_form.commit_to(server)
 
 
 func _commit_subscription_form() -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+    var server : ReactiveOpcUaServer             = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    var subscription : ReactiveOpcUaSubscription = server.subscriptions.get_entry(_selected_subscription_id)
     if subscription == null:
         return
 
@@ -245,9 +210,9 @@ func _commit_subscription_form() -> void:
 
 
 func _commit_tag_form() -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
-    var tag: ReactiveOpcUaTag = _get_tag(subscription, _selected_tag_id) if subscription else null
+    var server : ReactiveOpcUaServer             = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    var subscription : ReactiveOpcUaSubscription = server.subscriptions.get_entry(_selected_subscription_id)
+    var tag : ReactiveOpcUaTag                   = subscription.tags.get_entry(_selected_tag_id)
     if tag == null:
         return
 
@@ -310,7 +275,7 @@ func _on_add_server_pressed() -> void:
 
     AppState.current_project.opc_ua_servers.set_entry(id, cfg)
 
-    server_tree.select_server(cfg.id.value)
+    server_tree.select_server(id)
 
 
 func _on_add_subscription_pressed() -> void:
@@ -319,18 +284,18 @@ func _on_add_subscription_pressed() -> void:
 
     _commit_form()
 
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    if cfg == null:
+    var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    if server == null:
         return
 
     var id: String = "subscription_%d" % Time.get_ticks_msec()
-    var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new({}, cfg, id)
+    var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new({}, server, id)
     subscription.id.value              = id
     subscription.display_name.value    = "New Subscription"
     subscription.pub_interval_ms.value = 500.0
-    cfg.subscriptions.append(subscription)
+    server.subscriptions.set_entry(id, subscription)
 
-    server_tree.select_subscription(_selected_server_id, subscription.id.value)
+    server_tree.select_subscription(_selected_server_id, id)
 
 
 func _on_add_tag_pressed() -> void:
@@ -339,8 +304,8 @@ func _on_add_tag_pressed() -> void:
 
     _commit_form()
 
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
+    var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    var subscription: ReactiveOpcUaSubscription = server.subscriptions.get_entry(_selected_subscription_id)
     if subscription == null:
         return
 
@@ -350,10 +315,9 @@ func _on_add_tag_pressed() -> void:
     tag.node_id.value      = ""
     tag.display_name.value = "New Tag"
 
-    subscription.tags.append(tag)
+    subscription.tags.set_entry(id, tag)
 
-    server_tree.refresh()
-    server_tree.select_tag(_selected_server_id, _selected_subscription_id, tag.id.value)
+    server_tree.select_tag(_selected_server_id, _selected_subscription_id, id)
 
 
 func _on_remove_pressed() -> void:
@@ -364,40 +328,26 @@ func _on_remove_pressed() -> void:
 
     match _selection_type:
         SelectionType.SERVER:
-            AppState.current_project.opc_ua_servers.erase(_selected_server_id)
+            AppState.current_project.opc_ua_servers.erase_entry(_selected_server_id)
             _selected_server_id       = ""
             _selected_subscription_id = ""
             _selected_tag_id          = ""
             _selection_type           = SelectionType.NONE
 
         SelectionType.SUBSCRIPTION:
-            var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-            if cfg:
-                _remove_subscription(cfg, _selected_subscription_id)
+            var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+            server.subscriptions.erase_entry(_selected_subscription_id)
             _selected_subscription_id = ""
             _selected_tag_id          = ""
             _selection_type           = SelectionType.SERVER
 
         SelectionType.TAG:
-            var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-            var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
-            if subscription:
-                var tag_index: int = -1
-                for i: int in subscription.tags.value.size():
-                    var tag: ReactiveOpcUaTag = subscription.tags.value[i]
-                    if tag.id.value == _selected_tag_id:
-                        tag_index = i
-                        break
-
-                if tag_index != -1:
-                    subscription.tags.remove_at(tag_index)
-                else:
-                    push_warning("Delete: selected tag '%s' not found in subscription '%s'." % [_selected_tag_id, _selected_subscription_id])
+            var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+            var subscription: ReactiveOpcUaSubscription = server.subscriptions.get_entry(_selected_subscription_id)
+            subscription.tags.erase_entry(_selected_tag_id)
 
             _selected_tag_id = ""
             _selection_type  = SelectionType.SUBSCRIPTION
-
-    server_tree.refresh()
 
     match _selection_type:
         SelectionType.SERVER:
@@ -413,23 +363,23 @@ func _on_remove_pressed() -> void:
 
 func _on_test_pressed() -> void:
     _commit_form()
-    var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-    if cfg == null:
+    var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+    if server == null:
         return
 
     var test_client: GodotOpcUa = GodotOpcUa.new()
     var ok: bool
-    if cfg.username.value.is_empty():
-        ok = test_client.connect_to_server(cfg.endpoint_url.value)
+    if server.username.value.is_empty():
+        ok = test_client.connect_to_server(server.endpoint_url.value)
     else:
         ok = test_client.connect_with_credentials(
-            cfg.endpoint_url.value, cfg.username.value, cfg.password.value
+            server.endpoint_url.value, server.username.value, server.password.value
         )
     test_client.disconnect_server()
 
     OS.alert(
         "Connection successful." if ok else "Connection failed.",
-        "Test Connection — %s" % cfg.display_name.value
+        "Test Connection — %s" % server.display_name.value
     )
 
 
@@ -446,15 +396,15 @@ func _on_confirm_pressed() -> void:
     _commit_form()
 
     if _picker_active and _selection_type == SelectionType.TAG:
-        var cfg: ReactiveOpcUaServer = _get_server(_selected_server_id)
-        var subscription: ReactiveOpcUaSubscription = _get_subscription(cfg, _selected_subscription_id) if cfg else null
-        var tag: ReactiveOpcUaTag = _get_tag(subscription, _selected_tag_id) if subscription else null
+        var server : ReactiveOpcUaServer             = AppState.current_project.opc_ua_servers.get_entry(_selected_server_id)
+        var subscription : ReactiveOpcUaSubscription = server.subscriptions.get_entry(_selected_subscription_id)
+        var tag : ReactiveOpcUaTag                   = subscription.tags.get_entry(_selected_tag_id)
 
         if tag != null:
             var result: OpcUaTagBinding = OpcUaTagBinding.new(
                 _selected_server_id,
                 _selected_subscription_id,
-                OpcUaNodeId.parse(tag.node_id.value) if tag.node_id.value != "" else null
+                _selected_tag_id
             )
             var callback: Callable = _picker_callback
 
@@ -493,12 +443,12 @@ func _on_tag_browse_requested() -> void:
 # ── Shared browse helper ──────────────────────────────────────────────────────
 
 func _open_browser_for_server(server_id: String, on_picked: Callable = Callable()) -> void:
-    var cfg: ReactiveOpcUaServer = _get_server(server_id)
-    if cfg == null:
+    var server : ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(server_id)
+    if server == null:
         return
 
     var browse_nodes: BrowseNodes = get_node("/root/Main/Dialogs/BrowseNodes")
-    browse_nodes.browse(cfg, on_picked)
+    browse_nodes.browse(server, on_picked)
 
 # ── Form dirty tracking ───────────────────────────────────────────────────────
 

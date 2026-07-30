@@ -18,8 +18,8 @@ func _ready() -> void:
     # Structural changes to opc_ua_servers (add/remove/reorder) always
     # trigger a rebuild; no rebinding needed on project load/close, since
     # has_project toggling doesn't change instance identity either.
-    AppState.current_project.opc_ua_servers.connect_self_changed(
-        func(_origin: Reactive) -> void:
+    AppState.current_project.opc_ua_servers.connect_any_changed_self(
+        func(_origin: ReactiveDictionary) -> void:
             _rebuild_all()
     )
     _rebuild_all()

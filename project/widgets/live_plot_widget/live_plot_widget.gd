@@ -55,7 +55,7 @@ func get_widget_class() -> String:
 # Edit Mode
 # ─────────────────────────────────────────────
 
-func build_properties(builder: WidgetPropertyBuilder) -> void:
+func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
    # builder.add_node_field(  "node_id",      "Node ID",      node_id)
    # builder.add_string_field("signal_name",  "Signal Name",  signal_name)

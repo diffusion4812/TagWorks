@@ -223,7 +223,7 @@ func add_node_field(
     group_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
     _populate_group_option(group_option, binding_prop.server_id.value)
-    _select_option_by_metadata(group_option, binding_prop.group_id.value)
+    _select_option_by_metadata(group_option, binding_prop.subscription_id.value)
 
     group_row.add_child(group_label)
     group_row.add_child(group_option)
@@ -236,7 +236,7 @@ func add_node_field(
 
     tag_label.text                  = "Tag"
     tag_label.custom_minimum_size.x = 60
-    tag_edit.text                   = binding_prop.node_id.value if binding_prop.node_id.value != "" else "(none)"
+    tag_edit.text                   = binding_prop.tag_id.value
     tag_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
     tag_edit.editable               = false
     browse_btn.text                 = "Browse"
@@ -248,35 +248,35 @@ func add_node_field(
 
     # ── Reactive → UI (binding_prop changes update the widgets) ──────────────
 
-    var on_server_changed: Callable = func(_new_value: String) -> void:
+    var on_server_changed: Callable = func(_new_value: ReactiveString) -> void:
         if not is_instance_valid(server_option):
             return
-        _select_option_by_metadata(server_option, binding_prop.server_id.value)
+        _select_option_by_metadata(server_option, _new_value.value)
         if is_instance_valid(group_option):
-            _populate_group_option(group_option, binding_prop.server_id.value)
-            _select_option_by_metadata(group_option, binding_prop.group_id.value)
+            _populate_group_option(group_option, _new_value.value)
+            _select_option_by_metadata(group_option, binding_prop.subscription_id.value)
 
-    var on_group_changed: Callable = func(_new_value: String) -> void:
+    var on_subscription_changed: Callable = func(_new_value: ReactiveString) -> void:
         if not is_instance_valid(group_option):
             return
-        _select_option_by_metadata(group_option, binding_prop.group_id.value)
+        _select_option_by_metadata(group_option, _new_value.value)
 
-    var on_node_id_changed: Callable = func(_new_value: String) -> void:
+    var on_tag_id_changed: Callable = func(_new_value: ReactiveString) -> void:
         if not is_instance_valid(tag_edit):
             return
-        tag_edit.text = binding_prop.node_id.value if binding_prop.node_id.value != "" else "(none)"
+        tag_edit.text = _new_value.value
 
-    binding_prop.server_id.changed.connect(on_server_changed)
-    binding_prop.group_id.changed.connect(on_group_changed)
-    binding_prop.node_id.changed.connect(on_node_id_changed)
+    binding_prop.server_id.connect_self_changed(on_server_changed)
+    binding_prop.subscription_id.connect_self_changed(on_subscription_changed)
+    binding_prop.tag_id.connect_self_changed(on_tag_id_changed)
 
     col.tree_exiting.connect(func() -> void:
-        if binding_prop.server_id.changed.is_connected(on_server_changed):
-            binding_prop.server_id.changed.disconnect(on_server_changed)
-        if binding_prop.group_id.changed.is_connected(on_group_changed):
-            binding_prop.group_id.changed.disconnect(on_group_changed)
-        if binding_prop.node_id.changed.is_connected(on_node_id_changed):
-            binding_prop.node_id.changed.disconnect(on_node_id_changed)
+        if binding_prop.server_id.reactive_changed.is_connected(on_server_changed):
+            binding_prop.server_id.reactive_changed.disconnect(on_server_changed)
+        if binding_prop.subscription_id.reactive_changed.is_connected(on_subscription_changed):
+            binding_prop.subscription_id.reactive_changed.disconnect(on_subscription_changed)
+        if binding_prop.tag_id.reactive_changed.is_connected(on_tag_id_changed):
+            binding_prop.tag_id.reactive_changed.disconnect(on_tag_id_changed)
     )
 
     # ── User intent → binding_prop (UI updates only set data, never text) ────
@@ -284,72 +284,24 @@ func add_node_field(
     server_option.item_selected.connect(func(_index: int) -> void:
         var sid: String = server_option.get_item_metadata(server_option.selected)
         binding_prop.server_id.value = sid
-        binding_prop.group_id.value  = ""
-        binding_prop.node_id.value   = ""
+        binding_prop.subscription_id.value  = ""
+        binding_prop.tag_id.value   = ""
     )
 
     group_option.item_selected.connect(func(_index: int) -> void:
         var gid: String = group_option.get_item_metadata(group_option.selected)
-        binding_prop.group_id.value = gid
+        binding_prop.subscription_id.value = gid
     )
 
     browse_btn.pressed.connect(func() -> void:
         _panel.opc_ua_connection_dialog.browse(func(result: OpcUaTagBinding) -> void:
-            if not result.is_valid():
-                return
-
-            _ensure_tag_registered(result.server_id, result.group_id, result.node_id)
-
             binding_prop.server_id.value = result.server_id
-            binding_prop.group_id.value  = result.group_id
-            binding_prop.node_id.value   = result.node_id_string()
+            binding_prop.subscription_id.value  = result.subscription_id
+            binding_prop.tag_id.value   = result.tag_id
         )
     )
 
     _panel.extra_props.add_child(col)
-
-## Ensures a ReactiveOpcUaTag exists for `node_id` inside the target group's
-## tags array. If one already exists (matched by node_id string), it is left
-## untouched; otherwise a new tag entry is appended so OpcUaGroup will pick
-## it up on the next reconciliation and actually subscribe to it.
-func _ensure_tag_registered(server_id: String, group_id: String, node_id: OpcUaNodeId) -> void:
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
-        return
-
-    var server: ReactiveOpcUaServer = null
-    for s: ReactiveOpcUaServer in project.opc_ua_servers.value:
-        if s.id.value == server_id:
-            server = s
-            break
-
-    if server == null:
-        push_warning("_ensure_tag_registered: server '%s' not found." % server_id)
-        return
-
-    var group: ReactiveOpcUaSubscription = null
-    for g: ReactiveOpcUaSubscription in server.groups.value:
-        if g.id.value == group_id:
-            group = g
-            break
-
-    if group == null:
-        push_warning("_ensure_tag_registered: group '%s' not found on server '%s'." % [group_id, server_id])
-        return
-
-    var node_id_str: String = node_id.to_tag_name()
-
-    for existing: ReactiveOpcUaTag in group.tags.value:
-        if existing.node_id.value == node_id_str:
-            return  # already registered — nothing to do
-
-    var new_tag: ReactiveOpcUaTag = ReactiveOpcUaTag.new({
-        "node_id": node_id_str,
-        "display_name": node_id_str,
-        "is_active": true,
-    }, group, "tag")
-
-    group.tags.append(new_tag)
 
 # ── Option population helpers ─────────────────────────────────────────────────
 func _populate_server_option(option: OptionButton) -> void:

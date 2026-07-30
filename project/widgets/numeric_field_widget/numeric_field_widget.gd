@@ -100,7 +100,7 @@ func _on_focus_entered() -> void:
         DisplayServer.KEYBOARD_TYPE_NUMBER_DECIMAL
     )
 
-func _on_text_submitted(text: String) -> void:
+func _on_text_submitted(_text: String) -> void:
     line_edit.release_focus()
     DisplayServer.virtual_keyboard_hide()
 
@@ -122,7 +122,7 @@ func get_widget_class() -> String:
 # Edit Mode
 # ─────────────────────────────────────────────
 
-func build_properties(builder: WidgetPropertyBuilder) -> void:
+func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
    # super.build_properties(builder)
    # builder.add_node_field(  "node_id",        "Node ID",        _node_id, _server_id, _group_id)

@@ -17,7 +17,6 @@ extends Control
 
 const DEFAULT_PAGE_NAME: String = "New Page"
 const DEFAULT_ROOT_NAME: String = "Project"
-const PAGE_ICON_PATH:    String = "res://assets/icons/page_icon.svg"
 
 enum MenuAction {
     ADD_PAGE,
@@ -29,7 +28,6 @@ enum MenuAction {
 # ─────────────────────────────────────────────
 
 var _tree_root : TreeItem   = null
-var _page_icon : Texture2D  = null
 var _item_map  : Dictionary = {}
 
 # ─────────────────────────────────────────────
@@ -37,18 +35,9 @@ var _item_map  : Dictionary = {}
 # ─────────────────────────────────────────────
 
 func _ready() -> void:
-    _load_icon()
     _setup_tree()
     _connect_signals()
     _update_button_states()
-
-
-func _load_icon() -> void:
-    if ResourceLoader.exists(PAGE_ICON_PATH):
-        _page_icon = load(PAGE_ICON_PATH)
-    else:
-        push_warning("PagePanel: Icon not found at '%s'." % PAGE_ICON_PATH)
-
 
 func _setup_tree() -> void:
     page_tree.hide_root        = true
@@ -135,9 +124,6 @@ func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
     item.set_text(0, page.page_name.value)
     item.set_metadata(0, page)
     item.set_editable(0, false)
-
-    if _page_icon != null:
-        item.set_icon(0, _page_icon)
 
     _item_map[page.page_id.value] = item
     return item

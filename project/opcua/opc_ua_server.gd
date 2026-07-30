@@ -92,7 +92,6 @@ func _rebuild_subscriptions_from_config() -> void:
 
 func _spawn_subscription(sub_cfg: ReactiveOpcUaSubscription) -> void:
     var subscription: OpcUaSubscription = OpcUaSubscription.new(sub_cfg)
-    subscription.apply_config(sub_cfg)
     _subscriptions[sub_cfg.id.value] = subscription
 
     if _is_connected():

@@ -16,6 +16,6 @@ func _init(initial_value: Variant = null, initial_owner: Reactive = null, label:
 func _describe_value() -> String:
     if value == null:
         return "null"
-    if value.has_method("_describe_value"):
+    if value is Object and value.has_method("_describe_value"):
         return value._describe_value()
     return str(value)

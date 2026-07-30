@@ -79,7 +79,7 @@ func get_widget_class() -> String:
 # Edit Mode
 # ─────────────────────────────────────────────
 
-func build_properties(builder: WidgetPropertyBuilder) -> void:
+func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
    # builder.add_string_field("text",                "Text",                 text)
    # builder.add_int_field(   "font_size",            "Font Size",            font_size)

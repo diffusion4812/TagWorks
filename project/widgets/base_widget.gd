@@ -95,14 +95,14 @@ func _connect_data_signals() -> void:
     pass # set up per-property reactive_changed listeners if needed
 
 
-func build_properties(builder: WidgetPropertyBuilder) -> void:
+func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
     #builder.add_float_field("position/x", "Pos X",  widget.properties["position/x"].value)
     #builder.add_float_field("position/y", "Pos Y",  widget.properties["position/y"].value)
     #builder.add_float_field("size/x",     "Size X", widget.properties["size/x"].value)
     #builder.add_float_field("size/y",     "Size Y", widget.properties["size/y"].value)
 
-func _on_property_changed(p: String, v: Variant) -> void:
+func _on_property_changed(_p: String, _v: Variant) -> void:
     pass
 
 func get_drop_target() -> Control:

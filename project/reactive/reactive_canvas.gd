@@ -10,8 +10,8 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     widgets  = ReactiveArray.new([], self, "widgets")
     is_dirty = ReactiveBool.new(false, self, "is_dirty")
 
-    widgets.connect_any_changed(
-        func(_origin: Reactive) -> void:
+    widgets.connect_any_changed_self(
+        func(_self: Reactive) -> void:
             is_dirty.value = true
     )
 

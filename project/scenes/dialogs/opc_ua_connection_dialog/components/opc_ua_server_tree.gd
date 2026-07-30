@@ -30,13 +30,10 @@ var _selected_subscription_id: String = ""
 var _selected_tag_id:         String = ""
 var _selection_kind:          _SelectionKind = _SelectionKind.NONE
 
-## server_id (String) -> Callable, so each server's connection_status
-## binding can be cleanly disconnected when the tree is rebuilt or a
-## server is removed.
-var _status_bindings: Dictionary = {}
-
 ## Callable bound to AppState.current_project.opc_ua_servers so the tree
-## rebuilds whenever a server is added/removed from the project.
+## rebuilds whenever anything changes anywhere in the server/subscription/
+## tag layout. Reactive changes bubble up from tags -> subscriptions ->
+## servers -> this dictionary, so a single top-level binding is enough.
 var _servers_changed_callback: Callable = Callable()
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -52,13 +49,15 @@ func _ready() -> void:
 
     item_selected.connect(_on_item_selected)
 
-    _bind_servers_dictionary()
+    AppState.current_project.opc_ua_servers.connect_any_changed_self(
+        func(_origin: ReactiveDictionary) -> void:
+            _rebuild()
+    )
     _rebuild()
 
 
 func _exit_tree() -> void:
     _unbind_servers_dictionary()
-    _unbind_all_status()
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -134,8 +133,8 @@ func has_tag_selected() -> bool:
 # ── Servers dictionary binding ────────────────────────────────────────────
 
 ## Binds directly to AppState.current_project.opc_ua_servers so the tree
-## rebuilds immediately whenever a server is added or removed from the
-## project, without polling.
+## rebuilds immediately on any change anywhere in the server/subscription/
+## tag layout (add/remove/edit), without polling.
 func _bind_servers_dictionary() -> void:
     if AppState.current_project == null:
         return
@@ -160,7 +159,6 @@ func _servers_dict() -> Dictionary:
 # ── Internal build ────────────────────────────────────────────────────────
 
 func _rebuild() -> void:
-    _unbind_all_status()
     clear()
     var root: TreeItem = create_item()
     if root == null:
@@ -172,9 +170,7 @@ func _rebuild() -> void:
         server_item.set_text(1, "")
         server_item.set_metadata(0, { "type": "server", "server_id": cfg.id.value })
 
-        _bind_status(cfg)
-
-        for subscription: ReactiveOpcUaSubscription in cfg.subscriptions.value:
+        for subscription: ReactiveOpcUaSubscription in cfg.subscriptions.values():
             var subscription_item: TreeItem = create_item(server_item)
             subscription_item.set_text(0, "  " + subscription.display_name.value)
             subscription_item.set_text(1, "%d ms" % subscription.pub_interval_ms.value)
@@ -184,7 +180,7 @@ func _rebuild() -> void:
                 "subscription_id": subscription.id.value
             })
 
-            for tag: ReactiveOpcUaTag in subscription.tags.value:
+            for tag: ReactiveOpcUaTag in subscription.tags.values():
                 var tag_item: TreeItem = create_item(subscription_item)
                 tag_item.set_text(0, "    " + tag.display_name.value)
                 tag_item.set_text(1, tag.node_id.value)
@@ -233,40 +229,6 @@ func _restore_selection() -> void:
     _selected_tag_id          = ""
     _selection_kind           = _SelectionKind.NONE
     selection_cleared.emit()
-
-# ── Status binding ───────────────────────────────────────────────────────────
-
-## Binds directly to this server's reactive connection_status field, so the
-## row's status prefix updates immediately on any transition
-## (disconnected/connecting/connected/failed) without polling.
-func _bind_status(cfg: ReactiveOpcUaServer) -> void:
-    var server_id: String = cfg.id.value
-    var callback: Callable = func(_origin: Reactive) -> void:
-        _refresh_status_row(server_id)
-
-    cfg.connection_status.connect_self_changed(callback)
-    _status_bindings[server_id] = { "cfg": cfg, "callable": callback }
-
-
-func _unbind_all_status() -> void:
-    for binding: Dictionary in _status_bindings.values():
-        var cfg: ReactiveOpcUaServer = binding.get("cfg")
-        var callback: Callable = binding.get("callable")
-        if cfg != null and callback.is_valid():
-            cfg.connection_status.reactive_changed.disconnect(callback)
-    _status_bindings.clear()
-
-
-## Updates a single server row's status prefix in place, without touching
-## the rest of the tree structure.
-func _refresh_status_row(server_id: String) -> void:
-    var item: TreeItem = _find_server_item(server_id)
-    if item == null:
-        return
-    var cfg: ReactiveOpcUaServer = _find_server(server_id)
-    if cfg == null:
-        return
-    item.set_text(0, _status_prefix(cfg) + cfg.display_name.value)
 
 # ── Lookup helpers ────────────────────────────────────────────────────────
 

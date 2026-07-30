@@ -85,10 +85,21 @@ func _describe_value() -> String:
 ## Fires callback(origin) for every change in this subtree,
 ## whether it originates from this node itself or any descendant.
 ## Useful for coarse-grained tracking like dirty flags.
-func connect_any_changed(callback: Callable) -> Callable:
+func connect_any_changed_origin(callback: Callable) -> Callable:
     var wrapper: Callable = func(origin: Reactive) -> void:
         if callback.is_valid():
             callback.call(origin)
+    reactive_changed.connect(wrapper)
+    return wrapper
+
+## Fires callback(self) for every change in this subtree,
+## regardless of which descendant (or self) triggered it.
+## Use this when you only care that *this* node's subtree is dirty,
+## not who caused it.
+func connect_any_changed_self(callback: Callable) -> Callable:
+    var wrapper: Callable = func(_origin: Reactive) -> void:
+        if callback.is_valid():
+            callback.call(self)
     reactive_changed.connect(wrapper)
     return wrapper
 

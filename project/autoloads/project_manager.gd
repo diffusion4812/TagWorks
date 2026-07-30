@@ -62,17 +62,15 @@ func _on_close_project_requested() -> void:
 func _save(path: String) -> void:
     _ensure_save_dir()
 
-    var project: ReactiveProject = AppState.current_project.value
-
     var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
     if file == null:
         push_error("Failed to open file for writing: %s" % path)
         return
 
-    file.store_string(JSON.stringify(project.serialize(), "\t"))
+    file.store_string(JSON.stringify(AppState.current_project.value.serialize(), "\t"))
     file.close()
 
-    project.file_path.value = path
+    AppState.current_project.value.file_path.value = path
 
 # ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -95,12 +93,12 @@ func _load(path: String) -> void:
         AppState.last_error.value = "Invalid project file format."
         return
 
-    var project: ReactiveProject = ReactiveProject.from_dict(payload)
-    if project == null:
+    var p: ReactiveProject = ReactiveProject.from_dict(payload)
+    if p == null:
         AppState.last_error.value = "Unsupported or corrupt project file."
         return
 
-    project.file_path.value = path
+    p.file_path.value = path
 
     # Rebuild the live scene widget trees for every page from canvas data
     # _restore_all_canvases(project.pages)

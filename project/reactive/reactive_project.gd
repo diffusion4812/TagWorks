@@ -22,7 +22,7 @@ func _init(initial_owner: Reactive = null, label: String = "") -> void:
     opc_ua_servers = ReactiveDictionary.new(
         {}, self, "opc_ua_servers",
         TYPE_STRING, &"", null,
-        TYPE_OBJECT, &"Resource", null   # no script constraint
+        TYPE_OBJECT, &"Resource", null
     )
     pages          = ReactiveArray.new([], self, "pages")
 

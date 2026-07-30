@@ -60,7 +60,7 @@ func get_widget_class() -> String:
 # Edit Mode
 # ─────────────────────────────────────────────
 
-func build_properties(builder: WidgetPropertyBuilder) -> void:
+func build_properties(_builder: WidgetPropertyBuilder) -> void:
     pass
    # builder.add_color_field( "color_on",  "Color ON",  color_on)
   #  builder.add_color_field( "color_off", "Color OFF", color_off)
@@ -70,18 +70,18 @@ func build_properties(builder: WidgetPropertyBuilder) -> void:
 # ─────────────────────────────────────────────
 
 func serialize() -> Dictionary:
-    var data := super.serialize()
-    data["color_on"]  = { "r": color_on.r,  "g": color_on.g,  "b": color_on.b,  "a": color_on.a  }
-    data["color_off"] = { "r": color_off.r, "g": color_off.g, "b": color_off.b, "a": color_off.a }
-    return data
+    var serialized_data : Dictionary = super.serialize()
+    serialized_data["color_on"]  = { "r": color_on.r,  "g": color_on.g,  "b": color_on.b,  "a": color_on.a  }
+    serialized_data["color_off"] = { "r": color_off.r, "g": color_off.g, "b": color_off.b, "a": color_off.a }
+    return serialized_data
 
-func deserialize(data: Dictionary) -> void:
-    super.deserialize(data)
+func deserialize(d: Dictionary) -> void:
+    super.deserialize(d)
 
-    if data.has("color_on"):
-        var c: Dictionary = data["color_on"]
+    if d.has("color_on"):
+        var c: Dictionary = d["color_on"]
         color_on = Color(c["r"], c["g"], c["b"], c["a"])
 
-    if data.has("color_off"):
-        var c: Dictionary = data["color_off"]
+    if d.has("color_off"):
+        var c: Dictionary = d["color_off"]
         color_off = Color(c["r"], c["g"], c["b"], c["a"])

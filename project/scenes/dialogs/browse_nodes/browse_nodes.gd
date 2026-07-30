@@ -122,21 +122,21 @@ func browse(
 func _connect_async(server: ReactiveOpcUaServer) -> void:
     _run_async(func() -> Dictionary:
         var client: GodotOpcUa = GodotOpcUa.new()
-        var ok: bool
+        var err: Error
         if server.username.value.is_empty():
-            ok = client.connect_to_server(server.endpoint_url.value)
+            err = client.connect_to_server(server.endpoint_url.value)
         else:
-            ok = client.connect_with_credentials(
+            err = client.connect_with_credentials(
                 server.endpoint_url.value, server.username.value, server.password.value
             )
-        return { "ok": ok, "client": client }
+        return { "err": err, "client": client }
     , _on_connect_finished)
 
 
 func _on_connect_finished(result: Dictionary) -> void:
     refresh_button.disabled = false
 
-    if not result.get("ok", false):
+    if result.get("err", Error.ERR_BUG) != Error.OK:
         var reason: String = "Could not connect to %s." % _last_server.endpoint_url.value
         selected_label.text = "⚠ %s" % reason
         connect_failed.emit(reason)

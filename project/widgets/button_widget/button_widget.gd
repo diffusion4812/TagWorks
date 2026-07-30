@@ -20,14 +20,24 @@ func _define_default_properties() -> void:
     _ensure_property("label", func() -> ReactiveString:
         return ReactiveString.new("Button", data.properties, "label")
     )
-    _ensure_property("node_id", func() -> ReactiveOpcUaTagBinding:
-        return ReactiveOpcUaTagBinding.new({}, data.properties, "node_id")
+    _ensure_property("tag_id", func() -> ReactiveOpcUaTagBinding:
+        return ReactiveOpcUaTagBinding.new({}, data.properties, "tag_id")
     )
 
 func _connect_data_signals() -> void:
     data.properties.value["label"].connect_self_changed(
         func(s: ReactiveString) -> void:
             button.text = s.value
+    )
+    data.properties.value["tag_id"].connect_any_changed_self(
+        func(t: ReactiveOpcUaTagBinding) -> void:
+            var server : ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(t.server_id.value)
+            var subscription : ReactiveOpcUaSubscription = server.subscriptions.get_entry(t.subscription_id.value)
+            var tag : ReactiveOpcUaTag = subscription.tags.get_entry(t.tag_id.value)
+            tag.value.connect_self_changed(
+                func(value : ReactiveVariant) -> void:
+                    button.text = str(value.value)
+            )
     )
 
 # ─────────────────────────────────────────────
@@ -58,7 +68,7 @@ func get_widget_class() -> String:
 func build_properties(builder: WidgetPropertyBuilder) -> void:
     super.build_properties(builder)
     builder.add_string_field("label", "Label",  data.properties)
-    builder.add_node_field("node_id", "Node ID",  data.properties)
+    builder.add_node_field("tag_id", "Node ID",  data.properties)
 
 # ─────────────────────────────────────────────
 # Serialization

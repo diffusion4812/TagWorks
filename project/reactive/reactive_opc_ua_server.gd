@@ -22,7 +22,7 @@ var pub_interval_ms: ReactiveFloat
 var poll_interval_sec: ReactiveFloat
 var reconnect_interval_sec: ReactiveFloat
 var max_reconnect_attempts: ReactiveInt
-var subscriptions: ReactiveArray   # ReactiveArray of ReactiveOpcUaSubscription
+var subscriptions: ReactiveDictionary   # key: String (subscription id), value: ReactiveOpcUaSubscription
 
 ## ── Runtime-only state ──────────────────────────────────────────────────────
 ## NOT persisted (excluded from to_data()/from_data()) and NOT propagated to
@@ -47,7 +47,11 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     poll_interval_sec = ReactiveFloat.new(0.01, self, "poll_interval_sec")
     reconnect_interval_sec = ReactiveFloat.new(3.0, self, "reconnect_interval_sec")
     max_reconnect_attempts = ReactiveInt.new(10, self, "max_reconnect_attempts")
-    subscriptions = ReactiveArray.new([], self, "subscriptions")
+    subscriptions = ReactiveDictionary.new(
+        {}, self, "subscriptions",
+        TYPE_STRING, &"", null,
+        TYPE_OBJECT, &"Resource", null
+    )
 
     # Runtime-only fields: constructed WITHOUT `self` as owner so they never
     # bubble into this server's (or any ancestor's) self_changed signal, and
@@ -80,7 +84,7 @@ func from_data(data: Dictionary) -> void:
     subscriptions.clear()
     for subscription_data: Dictionary in data.get("subscriptions", []):
         var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new(subscription_data, self, "subscription")
-        subscriptions.append(subscription)
+        subscriptions.set(subscription.id.value, subscription)
 
 func to_data() -> Dictionary:
     var serialised_subscriptions: Array = []

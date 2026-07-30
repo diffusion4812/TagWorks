@@ -77,16 +77,6 @@ func rebuild(client: GodotOpcUa) -> void:
         client.delete_subscription(_sub_handle)
         _sub_handle = -1
 
-    var specs: Array = []
-    for entry: SubscriptionEntry in _entries.values():
-        if entry.tag.is_active.value:
-            specs.append({
-                "node_id": entry.node_id
-            })
-
-    if specs.is_empty():
-        return
-
     _sub_handle = client.create_subscription(pub_interval_ms)
     if _sub_handle == -1:
         push_warning(
@@ -94,6 +84,19 @@ func rebuild(client: GodotOpcUa) -> void:
             % [subscription_id, pub_interval_ms]
         )
 
+    for entry: SubscriptionEntry in _entries.values():
+        var on_data: Callable = func(_d: Dictionary) -> void:
+            entry.tag.quality.value   = _d.get("quality")
+            entry.tag.value.value     = _d.get("value")
+            entry.tag.timestamp.value = _d.get("timestamp_ms")
+
+        client.subscribe(
+            _sub_handle,
+            entry.node_id,
+            on_data,
+            100.0,
+            0.0
+        )
 
 func delete(client: GodotOpcUa) -> void:
     if _sub_handle != -1:

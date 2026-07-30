@@ -30,8 +30,8 @@ var tag_type: ReactiveInt          # stores a TagType enum value
 ## connect_self_changed() on the individual field, same as any other
 ## Reactive value.
 var value: ReactiveVariant
-var quality: ReactiveVariant       # e.g. OPC UA StatusCode / Good-Uncertain-Bad
-var timestamp: ReactiveFloat       # Unix time of last update, for staleness checks
+var quality: ReactiveInt       # e.g. OPC UA StatusCode / Good-Uncertain-Bad
+var timestamp: ReactiveInt       # Unix time of last update, for staleness checks
 
 func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String = "ReactiveOpcUaTag") -> void:
     super._init(initial_owner, label)
@@ -47,8 +47,8 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     # Runtime-only fields: constructed WITHOUT `self` as owner so they never
     # bubble into this tag's (or any ancestor's) self_changed signal.
     value = ReactiveVariant.new(null, null, "value")
-    quality = ReactiveVariant.new(null, null, "quality")
-    timestamp = ReactiveFloat.new(0.0, null, "timestamp")
+    quality = ReactiveInt.new(0, null, "quality")
+    timestamp = ReactiveInt.new(0, null, "timestamp")
 
     if not data.is_empty():
         from_data(data)

@@ -15,7 +15,7 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     tags = ReactiveDictionary.new(
         {}, self, "tags",
         TYPE_STRING, &"", null,
-        TYPE_OBJECT, &"ReactiveOpcUaTag", ReactiveOpcUaTag
+        TYPE_OBJECT, &"Resource", null
     )
 
     if not data.is_empty():
