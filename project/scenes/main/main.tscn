@@ -1,15 +1,16 @@
 [gd_scene format=3 uid="uid://chrkq14f3x3w0"]
 
-[ext_resource type="Script" uid="uid://ddgc0oskbohlj" path="res://scenes/main.gd" id="1_o5qli"]
-[ext_resource type="Theme" uid="uid://2pnop8nm7lxm" path="res://resources/base_theme.tres" id="1_ya4ey"]
-[ext_resource type="Script" uid="uid://b5uyhhaq24c5j" path="res://scenes/safe_area_container.gd" id="2_tipki"]
-[ext_resource type="PackedScene" uid="uid://cngi5xaoyrkxg" path="res://scenes/dialogs/widget_palette/widget_palette.tscn" id="3_tbgi4"]
-[ext_resource type="PackedScene" uid="uid://bo0tkqp8g6tm3" path="res://scenes/dialogs/pages_panel/pages_panel.tscn" id="3_ya4ey"]
-[ext_resource type="Script" uid="uid://dwudljs54kucl" path="res://scenes/dialogs/pages_panel/canvas_container.gd" id="4_eb6dy"]
-[ext_resource type="PackedScene" uid="uid://byyleyvv2a352" path="res://scenes/dialogs/script_editor/script_editor.tscn" id="5_85g3d"]
-[ext_resource type="PackedScene" uid="uid://dg1rxoysdt2ry" path="res://scenes/dialogs/property_panel/property_panel.tscn" id="5_o6xl0"]
-[ext_resource type="PackedScene" uid="uid://dmlg5i5n4rxtw" path="res://scenes/dialogs/opc_ua_connection_dialog/opc_ua_connection_dialog.tscn" id="6_tefeu"]
-[ext_resource type="PackedScene" uid="uid://dakwhsxj2tr72" path="res://scenes/dialogs/browse_nodes/browse_nodes.tscn" id="8_tipki"]
+[ext_resource type="Theme" uid="uid://2pnop8nm7lxm" path="res://resources/base_theme.tres" id="1_ouso4"]
+[ext_resource type="Script" uid="uid://ddgc0oskbohlj" path="res://scenes/main/main.gd" id="2_blune"]
+[ext_resource type="Script" uid="uid://b5uyhhaq24c5j" path="res://scenes/safe_area_container.gd" id="3_th5th"]
+[ext_resource type="PackedScene" uid="uid://kk1oivxbhmqy" path="res://scenes/main/start_screen.tscn" id="4_ouso4"]
+[ext_resource type="PackedScene" uid="uid://bo0tkqp8g6tm3" path="res://scenes/dialogs/pages_panel/pages_panel.tscn" id="5_raeie"]
+[ext_resource type="Script" uid="uid://dwudljs54kucl" path="res://scenes/dialogs/pages_panel/canvas_container.gd" id="6_hxu8e"]
+[ext_resource type="PackedScene" uid="uid://cngi5xaoyrkxg" path="res://scenes/dialogs/widget_palette/widget_palette.tscn" id="7_nvumn"]
+[ext_resource type="PackedScene" uid="uid://dg1rxoysdt2ry" path="res://scenes/dialogs/property_panel/property_panel.tscn" id="8_ou6is"]
+[ext_resource type="PackedScene" uid="uid://byyleyvv2a352" path="res://scenes/dialogs/script_editor/script_editor.tscn" id="9_necax"]
+[ext_resource type="PackedScene" uid="uid://dmlg5i5n4rxtw" path="res://scenes/dialogs/opc_ua_connection_dialog/opc_ua_connection_dialog.tscn" id="10_r4lks"]
+[ext_resource type="PackedScene" uid="uid://dakwhsxj2tr72" path="res://scenes/dialogs/browse_nodes/browse_nodes.tscn" id="11_pg34l"]
 
 [node name="Main" type="Control" unique_id=1699472879]
 layout_mode = 3
@@ -18,8 +19,8 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = ExtResource("1_ya4ey")
-script = ExtResource("1_o5qli")
+theme = ExtResource("1_ouso4")
+script = ExtResource("2_blune")
 
 [node name="Background" type="Panel" parent="." unique_id=500542961]
 layout_mode = 1
@@ -36,7 +37,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("2_tipki")
+script = ExtResource("3_th5th")
 
 [node name="RootLayout" type="VBoxContainer" parent="SafeAreaContainer" unique_id=974261623]
 layout_mode = 2
@@ -115,57 +116,57 @@ text = "Edit Mode"
 [node name="WorkArea" type="HSplitContainer" parent="SafeAreaContainer/RootLayout" unique_id=1534408628]
 layout_mode = 2
 size_flags_vertical = 3
-split_offsets = PackedInt32Array(250, 0)
+split_offsets = PackedInt32Array(109)
 drag_nested_intersections = true
-split_offset = 250
+split_offset = 109
+
+[node name="StartupContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=356782099 instance=ExtResource("4_ouso4")]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="PageContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1090117370]
+unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
 size_flags_stretch_ratio = 0.4
 drag_nested_intersections = true
 
-[node name="PagesPanel" parent="SafeAreaContainer/RootLayout/WorkArea/PageContainer" unique_id=1118176807 instance=ExtResource("3_ya4ey")]
+[node name="PagesPanel" parent="SafeAreaContainer/RootLayout/WorkArea/PageContainer" unique_id=1118176807 instance=ExtResource("5_raeie")]
 layout_mode = 2
 
-[node name="Panel" type="Control" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1881398819]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="CanvasContainer" type="TabContainer" parent="SafeAreaContainer/RootLayout/WorkArea/Panel" unique_id=1430019445]
+[node name="CanvasContainer" type="TabContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1430019445]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+visible = false
+custom_minimum_size = Vector2(400, 400)
+layout_mode = 2
 size_flags_horizontal = 3
-script = ExtResource("4_eb6dy")
+script = ExtResource("6_hxu8e")
 
 [node name="InspectorContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1030319876]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
+visible = false
+custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
 drag_nested_intersections = true
 
-[node name="WidgetPalette" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=232280490 instance=ExtResource("3_tbgi4")]
+[node name="WidgetPalette" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=232280490 instance=ExtResource("7_nvumn")]
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 
-[node name="PropertyPanel" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=77828116 instance=ExtResource("5_o6xl0")]
+[node name="PropertyPanel" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=77828116 instance=ExtResource("8_ou6is")]
 layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="Dialogs" type="CanvasLayer" parent="." unique_id=276274510]
 
-[node name="ScriptEditor" parent="Dialogs" unique_id=980154428 instance=ExtResource("5_85g3d")]
+[node name="ScriptEditor" parent="Dialogs" unique_id=980154428 instance=ExtResource("9_necax")]
 visible = false
 
-[node name="OpcUaConnectionDialog" parent="Dialogs" unique_id=425608285 instance=ExtResource("6_tefeu")]
+[node name="OpcUaConnectionDialog" parent="Dialogs" unique_id=425608285 instance=ExtResource("10_r4lks")]
 visible = false
 
-[node name="BrowseNodes" parent="Dialogs" unique_id=547478622 instance=ExtResource("8_tipki")]
+[node name="BrowseNodes" parent="Dialogs" unique_id=547478622 instance=ExtResource("11_pg34l")]
 visible = false
 
 [node name="FileDialog" type="FileDialog" parent="Dialogs" unique_id=1008746229]

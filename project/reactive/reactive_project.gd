@@ -5,12 +5,15 @@ extends ReactiveObject
 
 const FILE_VERSION: int = 2
 
-# ── Fields ────────────────────────────────────────────────────────────────────
 
+## ── Persisted configuration ────────────────────────────────────────────────
 var project_name   : ReactiveString
 var file_path      : ReactiveString
 var opc_ua_servers : ReactiveDictionary  # key: String (server id), value: ReactiveOpcUaServer
 var pages          : ReactiveArray
+
+## ── Runtime-only state ──────────────────────────────────────────────────────
+var is_loaded      : ReactiveBool
 
     # ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -25,6 +28,8 @@ func _init(initial_owner: Reactive = null, label: String = "") -> void:
         TYPE_OBJECT, &"Resource", null
     )
     pages          = ReactiveArray.new([], self, "pages")
+
+    is_loaded      = ReactiveBool.new(false, null, "is_loaded")
 
 func _describe_value() -> String:
     if project_name == null:

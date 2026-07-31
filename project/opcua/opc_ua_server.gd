@@ -17,13 +17,15 @@ extends Node
 ## toggle costs the same as changing the endpoint URL (full session
 ## reconnect). Acceptable for MVP; revisit with tiered reconciliation
 ## if churn becomes a real-world problem.
+##
+## Signal wiring to `config.reactive_changed` is fire-and-forget: Godot
+## automatically severs the connection when this node is freed, so no
+## manual disconnect is needed in teardown().
 var config: ReactiveOpcUaServer
 
 var _client: GodotOpcUa
-var _last_tick_ms: int = 0
 var _poll_accum_sec: float = 0.0
 var _subscriptions: Dictionary = {}
-var _config_changed_callable: Callable = Callable()
 
 var client: GodotOpcUa:
     get: return _client
@@ -34,9 +36,7 @@ func _init(cfg: ReactiveOpcUaServer) -> void:
     config = cfg
     name = "OpcUaServerConnection_%s" % config.id.value
 
-    _config_changed_callable = func(_origin: Reactive) -> void:
-        _on_config_changed()
-    config.connect_self_changed(_config_changed_callable)
+    config.connect_self_changed(_on_config_changed)
 
     _rebuild_subscriptions_from_config()
 
@@ -54,8 +54,7 @@ func _process(delta: float) -> void:
         _handle_iterate_error(err)
 
 func _exit_tree() -> void:
-    if _is_connected():
-        disconnect_from_server()
+    disconnect_from_server()  # safe no-op if not connected
 
 # ── Reactive binding ──────────────────────────────────────────────────────
 
@@ -63,7 +62,7 @@ func _exit_tree() -> void:
 ## construction-time build). Tears down and recreates the full
 ## subscription set; reconnects from scratch if a connection was already
 ## active.
-func _on_config_changed() -> void:
+func _on_config_changed(_origin: Reactive) -> void:
     var was_connected: bool = _is_connected()
 
     if was_connected:
@@ -107,6 +106,9 @@ func _teardown_subscription(subscription_id: String) -> void:
 # ── Connection ────────────────────────────────────────────────────────────
 
 func connect_to_server() -> bool:
+    if _is_connected():
+        return true
+
     config.set_connecting()
 
     var err: Error
@@ -124,12 +126,16 @@ func connect_to_server() -> bool:
         return false
 
     _rebuild_all_subscriptions()
-    _last_tick_ms = Time.get_ticks_msec()
+    _poll_accum_sec = 0.0
     config.set_connected()
     return true
 
 
+## Idempotent: safe to call regardless of current connection state.
 func disconnect_from_server() -> void:
+    if not _is_connected():
+        return
+
     for subscription: OpcUaSubscription in _subscriptions.values():
         subscription.delete(_client)
     _client.disconnect_server()
@@ -137,17 +143,14 @@ func disconnect_from_server() -> void:
 
 
 ## Called by OpcUaManager when this connection's server has been removed
-## from the project config entirely.
+## from the project config entirely. Only responsible for tearing down
+## the OPC UA session and subscriptions — the config.reactive_changed
+## signal connection is cleaned up automatically by Godot on queue_free().
 func teardown() -> void:
-    if _is_connected():
-        disconnect_from_server()
+    disconnect_from_server()
 
     for subscription_id: String in _subscriptions.keys().duplicate():
         _teardown_subscription(subscription_id)
-
-    if _config_changed_callable.is_valid():
-        config.reactive_changed.disconnect(_config_changed_callable)
-    _config_changed_callable = Callable()
 
     queue_free()
 

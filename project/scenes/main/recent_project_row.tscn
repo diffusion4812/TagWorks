@@ -1,0 +1,75 @@
+[gd_scene format=3 uid="uid://cl7a71de6ssk0"]
+
+[ext_resource type="Script" uid="uid://cdyp1kt7ihsao" path="res://scenes/main/recent_project_row.gd" id="1_m67cv"]
+
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_1i0je"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_wfi4e"]
+font_size = 20
+
+[sub_resource type="LabelSettings" id="LabelSettings_1i0je"]
+font_size = 12
+
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_5invh"]
+size = Vector2(24, 24)
+
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_g7xfr"]
+
+[node name="RecentProjectRow" type="PanelContainer" unique_id=1892631004]
+custom_minimum_size = Vector2(300, 48)
+script = ExtResource("1_m67cv")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1322594883]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1316610447]
+layout_mode = 2
+
+[node name="ProjectIcon" type="TextureRect" parent="MarginContainer/HBoxContainer" unique_id=716389043]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture = SubResource("PlaceholderTexture2D_1i0je")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer" unique_id=844083128]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NameLabel" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer" unique_id=1203206249]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Project name"
+label_settings = SubResource("LabelSettings_wfi4e")
+
+[node name="PathLabel" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer" unique_id=328361965]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Project location"
+label_settings = SubResource("LabelSettings_1i0je")
+
+[node name="TimeLabel" type="Label" parent="MarginContainer/HBoxContainer" unique_id=1477464837]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CloseButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=1159016490]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+icon = SubResource("PlaceholderTexture2D_5invh")
+flat = true
+icon_alignment = 1
+expand_icon = true
+
+[node name="WarningIcon" type="TextureRect" parent="MarginContainer/HBoxContainer" unique_id=1386259140]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture = SubResource("PlaceholderTexture2D_g7xfr")

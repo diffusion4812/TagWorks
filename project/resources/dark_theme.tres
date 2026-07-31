@@ -6,9 +6,6 @@ bg_color = Color(0.078431375, 0.078431375, 0.078431375, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5invh"]
 bg_color = Color(0.16078432, 0.16078432, 0.16078432, 1)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vpu3r"]
-bg_color = Color(0.078431375, 0.078431375, 0.078431375, 1)
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0m8lx"]
 bg_color = Color(0.16078432, 0.16078432, 0.16078432, 1)
 
@@ -28,7 +25,6 @@ border_color = Color(0.5882353, 0.5882353, 0.5882353, 1)
 [resource]
 Panel/styles/panel = SubResource("StyleBoxFlat_ihqd5")
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_5invh")
-ScrollContainer/styles/panel = SubResource("StyleBoxFlat_vpu3r")
 TabContainer/styles/panel = SubResource("StyleBoxFlat_0m8lx")
 TabContainer/styles/tab_selected = SubResource("StyleBoxFlat_ha1y0")
 TabContainer/styles/tabbar_background = SubResource("StyleBoxFlat_mij6w")

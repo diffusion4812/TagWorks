@@ -57,8 +57,6 @@ func _on_close_project_requested() -> void:
 # ── Save ──────────────────────────────────────────────────────────────────────
 
 ## Serialises the full reactive project tree to JSON.
-## ReactiveCanvas on each page already holds the current widget layout —
-## no scene tree traversal is required.
 func _save(path: String) -> void:
     _ensure_save_dir()
 
@@ -67,10 +65,12 @@ func _save(path: String) -> void:
         push_error("Failed to open file for writing: %s" % path)
         return
 
-    file.store_string(JSON.stringify(AppState.current_project.value.serialize(), "\t"))
+    file.store_string(JSON.stringify(AppState.current_project.serialize(), "\t"))
     file.close()
 
-    AppState.current_project.value.file_path.value = path
+    AppState.current_project.file_path.value = path
+
+    RecentProjects.add(AppState.current_project.file_path.value, AppState.current_project.project_name.value)
 
 # ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -106,9 +106,11 @@ func _load(path: String) -> void:
     # Push the fully hydrated project into AppState
     AppState.current_project.value = project
 
-    var default_page: ReactivePage = AppState.current_project.value.get_default_page()
+    var default_page: ReactivePage = AppState.current_project.get_default_page()
     if default_page != null:
         AppState.active_page.value  = default_page
+
+    RecentProjects.add(path, AppState.current_project.project_name.value)
 
 # ── Canvas Restore ────────────────────────────────────────────────────────────
 

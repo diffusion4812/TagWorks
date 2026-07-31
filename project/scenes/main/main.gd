@@ -3,18 +3,23 @@ extends Control
 
 # ── Child references ──────────────────────────────────────────────────────────
 
-@onready var file_menu:           PopupMenu             = %FileMenu
-@onready var edit_menu:           PopupMenu             = %EditMenu
-@onready var server_menu:         PopupMenu             = %ServerMenu
-@onready var edit_mode_toggle:    Button                = %EditModeButton
+@onready var file_menu :           PopupMenu             = %FileMenu
+@onready var edit_menu :           PopupMenu             = %EditMenu
+@onready var server_menu :         PopupMenu             = %ServerMenu
+@onready var edit_mode_toggle :    Button                = %EditModeButton
 
-@onready var connection_dialog:   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
-@onready var file_dialog:         FileDialog            = $Dialogs/FileDialog
+@onready var startup_container :         CenterContainer       = %StartupContainer
+@onready var page_container :            VSplitContainer       = %PageContainer
+@onready var canvas_container :          PageTabContainer      = %CanvasContainer
+@onready var inspector_container :       VSplitContainer       = %InspectorContainer
 
-var active_theme: Theme
-@onready var base_theme: Theme = preload("res://resources/base_theme.tres")
-@onready var dark_theme: Theme = preload("res://resources/dark_theme.tres")
-@onready var light_theme: Theme = preload("res://resources/light_theme.tres")
+@onready var connection_dialog :   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
+@onready var file_dialog :         FileDialog            = $Dialogs/FileDialog
+
+var active_theme : Theme
+@onready var base_theme : Theme = preload("res://resources/base_theme.tres")
+@onready var dark_theme : Theme = preload("res://resources/dark_theme.tres")
+@onready var light_theme : Theme = preload("res://resources/light_theme.tres")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,6 +63,9 @@ func _connect_signals() -> void:
     server_menu.id_pressed.connect(_on_server_menu_pressed)
     edit_mode_toggle.toggled.connect(_on_mode_toggled)
 
+    # ── Startup ───────────────────────────────────────────────────────────────
+    IntentBus.open_project_dialog_requested.connect(func() -> void: _open_load_dialog())
+
     # ── Server registry (sourced from the reactive project) ───────────────────
     # AppState.current_project is a permanent instance — bind once, forever.
     # Structural changes to opc_ua_servers (add/remove/reorder) always
@@ -74,6 +82,19 @@ func _connect_signals() -> void:
     AppState.edit_mode.connect_self_changed(
         func(edit_mode: ReactiveBool) -> void:
             edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
+    )
+
+    AppState.current_project.project_name.connect_self_changed(
+        func(new_name: ReactiveString) -> void:
+            get_window().title = new_name.value
+    )
+
+    AppState.has_project.connect_self_changed(
+        func(has_project: ReactiveBool) -> void:
+            startup_container.visible = not has_project.value
+            page_container.visible = has_project.value
+            canvas_container.visible = has_project.value
+            inspector_container.visible = has_project.value
     )
 
 # ── System ────────────────────────────────────────────────────────────────────
@@ -114,9 +135,13 @@ func _on_mode_toggled(is_edit: bool) -> void:
 func _on_file_menu_pressed(id: int) -> void:
     match id:
         0: IntentBus.new_project_requested.emit()
-        1: _open_load_dialog()
+        1: IntentBus.open_file_dialog_requested.emit()
         2: _request_save()
-        3: _open_save_dialog()
+        3:
+            if AppState.current_project.file_path.value.is_empty():
+                _open_save_dialog("projects/", AppState.current_project.file_path.value)
+            else:
+                _open_save_dialog("projects/")
         4: IntentBus.close_project_requested.emit()
         6: get_tree().quit()
 
@@ -225,19 +250,17 @@ func _status_prefix(cfg: ReactiveOpcUaServer) -> String:
 
 ## Emits a save intent. If no project is active, falls back to the save dialog.
 func _request_save() -> void:
-    if ProjectManager.has_active_project():
-        IntentBus.save_project_requested.emit()
+    if AppState.current_project.file_path.value.is_empty():
+        _open_save_dialog("projects/", AppState.current_project.file_path.value)
     else:
-        _open_save_dialog()
+        IntentBus.save_project_requested.emit()
 
-
-func _open_save_dialog() -> void:
+func _open_save_dialog(current_dir: String = "", current_file: String = "") -> void:
     file_dialog.file_mode   = FileDialog.FILE_MODE_SAVE_FILE
     file_dialog.access      = FileDialog.ACCESS_USERDATA
     file_dialog.filters     = PackedStringArray(["*.json ; Project Files"])
-    file_dialog.current_dir = "projects/"
-    if ProjectManager.has_active_project():
-        file_dialog.current_file = ProjectManager.get_current_project_path().get_file()
+    file_dialog.current_dir = current_dir
+    file_dialog.current_file = current_file
     file_dialog.popup_centered(Vector2i(800, 600))
 
 

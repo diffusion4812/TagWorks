@@ -1,5 +1,18 @@
 [gd_resource type="Theme" format=3 uid="uid://2pnop8nm7lxm"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ouso4"]
+bg_color = Color(0.28627452, 0.28627452, 0.28627452, 1)
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.28627452, 0.28627452, 0.28627452, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mij6w"]
 border_width_left = 4
 border_width_top = 4
@@ -11,6 +24,8 @@ corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
 [resource]
+RecentProjects/base_type = &"ScrollContainer"
+RecentProjects/styles/panel = SubResource("StyleBoxFlat_ouso4")
 SplitContainer/constants/separation = 0
 TabContainer/constants/side_margin = 0
 Tree/constants/v_separation = 0
