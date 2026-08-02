@@ -13,6 +13,58 @@ extends Node
 
 var _connections: Dictionary = {}   # server_id (String) -> OpcUaServer
 
+enum TagType {
+    UNKNOWN = -1,
+    BOOL,
+    SBYTE,
+    BYTE,
+    INT16,
+    UINT16,
+    INT32,
+    UINT32,
+    INT64,
+    UINT64,
+    FLOAT,
+    DOUBLE,
+    STRING,
+}
+
+## ns=0 numeric identifier → TagType. Source: OPC UA Part 6, Annex A.
+const _UA_NUMERIC_TO_TAG_TYPE: Dictionary = {
+    1:  TagType.BOOL,
+    2:  TagType.SBYTE,
+    3:  TagType.BYTE,
+    4:  TagType.INT16,
+    5:  TagType.UINT16,
+    6:  TagType.INT32,
+    7:  TagType.UINT32,
+    8:  TagType.INT64,
+    9:  TagType.UINT64,
+    10: TagType.FLOAT,
+    11: TagType.DOUBLE,
+    12: TagType.STRING,
+}
+
+## Types our conversion pipeline (_godot_to_ua_variant_typed) currently
+## supports end-to-end for writes. Extend this alongside the C++ side —
+## keeping both lists in sync is a manual step worth a code-comment
+## cross-reference in the C++ file too.
+const _SUPPORTED: Array = [
+    TagType.BOOL, TagType.SBYTE, TagType.BYTE,
+    TagType.INT16, TagType.UINT16, TagType.INT32, TagType.UINT32,
+    TagType.INT64, TagType.UINT64, TagType.FLOAT, TagType.DOUBLE,
+    TagType.STRING,
+]
+
+func tag_type_from_ua_numeric(numeric_id: int) -> TagType:
+    return _UA_NUMERIC_TO_TAG_TYPE.get(numeric_id, TagType.UNKNOWN)
+
+func is_tag_supported(tag_type: TagType) -> bool:
+    return tag_type in _SUPPORTED
+
+func tag_type_label(tag_type: TagType) -> String:
+    return TagType.keys()[tag_type] if tag_type != TagType.UNKNOWN else "Unknown"
+
 func _ready() -> void:
     # AppState.current_project is a permanent instance — bind once, forever.
     # Structural changes to opc_ua_servers (add/remove/reorder) always

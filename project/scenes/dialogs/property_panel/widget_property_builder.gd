@@ -63,26 +63,73 @@ func add_int_field(prop: String, lbl: String, current: int) -> void:
     _panel.extra_props.add_child(row)
 
 
-func add_string_field(p: String, l: String, v: ReactiveDictionary) -> void:
-    var row   :HBoxContainer = HBoxContainer.new()
-    var label :Label = Label.new()
-    var field :LineEdit = LineEdit.new()
+func add_dynamic_field(p: String, l: String, v: ReactiveDictionary) -> void:
+    var field: ReactiveDynamicField = v.value[p]
+
+    var row: HBoxContainer = HBoxContainer.new()
+    var label: Label = Label.new()
+    label.text                  = l
+    label.custom_minimum_size.x = 100
+    row.add_child(label)
+
+    var container: VBoxContainer = VBoxContainer.new()
+    container.add_child(row)
+    container.add_child(_build_dynamic_field_editor(p, field))
+    _panel.extra_props.add_child(container)
+
+func add_action_field(p: String, l: String, v: ReactiveDictionary) -> void:
+    var action: ReactiveActionBinding = v.value[p]
+
+    var row: HBoxContainer = HBoxContainer.new()
+    var label: Label = Label.new()
+    var type_dropdown: OptionButton = OptionButton.new()
+    var editor_slot: VBoxContainer = VBoxContainer.new()
 
     label.text                  = l
     label.custom_minimum_size.x = 100
-    field.text                  = v.value[p].value
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    field.text_submitted.connect(func(n: String) -> void:
-        _panel.property_changed.emit(p, n)
-        field.text = v.value[p].value # re-sync after widget accepts/refuses
-    )
+    type_dropdown.add_item("None",           ReactiveActionBinding.ActionType.NONE)
+    type_dropdown.add_item("Write Tag",      ReactiveActionBinding.ActionType.WRITE_TAG)
+    type_dropdown.add_item("Run Script",     ReactiveActionBinding.ActionType.RUN_SCRIPT)
+    type_dropdown.add_item("Navigate Scene", ReactiveActionBinding.ActionType.NAVIGATE_SCENE)
+    type_dropdown.add_item("Emit App Event", ReactiveActionBinding.ActionType.EMIT_APP_EVENT)
+    type_dropdown.select(action.action_type.value)
 
     row.add_child(label)
-    row.add_child(field)
-    #row.add_child(_make_script_button(target))
-    _panel.extra_props.add_child(row)
+    row.add_child(type_dropdown)
 
+    var container: VBoxContainer = VBoxContainer.new()
+    container.add_child(row)
+    container.add_child(editor_slot)
+
+    var rebuild: Callable = func() -> void:
+        for child: Node in editor_slot.get_children():
+            child.queue_free()
+        match action.action_type.value:
+            ReactiveActionBinding.ActionType.WRITE_TAG:
+                var wrapper: VBoxContainer = VBoxContainer.new()
+                wrapper.add_child(_build_write_target_editor(action.target_node, func() -> void:
+                    _panel.property_changed.emit(p, action)
+                ))
+                wrapper.add_child(_build_dynamic_field_editor(p, action.value))
+                editor_slot.add_child(wrapper)
+            ReactiveActionBinding.ActionType.RUN_SCRIPT:
+                editor_slot.add_child(_make_action_script_editor(p, action))
+            ReactiveActionBinding.ActionType.NAVIGATE_SCENE:
+                editor_slot.add_child(_make_scene_path_editor(p, action))
+            ReactiveActionBinding.ActionType.EMIT_APP_EVENT:
+                editor_slot.add_child(_make_event_name_editor(p, action))
+            ReactiveActionBinding.ActionType.NONE:
+                pass  # nothing to configure
+
+    type_dropdown.item_selected.connect(func(idx: int) -> void:
+        action.action_type.value = type_dropdown.get_item_id(idx)
+        _panel.property_changed.emit(p, action)
+        rebuild.call()
+    )
+
+    rebuild.call()
+    _panel.extra_props.add_child(container)
 
 func add_bool_field(prop: String, lbl: String, current: bool) -> void:
     var row      :HBoxContainer = HBoxContainer.new()
@@ -187,18 +234,149 @@ func _add_string_list_entry(
     container.add_child(entry_row)
 
 
-func add_node_field(
-    prop: String,
-    lbl:  String,
-    v:    ReactiveDictionary
-) -> void:
+func add_node_field(prop: String, lbl: String, v: ReactiveDictionary) -> void:
     var binding_prop: ReactiveOpcUaTagBinding = v.value[prop] as ReactiveOpcUaTagBinding
 
-    var col   : VBoxContainer = VBoxContainer.new()
-    var label : Label = Label.new()
+    var col: VBoxContainer = VBoxContainer.new()
+    var label: Label = Label.new()
     label.text = lbl
     col.add_child(label)
+    col.add_child(_build_tag_binding_editor(binding_prop))
 
+    _panel.extra_props.add_child(col)
+
+# ── Option population helpers ─────────────────────────────────────────────────
+func _populate_server_option(option: OptionButton) -> void:
+    option.clear()
+
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
+        option.add_item(cfg.display_name.value)
+        option.set_item_metadata(option.item_count - 1, cfg.id.value)
+
+
+func _populate_group_option(option: OptionButton, server_id: String) -> void:
+    option.clear()
+    if server_id == "":
+        return
+
+    for group: ReactiveOpcUaSubscription in AppState.current_project.opc_ua_servers.get_entry(server_id).subscriptions.values():
+        var item_label: String = "%s  —  %.0f ms" % [group.id.value, group.pub_interval_ms.value]
+        option.add_item(item_label)
+        option.set_item_metadata(option.item_count - 1, group.id.value)
+
+func _select_option_by_metadata(option: OptionButton, metadata_value: String) -> void:
+    for i: int in option.item_count:
+        if option.get_item_metadata(i) == metadata_value:
+            option.select(i)
+            return
+
+func _build_dynamic_field_editor(p: String, field: ReactiveDynamicField) -> Control:
+    var wrapper: VBoxContainer = VBoxContainer.new()
+    var source_dropdown: OptionButton = OptionButton.new()
+    var editor_slot: MarginContainer = MarginContainer.new()
+
+    source_dropdown.add_item("Constant", ReactiveDynamicField.SourceType.CONSTANT)
+    source_dropdown.add_item("OPC Tag",  ReactiveDynamicField.SourceType.OPC_TAG)
+    source_dropdown.add_item("Script",   ReactiveDynamicField.SourceType.SCRIPT)
+    source_dropdown.select(field.source_type.value)
+
+    wrapper.add_child(source_dropdown)
+    wrapper.add_child(editor_slot)
+
+    var rebuild: Callable = func() -> void:
+        for child: Node in editor_slot.get_children():
+            child.queue_free()
+        match field.source_type.value:
+            ReactiveDynamicField.SourceType.CONSTANT:
+                editor_slot.add_child(_make_constant_editor(p, field))
+            ReactiveDynamicField.SourceType.OPC_TAG:
+                editor_slot.add_child(_make_tag_editor(p, field))
+            ReactiveDynamicField.SourceType.SCRIPT:
+                editor_slot.add_child(_make_script_editor(p, field))
+
+    source_dropdown.item_selected.connect(func(idx: int) -> void:
+        field.source_type.value = source_dropdown.get_item_id(idx)
+        _panel.property_changed.emit(p, field)
+        rebuild.call()
+    )
+
+    rebuild.call()
+    return wrapper
+
+func _make_constant_editor(p: String, f: ReactiveDynamicField) -> Control:
+    var field: LineEdit = LineEdit.new()
+    field.text                  = str(f.constant_value.value)
+    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+    field.text_submitted.connect(func(n: String) -> void:
+        f.constant_value.value = n
+        _panel.property_changed.emit(p, f)
+        field.text = str(f.constant_value.value)
+    )
+    return field
+
+func _make_tag_editor(p: String, f: ReactiveDynamicField) -> Control:
+    return _build_tag_binding_editor(f.tag_binding, func() -> void:
+        _panel.property_changed.emit(p, f)
+    )
+
+func _make_script_editor(p: String, f: ReactiveDynamicField) -> Control:
+    var edit: TextEdit = TextEdit.new()
+    edit.text                  = f.script_source.value
+    edit.custom_minimum_size.y = 80
+    edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+    edit.text_changed.connect(func() -> void:
+        f.script_source.value = edit.text
+        _panel.property_changed.emit(p, f)
+    )
+    return edit
+
+func _make_action_script_editor(p: String, a: ReactiveActionBinding) -> Control:
+    var edit: TextEdit = TextEdit.new()
+    edit.text                  = a.script_source.value
+    edit.custom_minimum_size.y = 100
+    edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+    edit.text_changed.connect(func() -> void:
+        a.script_source.value = edit.text
+        _panel.property_changed.emit(p, a)
+    )
+    return edit
+
+func _make_scene_path_editor(p: String, a: ReactiveActionBinding) -> Control:
+    var field: LineEdit = LineEdit.new()
+    field.text                  = a.scene_path.value
+    field.placeholder_text      = "res://path/to/scene.tscn"
+    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+    field.text_submitted.connect(func(n: String) -> void:
+        a.scene_path.value = n
+        _panel.property_changed.emit(p, a)
+        field.text = a.scene_path.value
+    )
+    return field
+
+func _make_event_name_editor(p: String, a: ReactiveActionBinding) -> Control:
+    var field: LineEdit = LineEdit.new()
+    field.text                  = a.event_name.value
+    field.placeholder_text      = "custom_event_name"
+    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+    field.text_submitted.connect(func(n: String) -> void:
+        a.event_name.value = n
+        _panel.property_changed.emit(p, a)
+        field.text = a.event_name.value
+    )
+    return field
+
+func _build_tag_binding_editor(
+    binding_prop: ReactiveOpcUaTagBinding,
+    on_change: Callable = Callable()
+) -> Control:
+    var container: VBoxContainer = VBoxContainer.new()
+
+    # ── Server row ─────────────────────────────────────────────
     var server_row    : HBoxContainer = HBoxContainer.new()
     var server_label  : Label = Label.new()
     var server_option : OptionButton = OptionButton.new()
@@ -212,8 +390,9 @@ func add_node_field(
 
     server_row.add_child(server_label)
     server_row.add_child(server_option)
-    col.add_child(server_row)
+    container.add_child(server_row)
 
+    # ── Group row ──────────────────────────────────────────────
     var group_row    : HBoxContainer = HBoxContainer.new()
     var group_label  : Label = Label.new()
     var group_option : OptionButton = OptionButton.new()
@@ -227,8 +406,9 @@ func add_node_field(
 
     group_row.add_child(group_label)
     group_row.add_child(group_option)
-    col.add_child(group_row)
+    container.add_child(group_row)
 
+    # ── Tag row ────────────────────────────────────────────────
     var tag_row    : HBoxContainer = HBoxContainer.new()
     var tag_label  : Label = Label.new()
     var tag_edit   : LineEdit = LineEdit.new()
@@ -244,10 +424,9 @@ func add_node_field(
     tag_row.add_child(tag_label)
     tag_row.add_child(tag_edit)
     tag_row.add_child(browse_btn)
-    col.add_child(tag_row)
+    container.add_child(tag_row)
 
-    # ── Reactive → UI (binding_prop changes update the widgets) ──────────────
-
+    # ── Reactive → UI ──────────────────────────────────────────
     var on_server_changed: Callable = func(_new_value: ReactiveString) -> void:
         if not is_instance_valid(server_option):
             return
@@ -257,20 +436,18 @@ func add_node_field(
             _select_option_by_metadata(group_option, binding_prop.subscription_id.value)
 
     var on_subscription_changed: Callable = func(_new_value: ReactiveString) -> void:
-        if not is_instance_valid(group_option):
-            return
-        _select_option_by_metadata(group_option, _new_value.value)
+        if is_instance_valid(group_option):
+            _select_option_by_metadata(group_option, _new_value.value)
 
     var on_tag_id_changed: Callable = func(_new_value: ReactiveString) -> void:
-        if not is_instance_valid(tag_edit):
-            return
-        tag_edit.text = _new_value.value
+        if is_instance_valid(tag_edit):
+            tag_edit.text = _new_value.value
 
     binding_prop.server_id.connect_self_changed(on_server_changed)
     binding_prop.subscription_id.connect_self_changed(on_subscription_changed)
     binding_prop.tag_id.connect_self_changed(on_tag_id_changed)
 
-    col.tree_exiting.connect(func() -> void:
+    container.tree_exiting.connect(func() -> void:
         if binding_prop.server_id.reactive_changed.is_connected(on_server_changed):
             binding_prop.server_id.reactive_changed.disconnect(on_server_changed)
         if binding_prop.subscription_id.reactive_changed.is_connected(on_subscription_changed):
@@ -279,68 +456,110 @@ func add_node_field(
             binding_prop.tag_id.reactive_changed.disconnect(on_tag_id_changed)
     )
 
-    # ── User intent → binding_prop (UI updates only set data, never text) ────
-
+    # ── User intent → binding_prop ────────────────────────────
     server_option.item_selected.connect(func(_index: int) -> void:
         var sid: String = server_option.get_item_metadata(server_option.selected)
-        binding_prop.server_id.value = sid
-        binding_prop.subscription_id.value  = ""
-        binding_prop.tag_id.value   = ""
+        binding_prop.server_id.value       = sid
+        binding_prop.subscription_id.value = ""
+        binding_prop.tag_id.value          = ""
+        if on_change.is_valid():
+            on_change.call()
     )
 
     group_option.item_selected.connect(func(_index: int) -> void:
         var gid: String = group_option.get_item_metadata(group_option.selected)
         binding_prop.subscription_id.value = gid
+        if on_change.is_valid():
+            on_change.call()
     )
 
     browse_btn.pressed.connect(func() -> void:
-        _panel.opc_ua_connection_dialog.browse(func(result: OpcUaTagBinding) -> void:
-            binding_prop.server_id.value = result.server_id
-            binding_prop.subscription_id.value  = result.subscription_id
-            binding_prop.tag_id.value   = result.tag_id
+        _panel.opc_ua_connection_dialog.browse(func(result: ReactiveOpcUaTagBinding) -> void:
+            binding_prop.server_id.value       = result.server_id.value
+            binding_prop.subscription_id.value = result.subscription_id.value
+            binding_prop.tag_id.value          = result.tag_id.value
+            if on_change.is_valid():
+                on_change.call()
         )
     )
 
-    _panel.extra_props.add_child(col)
+    return container
 
-# ── Option population helpers ─────────────────────────────────────────────────
-func _populate_server_option(option: OptionButton) -> void:
-    option.clear()
+func _build_write_target_editor(
+    target: ReactiveOpcUaWriteTarget,
+    on_change: Callable = Callable()
+) -> Control:
+    var container: VBoxContainer = VBoxContainer.new()
 
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
-        return
+    # ── Server row ─────────────────────────────────────────────
+    var server_row    : HBoxContainer = HBoxContainer.new()
+    var server_label  : Label = Label.new()
+    var server_option : OptionButton = OptionButton.new()
 
-    for cfg: ReactiveOpcUaServer in project.opc_ua_servers.values():
-        option.add_item(cfg.display_name.value)
-        option.set_item_metadata(option.item_count - 1, cfg.id.value)
+    server_label.text                   = "Server"
+    server_label.custom_minimum_size.x  = 60
+    server_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
+    _populate_server_option(server_option)
+    _select_option_by_metadata(server_option, target.server_id.value)
 
-func _populate_group_option(option: OptionButton, server_id: String) -> void:
-    option.clear()
-    if server_id == "":
-        return
+    server_row.add_child(server_label)
+    server_row.add_child(server_option)
+    container.add_child(server_row)
 
-    var project: ReactiveProject = AppState.current_project.value
-    if project == null:
-        return
+    # ── Node row (no subscription/group needed for writes) ────
+    var node_row    : HBoxContainer = HBoxContainer.new()
+    var node_label  : Label = Label.new()
+    var node_edit   : LineEdit = LineEdit.new()
+    var browse_btn  : Button = Button.new()
 
-    var cfg: ReactiveOpcUaServer = null
-    for server: ReactiveOpcUaServer in project.opc_ua_servers.values():
-        if server.id.value == server_id:
-            cfg = server
-            break
+    node_label.text                  = "Node"
+    node_label.custom_minimum_size.x = 60
+    node_edit.text                   = target.node_id.value
+    node_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
+    node_edit.editable               = false
+    browse_btn.text                  = "Browse"
 
-    if cfg == null:
-        return
+    node_row.add_child(node_label)
+    node_row.add_child(node_edit)
+    node_row.add_child(browse_btn)
+    container.add_child(node_row)
 
-    for group: ReactiveOpcUaSubscription in cfg.groups.values():
-        var item_label: String = "%s  —  %.0f ms" % [group.id.value, group.pub_interval_ms.value]
-        option.add_item(item_label)
-        option.set_item_metadata(option.item_count - 1, group.id.value)
+    # ── Reactive → UI ──────────────────────────────────────────
+    var on_server_changed: Callable = func(_v: ReactiveString) -> void:
+        if is_instance_valid(server_option):
+            _select_option_by_metadata(server_option, _v.value)
 
-func _select_option_by_metadata(option: OptionButton, metadata_value: String) -> void:
-    for i: int in option.item_count:
-        if option.get_item_metadata(i) == metadata_value:
-            option.select(i)
-            return
+    var on_node_changed: Callable = func(_v: ReactiveString) -> void:
+        if is_instance_valid(node_edit):
+            node_edit.text = _v.value
+
+    target.server_id.connect_self_changed(on_server_changed)
+    target.node_id.connect_self_changed(on_node_changed)
+
+    container.tree_exiting.connect(func() -> void:
+        if target.server_id.reactive_changed.is_connected(on_server_changed):
+            target.server_id.reactive_changed.disconnect(on_server_changed)
+        if target.node_id.reactive_changed.is_connected(on_node_changed):
+            target.node_id.reactive_changed.disconnect(on_node_changed)
+    )
+
+    # ── User intent → target ────────────────────────────────────
+    server_option.item_selected.connect(func(_index: int) -> void:
+        var sid: String = server_option.get_item_metadata(server_option.selected)
+        target.server_id.value = sid
+        target.node_id.value   = ""  # server changed — clear stale node
+        if on_change.is_valid():
+            on_change.call()
+    )
+
+    browse_btn.pressed.connect(func() -> void:
+        var browse_nodes: BrowseNodes = _panel.get_node("/root/Main/Dialogs/BrowseNodes")
+        browse_nodes.browse(
+            AppState.current_project.opc_ua_servers.get_entry(target.server_id.value),
+            func(result: OpcUaNodeId) -> void:
+                target.node_id.value = result.to_tag_name()
+        )
+    )
+
+    return container

@@ -38,6 +38,8 @@ var _server_submenus: Dictionary = {}
 ## { server_id: { "cfg": ReactiveOpcUaServer, "callable": Callable } }
 var _status_bindings: Dictionary = {}
 
+var one_shot_startup: bool = true
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -91,7 +93,7 @@ func _connect_signals() -> void:
 
     AppState.has_project.connect_self_changed(
         func(has_project: ReactiveBool) -> void:
-            startup_container.visible = not has_project.value
+            startup_container.visible = false
             page_container.visible = has_project.value
             canvas_container.visible = has_project.value
             inspector_container.visible = has_project.value

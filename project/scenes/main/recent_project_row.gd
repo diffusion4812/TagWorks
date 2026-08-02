@@ -57,10 +57,11 @@ func _on_gui_input(event: InputEvent) -> void:
     if not (event is InputEventMouseButton and event.pressed):
         return
     if event.button_index == MOUSE_BUTTON_LEFT:
-        if _exists:
-            open_requested.emit(_file_path)
+        if event.double_click:
+            if _exists:
+                open_requested.emit(_file_path)
     elif event.button_index == MOUSE_BUTTON_RIGHT:
-        _show_context_menu(event.global_position)
+        _show_context_menu(DisplayServer.mouse_get_position())
 
 func _show_context_menu(at_position: Vector2) -> void:
     var menu : PopupMenu = PopupMenu.new()
@@ -79,7 +80,7 @@ func _show_context_menu(at_position: Vector2) -> void:
 func _on_context_menu_id_pressed(id: int) -> void:
     match id:
         0: open_requested.emit(_file_path)
-        1: OS.shell_show_in_file_manager(_file_path)
+        1: OS.shell_show_in_file_manager(ProjectSettings.globalize_path(_file_path))
         2: DisplayServer.clipboard_set(_file_path)
         3: remove_requested.emit(_file_path)
 

@@ -10,35 +10,48 @@ extends BaseWidget
 
 func _ready() -> void:
     super._ready()
-    button.text = data.properties.value["label"].value
+
+    # Sync + wire anything that touches actual view nodes here,
+    # since @onready vars are only guaranteed valid after this point.
+    var label_field: ReactiveDynamicField = data.properties.value["label"]
+    button.text = str(label_field.resolved.value)
+
+    if not button.pressed.is_connected(_on_button_pressed):
+        button.pressed.connect(_on_button_pressed)
 
     AppState.edit_mode.connect_self_changed(_on_edit_mode_changed)
     _on_edit_mode_changed(AppState.edit_mode)
 
 func _define_default_properties() -> void:
     super._define_default_properties()
-    _ensure_property("label", func() -> ReactiveString:
-        return ReactiveString.new("Button", data.properties, "label")
+    _ensure_property("label", func() -> ReactiveDynamicField:
+        return ReactiveDynamicField.new("Button", data.properties, "label")
     )
-    _ensure_property("tag_id", func() -> ReactiveOpcUaTagBinding:
-        return ReactiveOpcUaTagBinding.new({}, data.properties, "tag_id")
+    _ensure_property("on_click", func() -> ReactiveActionBinding:
+        return ReactiveActionBinding.new({}, data.properties, "on_click")
     )
 
 func _connect_data_signals() -> void:
-    data.properties.value["label"].connect_self_changed(
-        func(s: ReactiveString) -> void:
-            button.text = s.value
+    # Safe to run early — this only registers a listener; the callback
+    # itself won't fire until later, by which point button is valid.
+    var label_field: ReactiveDynamicField = data.properties.value["label"]
+    label_field.set_context_provider(_build_script_context)
+    label_field.resolved.connect_self_changed(func(r: ReactiveVariant) -> void:
+        if is_instance_valid(button):
+            button.text = str(r.value)
     )
-    data.properties.value["tag_id"].connect_any_changed_self(
-        func(t: ReactiveOpcUaTagBinding) -> void:
-            var server : ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(t.server_id.value)
-            var subscription : ReactiveOpcUaSubscription = server.subscriptions.get_entry(t.subscription_id.value)
-            var tag : ReactiveOpcUaTag = subscription.tags.get_entry(t.tag_id.value)
-            tag.value.connect_self_changed(
-                func(value : ReactiveVariant) -> void:
-                    button.text = str(value.value)
-            )
-    )
+
+func _build_script_context() -> Dictionary:
+    return { "id": data.widget_id.value }
+
+func _on_button_pressed() -> void:
+    var action: ReactiveActionBinding = data.properties.value["on_click"]
+    action.execute({ "widget_id": data.widget_id.value })
+
+func build_properties(builder: WidgetPropertyBuilder) -> void:
+    super.build_properties(builder)
+    builder.add_dynamic_field("label", "Label", data.properties)
+    builder.add_action_field("on_click", "On Click", data.properties)
 
 # ─────────────────────────────────────────────
 # Signal Handlers
@@ -52,7 +65,8 @@ func _on_edit_mode_changed(enabled: ReactiveBool) -> void:
     button.mouse_filter = Control.MOUSE_FILTER_IGNORE if enabled.value else Control.MOUSE_FILTER_STOP
 
 func _on_property_changed(p: String, v: Variant) -> void:
-    data.properties.value[p].value = v
+    pass
+    #data.properties.value[p].value = v
 
 # ─────────────────────────────────────────────
 # Class
@@ -60,15 +74,6 @@ func _on_property_changed(p: String, v: Variant) -> void:
 
 func get_widget_class() -> String:
     return "ButtonWidget"
-
-# ─────────────────────────────────────────────
-# Edit Mode
-# ─────────────────────────────────────────────
-
-func build_properties(builder: WidgetPropertyBuilder) -> void:
-    super.build_properties(builder)
-    builder.add_string_field("label", "Label",  data.properties)
-    builder.add_node_field("tag_id", "Node ID",  data.properties)
 
 # ─────────────────────────────────────────────
 # Serialization

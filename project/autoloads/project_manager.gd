@@ -48,7 +48,25 @@ func _on_save_project_as_requested(path: String) -> void:
 
 
 func _on_open_project_requested(path: String) -> void:
-    _load(path)
+    if not FileAccess.file_exists(path):
+        AppState.last_error.value = "Project file not found: %s" % path
+        return
+
+    var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        AppState.last_error.value = "Failed to open file for reading: %s" % path
+        return
+
+    var payload: Variant = JSON.parse_string(file.get_as_text())
+    file.close()
+
+    if not payload is Dictionary:
+        AppState.last_error.value = "Invalid project file format."
+        return
+
+    AppState.load_project(payload)
+    if AppState.current_project.is_loaded.value:
+        RecentProjects.add(path, AppState.current_project.project_name.value)
 
 
 func _on_close_project_requested() -> void:
@@ -71,46 +89,6 @@ func _save(path: String) -> void:
     AppState.current_project.file_path.value = path
 
     RecentProjects.add(AppState.current_project.file_path.value, AppState.current_project.project_name.value)
-
-# ── Load ──────────────────────────────────────────────────────────────────────
-
-## Deserialises a project from JSON, restores OPC UA state, rebuilds all
-## page canvas widget trees in the scene, then pushes the result into AppState.
-func _load(path: String) -> void:
-    if not FileAccess.file_exists(path):
-        AppState.last_error.value = "Project file not found: %s" % path
-        return
-
-    var file: FileAccess = FileAccess.open(path, FileAccess.READ)
-    if file == null:
-        AppState.last_error.value = "Failed to open file for reading: %s" % path
-        return
-
-    var payload: Variant = JSON.parse_string(file.get_as_text())
-    file.close()
-
-    if not payload is Dictionary:
-        AppState.last_error.value = "Invalid project file format."
-        return
-
-    var p: ReactiveProject = ReactiveProject.from_dict(payload)
-    if p == null:
-        AppState.last_error.value = "Unsupported or corrupt project file."
-        return
-
-    p.file_path.value = path
-
-    # Rebuild the live scene widget trees for every page from canvas data
-    # _restore_all_canvases(project.pages)
-
-    # Push the fully hydrated project into AppState
-    AppState.current_project.value = project
-
-    var default_page: ReactivePage = AppState.current_project.get_default_page()
-    if default_page != null:
-        AppState.active_page.value  = default_page
-
-    RecentProjects.add(path, AppState.current_project.project_name.value)
 
 # ── Canvas Restore ────────────────────────────────────────────────────────────
 

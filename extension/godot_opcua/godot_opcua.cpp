@@ -66,6 +66,8 @@ void GodotOpcUa::_bind_methods() {
     // ── Read / write ──────────────────────────────────────────────────────────
     ClassDB::bind_method(D_METHOD("read_node", "node_id"),
                          &GodotOpcUa::read_node);
+    ClassDB::bind_method(D_METHOD("read_node_data_type", "node_id"),
+                         &GodotOpcUa::read_node_data_type);
     ClassDB::bind_method(D_METHOD("read_nodes", "node_ids"),
                          &GodotOpcUa::read_nodes);
     ClassDB::bind_method(D_METHOD("write_node", "node_id", "value"),
@@ -268,6 +270,28 @@ Error GodotOpcUa::_map_ua_status_to_error(UA_StatusCode rs) {
                 return ERR_QUERY_FAILED;
             }
             return OK; // Uncertain codes treated as non-fatal
+    }
+}
+
+// ============================================================================
+// _ua_builtin_type_name
+// ============================================================================
+
+String GodotOpcUa::_ua_builtin_type_name(UA_UInt32 numeric_id) const {
+    switch (numeric_id) {
+        case UA_NS0ID_BOOLEAN: return "Boolean";
+        case UA_NS0ID_SBYTE:   return "SByte";
+        case UA_NS0ID_BYTE:    return "Byte";
+        case UA_NS0ID_INT16:   return "Int16";
+        case UA_NS0ID_UINT16:  return "UInt16";
+        case UA_NS0ID_INT32:   return "Int32";
+        case UA_NS0ID_UINT32:  return "UInt32";
+        case UA_NS0ID_INT64:   return "Int64";
+        case UA_NS0ID_UINT64:  return "UInt64";
+        case UA_NS0ID_FLOAT:   return "Float";
+        case UA_NS0ID_DOUBLE:  return "Double";
+        case UA_NS0ID_STRING:  return "String";
+        default:               return "Unsupported";
     }
 }
 
@@ -748,6 +772,55 @@ Variant GodotOpcUa::read_node(Ref<OpcUaNodeId> node_id) {
     return result;
 }
 
+Dictionary GodotOpcUa::read_node_data_type(const String &node_id_string) {
+    Dictionary out;
+    out["data_type"]      = -1;
+    out["data_type_name"] = String();
+    out["success"]        = false;
+
+    if (_client == nullptr) {
+        UtilityFunctions::push_error("GodotOpcUa: read_node_data_type called with no active client.");
+        return out;
+    }
+
+    Ref<OpcUaNodeId> parsed_id = OpcUaNodeId::parse(node_id_string);
+    if (parsed_id.is_null()) {
+        UtilityFunctions::push_error(
+            String("GodotOpcUa: Failed to parse NodeId string: ") + node_id_string);
+        return out;
+    }
+
+    UA_NodeId nid = parsed_id->to_ua_node_id();
+
+    UA_NodeId data_type_id;
+    UA_NodeId_init(&data_type_id);
+
+    const UA_StatusCode sc = UA_Client_readDataTypeAttribute(_client, nid, &data_type_id);
+    UA_NodeId_clear(&nid);
+
+    if (sc != UA_STATUSCODE_GOOD) {
+        UtilityFunctions::push_error(
+            String("GodotOpcUa: readDataTypeAttribute failed for ") + node_id_string +
+            " → " + String(UA_StatusCode_name(sc)));
+        UA_NodeId_clear(&data_type_id);
+        return out;
+    }
+
+    if (data_type_id.namespaceIndex == 0 &&
+        data_type_id.identifierType == UA_NODEIDTYPE_NUMERIC) {
+        out["data_type"]      = static_cast<int64_t>(data_type_id.identifier.numeric);
+        out["data_type_name"] = _ua_builtin_type_name(data_type_id.identifier.numeric);
+        out["success"]        = true;
+    } else {
+        // Complex/custom (ns>0) DataType — not a simple scalar we support.
+        out["data_type_name"] = String("Unsupported");
+        out["success"]        = true;  // read succeeded, just not a scalar builtin
+    }
+
+    UA_NodeId_clear(&data_type_id);
+    return out;
+}
+
 // ============================================================================
 // read_nodes  (batch)
 // ============================================================================
@@ -1049,7 +1122,7 @@ Array GodotOpcUa::browse_children(Ref<OpcUaNodeId> node_id) {
     UA_NodeId nid = node_id->to_ua_node_id();
     _browse_with_continuation(nid, result, _max_browse_depth);
     UA_NodeId_clear(&nid);
-
+    
     // Strip the "children" key — this is the flat, lazy variant.
     for (int i = 0; i < result.size(); ++i) {
         Dictionary d = result[i];

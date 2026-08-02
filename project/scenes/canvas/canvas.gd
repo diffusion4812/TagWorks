@@ -365,4 +365,5 @@ func _delete_widget(target: BaseWidget) -> void:
         _deselect_current()
     _context_target = null
     target.queue_free()
+    AppState.selected_widget.value = null
     _mark_dirty()

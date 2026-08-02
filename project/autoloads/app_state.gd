@@ -48,7 +48,7 @@ var last_saved_path : ReactiveString
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-    current_project = ReactiveProject.new(null, "app_state.current_project")
+    current_project  = ReactiveProject.new(null, "app_state.current_project")
     has_project      = ReactiveBool.new(false, null, "app_state.has_project")
     focused_page     = ReactiveVariant.new(null, null, "app_state.focused_page")
     active_page      = ReactiveVariant.new(null, null, "app_state.active_page")
@@ -60,6 +60,12 @@ func _ready() -> void:
     active_page.connect_self_changed(
         func(_active_page: ReactiveVariant) -> void:
             edit_mode.value = false
+    )
+
+    current_project.is_loaded.connect_self_changed(
+        func(is_loaded: ReactiveBool) -> void:
+            if is_loaded.value:
+                active_page.value = AppState.current_project.get_default_page()
     )
 
 # ── Project Lifecycle ─────────────────────────────────────────────────────────

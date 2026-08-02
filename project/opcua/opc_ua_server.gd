@@ -170,11 +170,7 @@ func _handle_iterate_error(err: Error) -> void:
 # ── Write ─────────────────────────────────────────────────────────────────
 
 func write_tag(node_id: OpcUaNodeId, value: Variant) -> bool:
-    var subscription: OpcUaSubscription = find_subscription_for_tag(node_id)
-    if subscription == null:
-        push_warning("OpcUaServerConnection [%s]: write on unregistered tag '%s'." % [config.id.value, node_id.to_string()])
-        return false
-    return subscription.write_tag(node_id, value, _client)
+    return _client.write_node(node_id, value)
 
 # ── Tag / subscription lookup ────────────────────────────────────────────────
 

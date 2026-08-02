@@ -109,6 +109,7 @@ private:
     bool       _godot_to_ua_variant(const Variant &gd_var, UA_Variant &out) const;
     Dictionary _make_tag_entry(const UA_DataValue &dv) const;
     static Error _map_ua_status_to_error(UA_StatusCode rs);
+    String _ua_builtin_type_name(UA_UInt32 numeric_id) const;
 
     // ── Node ID helpers ───────────────────────────────────────────────────────
     static String      _node_id_to_string(const UA_NodeId &id);
@@ -174,6 +175,7 @@ public:
     // ── Synchronous read / write ──────────────────────────────────────────────
 
     Variant    read_node(Ref<OpcUaNodeId> node_id);
+    Dictionary read_node_data_type(const String &node_id_string);
     Dictionary read_nodes(Array node_ids);
     bool       write_node(Ref<OpcUaNodeId> node_id, const Variant &value);
     Dictionary call_ua_method(Ref<OpcUaNodeId> object_id,

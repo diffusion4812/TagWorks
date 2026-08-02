@@ -69,7 +69,6 @@ func clear() -> void:
     _current_target  = null
     for child: Node in extra_props.get_children():
         child.queue_free()
-    hide()
 
 
 func _load_widget(node: Node, widget: ReactiveWidget) -> void:
@@ -78,8 +77,6 @@ func _load_widget(node: Node, widget: ReactiveWidget) -> void:
 
     panel_title.text = widget.widget_type.value
     node.build_properties(WidgetPropertyBuilder.new(self, widget))
-
-    show()
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
 

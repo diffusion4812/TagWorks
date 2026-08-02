@@ -339,7 +339,12 @@ func _on_item_selected() -> void:
         return
 
     selected_label.text     = node_id_str
-    confirm_button.disabled = false
+
+    var type: Dictionary = _client.read_node_data_type(node_id_str)
+    if not OpcUaManager.is_tag_supported(OpcUaManager.tag_type_from_ua_numeric(type["data_type"])):
+        confirm_button.disabled = true
+    else:
+        confirm_button.disabled = false
 
 
 func _on_item_activated() -> void:

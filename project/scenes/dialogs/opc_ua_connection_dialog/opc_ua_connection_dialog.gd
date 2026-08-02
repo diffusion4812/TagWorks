@@ -401,11 +401,11 @@ func _on_confirm_pressed() -> void:
         var tag : ReactiveOpcUaTag                   = subscription.tags.get_entry(_selected_tag_id)
 
         if tag != null:
-            var result: OpcUaTagBinding = OpcUaTagBinding.new(
-                _selected_server_id,
-                _selected_subscription_id,
-                _selected_tag_id
-            )
+            var result: ReactiveOpcUaTagBinding = ReactiveOpcUaTagBinding.new(
+                {"server_id": _selected_server_id,
+                 "subscription_id": _selected_subscription_id,
+                 "tag_id": _selected_tag_id}
+                , null)
             var callback: Callable = _picker_callback
 
             _end_picker_session()

@@ -57,9 +57,6 @@ func _on_tab_close_pressed(tab_index: int) -> void:
     # Safely destroy the tab
     tab_node.queue_free()
 
-    # Update visibility dynamically based on remaining active children
-    _update_visibility_deferred()
-
 
 func _on_pages_changed(_reactive: ReactiveArray) -> void:
     _rebuild_tabs()
@@ -106,8 +103,6 @@ func _rebuild_tabs() -> void:
     for page_id: String in current_ids:
         if _find_tab_by_page_id(page_id) == null:
             _create_tab_for_page(current_ids[page_id] as ReactivePage)
-
-    _update_visibility_deferred()
 
 
 func _create_tab_for_page(page: ReactivePage) -> void:
@@ -168,19 +163,6 @@ func _find_tab_by_page_id(page_id: String) -> ScrollContainer:
         if tab.has_meta(META_PAGE_ID) and tab.get_meta(META_PAGE_ID) == page_id:
             return tab as ScrollContainer
     return null
-
-
-## Checks remaining children to determine if the container should hide
-func _update_visibility_deferred() -> void:
-    # Call deferred ensures queued_free nodes are processed correctly if checked on the next frame
-    _check_visibility.call_deferred()
-
-func _check_visibility() -> void:
-    var active_tab_count: int = get_children().filter(func(node: Node) -> bool: return not node.is_queued_for_deletion()).size()
-    if active_tab_count == 0:
-        hide()
-    else:
-        show()
 
 # ── Dirty Indicator ───────────────────────────────────────────────────────────
 
