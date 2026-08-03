@@ -99,7 +99,7 @@ func _rebuild_tree() -> void:
     _tree_root.set_text(0, "")
     _tree_root.set_selectable(0, true)
 
-    if not AppState.has_project.value:
+    if not AppState.current_project.is_loaded.value:
         return
 
     for item: Variant in AppState.current_project.pages.values():
@@ -133,7 +133,7 @@ func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
 # ─────────────────────────────────────────────
 
 func _create_page(page_name: String) -> void:
-    if not AppState.has_project.value:
+    if not AppState.current_project.is_loaded.value:
         push_warning("PagePanel: No active project.")
         return
 
@@ -157,7 +157,7 @@ func _create_page(page_name: String) -> void:
 
 
 func _delete_page(page_id: String) -> void:
-    if not AppState.has_project.value:
+    if not AppState.current_project.is_loaded.value:
         push_warning("PagePanel: No active project.")
         return
 
@@ -287,7 +287,7 @@ func _update_button_states() -> void:
 # ─────────────────────────────────────────────
 ## Fires when the page hierarchy is structurally modified.
 func _on_page_hierarchy_changed(_pages: ReactiveArray) -> void:
-    if not AppState.has_project.value:
+    if not AppState.current_project.is_loaded.value:
         return
 
     var selected_id: String = _get_selected_page_id()

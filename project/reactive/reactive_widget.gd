@@ -64,7 +64,7 @@ static func from_dict(payload: Dictionary) -> ReactiveWidget:
     w.from_data(payload)
     return w
 
-# ── Serialise ─────────────────────────────────────────────────────────────────
+# ── Serialize ─────────────────────────────────────────────────────────────────
 
 func to_data() -> Dictionary:
     var serialised_children: Array = []
@@ -81,7 +81,7 @@ func to_data() -> Dictionary:
         "parent_id":   parent_id.value,
         "node_id":     node_id.value,
         "server_id":   server_id.value,
-        "properties":  properties.value.duplicate(),
+        "properties":  properties.serialize(),  # ReactiveDictionary handles recursion itself
         "children":    serialised_children,
     }
 
@@ -95,7 +95,7 @@ func from_data(payload: Dictionary) -> void:
     parent_id.value   = payload.get("parent_id",   "")
     node_id.value     = payload.get("node_id",     "")
     server_id.value   = payload.get("server_id",   "")
-    properties.value  = payload.get("properties",  {}) #TODO: Update this to serialise the type with ReactiveXYZ
+    properties.deserialize(payload.get("properties"))
 
     children.clear()
     for child_dict: Dictionary in payload.get("children", []):

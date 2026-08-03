@@ -14,19 +14,19 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     tag_id          = ReactiveString.new("", self, "tag_id")
 
     if not data.is_empty():
-        from_data(data)
+        deserialize(data)
 
 
 func _describe_value() -> String:
     return ""
 
-func from_data(data: Dictionary) -> void:
+func deserialize(data: Dictionary) -> void:
     server_id.value       = data.get("server_id", "")
     subscription_id.value = data.get("subscription_id",  "")
     tag_id.value         = data.get("tag_id",   "")
 
 
-func to_data() -> Dictionary:
+func serialize() -> Dictionary:
     return {
         "server_id": server_id.value,
         "subscription_id":  subscription_id.value,

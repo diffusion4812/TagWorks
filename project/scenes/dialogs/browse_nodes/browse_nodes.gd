@@ -10,13 +10,14 @@ signal node_id_selected(node_id: OpcUaNodeId)
 signal connect_failed(reason: String)
 
 # ── Scene references ──────────────────────────────────────────────────────────
-@onready var search_bar:            LineEdit = %SearchBar
-@onready var refresh_button:        Button   = %RefreshButton
-@onready var tree:                  Tree     = %NodeTree
-@onready var selected_label:        Label    = %SelectedLabel
-@onready var confirm_button:        Button   = %ConfirmButton
-@onready var close_button:          Button   = %CloseButton
-@onready var _hide_internal_toggle: CheckBox = %HideInternalCheckBox
+@onready var search_bar            : LineEdit = %SearchBar
+@onready var refresh_button        : Button   = %RefreshButton
+@onready var tree                  : Tree     = %NodeTree
+@onready var selected_label        : Label    = %SelectedLabel
+@onready var selected_type         : Label    = %SelectedType
+@onready var confirm_button        : Button   = %ConfirmButton
+@onready var close_button          : Button   = %CloseButton
+@onready var _hide_internal_toggle : CheckBox = %HideInternalCheckBox
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var _client:      GodotOpcUa          = null
@@ -343,9 +344,10 @@ func _on_item_selected() -> void:
     var type: Dictionary = _client.read_node_data_type(node_id_str)
     if not OpcUaManager.is_tag_supported(OpcUaManager.tag_type_from_ua_numeric(type["data_type"])):
         confirm_button.disabled = true
+        selected_type.text = "Unsupported"
     else:
         confirm_button.disabled = false
-
+        selected_type.text = type["data_type_name"]
 
 func _on_item_activated() -> void:
     if not confirm_button.disabled and confirm_button.visible:

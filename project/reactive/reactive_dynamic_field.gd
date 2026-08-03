@@ -76,17 +76,25 @@ func _bind_script() -> void:
         if not expr.has_execute_failed():
             resolved.value = result
 
-func from_data(data: Dictionary) -> void:
-    source_type.value    = data.get("source_type", SourceType.CONSTANT)
-    constant_value.value = data.get("constant_value", null)
-    script_source.value  = data.get("script_source", "")
-    tag_binding.from_data(data.get("tag_binding", {}))
-    _rebind()
+# ── Serialization ─────────────────────────────────────────────────────────────
 
-func to_data() -> Dictionary:
+func deserialize(data: Variant) -> void:
+    assert(data is Dictionary, "ReactiveDynamicField.deserialize expects a Dictionary")
+    var d: Dictionary = data as Dictionary
+
+    source_type.value    = d.get("source_type", SourceType.CONSTANT)
+    constant_value.value = d.get("constant_value", null)
+    script_source.value  = d.get("script_source", "")
+    tag_binding.deserialize(d.get("tag_binding", {}))
+
+    _rebind()
+    _log("DESERIALIZED", _get_type_name())
+    manually_emit()
+
+func serialize() -> Variant:
     return {
-        "source_type": source_type.value,
+        "source_type":    source_type.value,
         "constant_value": constant_value.value,
-        "script_source": script_source.value,
-        "tag_binding": tag_binding.to_data(),
+        "script_source":  script_source.value,
+        "tag_binding":    tag_binding.serialize(),
     }

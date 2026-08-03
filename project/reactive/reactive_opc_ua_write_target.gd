@@ -11,16 +11,16 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     node_id   = ReactiveString.new("", self, "node_id")
 
     if not data.is_empty():
-        from_data(data)
+        deserialize(data)
 
 func _describe_value() -> String:
     return node_id.value
 
-func from_data(data: Dictionary) -> void:
+func deserialize(data: Dictionary) -> void:
     server_id.value = data.get("server_id", "")
     node_id.value   = data.get("node_id", "")
 
-func to_data() -> Dictionary:
+func serialize() -> Dictionary:
     return {
         "server_id": server_id.value,
         "node_id": node_id.value,

@@ -30,7 +30,7 @@ func _init(initial_owner: Reactive = null, label: String = "") -> void:
 
 func _propagate(reactive: Reactive = null) -> void:
     var origin: Reactive = reactive if reactive != null else self
-    _log("PROPAGATE", _describe_value(), origin)
+    #_log("PROPAGATE", _describe_value(), origin)
     reactive_changed.emit(origin)
 
 func manually_emit() -> void:
@@ -54,6 +54,18 @@ func _log(event: String, value_str: String = "", origin: Reactive = null) -> voi
         msg += "  [origin: %s <%s>]" % [origin._build_owner_chain(), origin._get_type_name()]
 
     print(msg)
+
+# ── Serialization ─────────────────────────────────────────────────────────────
+
+## Override in subclasses to return this node's serialized representation
+## (a primitive, Dictionary, or Array — whatever is appropriate for the type).
+## Failing to override this is treated as a programming error, not a runtime
+## fallback case — it should be caught during development.
+func serialize() -> Variant:
+    push_error("Reactive: %s (%s) does not override serialize()" %
+               [_build_owner_chain(), _get_type_name()])
+    assert(false, "Reactive subclasses MUST override serialize()")
+    return null
 
 ## Returns the GDScript `class_name` (e.g. "ReactiveTag") if available,
 ## falling back to the native engine class (e.g. "Resource") otherwise.

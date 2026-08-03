@@ -37,10 +37,10 @@ func _on_new_project_requested() -> void:
     AppState.new_project()
 
 func _on_save_project_requested() -> void:
-    if AppState.current_project.value.file_path.value.is_empty():
+    if AppState.current_project.file_path.value.is_empty():
         push_warning("ProjectManager: Save requested but no active project path.")
         return
-    _save(AppState.current_project.value.file_path.value)
+    _save(AppState.current_project.file_path.value)
 
 
 func _on_save_project_as_requested(path: String) -> void:

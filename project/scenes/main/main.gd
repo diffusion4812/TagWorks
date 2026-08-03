@@ -91,12 +91,12 @@ func _connect_signals() -> void:
             get_window().title = new_name.value
     )
 
-    AppState.has_project.connect_self_changed(
-        func(has_project: ReactiveBool) -> void:
+    AppState.current_project.is_loaded.connect_self_changed(
+        func(is_loaded: ReactiveBool) -> void:
             startup_container.visible = false
-            page_container.visible = has_project.value
-            canvas_container.visible = has_project.value
-            inspector_container.visible = has_project.value
+            page_container.visible = is_loaded.value
+            canvas_container.visible = is_loaded.value
+            inspector_container.visible = is_loaded.value
     )
 
 # ── System ────────────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ func _on_mode_toggled(is_edit: bool) -> void:
 func _on_file_menu_pressed(id: int) -> void:
     match id:
         0: IntentBus.new_project_requested.emit()
-        1: IntentBus.open_file_dialog_requested.emit()
+        1: IntentBus.open_project_dialog_requested.emit()
         2: _request_save()
         3:
             if AppState.current_project.file_path.value.is_empty():
@@ -233,8 +233,8 @@ func _on_server_status_changed(cfg: ReactiveOpcUaServer, menu_item_index: int, s
 
 func _apply_submenu_state(submenu: PopupMenu, cfg: ReactiveOpcUaServer) -> void:
     var connected: bool = cfg.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTED
-    submenu.set_item_disabled(0, connected)
-    submenu.set_item_disabled(1, not connected)
+    #submenu.set_item_disabled(0, connected)
+    #submenu.set_item_disabled(1, not connected)
 
 
 func _status_prefix(cfg: ReactiveOpcUaServer) -> String:

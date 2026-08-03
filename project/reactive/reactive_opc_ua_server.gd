@@ -63,12 +63,12 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     last_error = ReactiveString.new("", null, "last_error")
 
     if not data.is_empty():
-        from_data(data)
+        deserialize(data)
 
 func _describe_value() -> String:
     return ""
 
-func from_data(data: Dictionary) -> void:
+func deserialize(data: Dictionary) -> void:
     id.value = data.get("id", "")
     display_name.value = data.get("display_name", "")
     endpoint_url.value = data.get("endpoint_url", "")
@@ -86,7 +86,7 @@ func from_data(data: Dictionary) -> void:
         var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new(subscription_data, self, "subscription")
         subscriptions.set(subscription.id.value, subscription)
 
-func to_data() -> Dictionary:
+func serialize() -> Dictionary:
     var serialised_subscriptions: Array = []
     for item: Variant in subscriptions.values():
         if item is ReactiveOpcUaSubscription:

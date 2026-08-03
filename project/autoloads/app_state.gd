@@ -10,10 +10,6 @@ extends Node
 ## (pages, opc_ua_servers, etc.) never needs to rebind due to a project swap.
 var current_project : ReactiveProject
 
-## Whether a project has actually been loaded/created, as opposed to the
-## default empty state. Use this instead of null-checking current_project.
-var has_project     : ReactiveBool
-
 # ── Page State ────────────────────────────────────────────────────────────────
 
 ## Reference to the page currently highlighted in the page tree.
@@ -49,7 +45,6 @@ var last_saved_path : ReactiveString
 
 func _ready() -> void:
     current_project  = ReactiveProject.new(null, "app_state.current_project")
-    has_project      = ReactiveBool.new(false, null, "app_state.has_project")
     focused_page     = ReactiveVariant.new(null, null, "app_state.focused_page")
     active_page      = ReactiveVariant.new(null, null, "app_state.active_page")
     selected_widget  = ReactiveVariant.new(null, null, "app_state.selected_widget")
@@ -78,23 +73,23 @@ func load_project(payload: Dictionary) -> bool:
         return false
 
     current_project.load_from_dict(payload)
-    has_project.value = true
     _reset_selection_state()
+    current_project.is_loaded.value = true
     return true
 
 ## Resets current_project to a fresh, empty project (e.g. "File > New").
 func new_project() -> void:
     current_project.reset_to_default()
-    has_project.value = true
     last_saved_path.value = ""
     _reset_selection_state()
+    current_project.is_loaded.value = true
 
 ## Closes the current project, returning to the default empty state.
 func close_project() -> void:
     current_project.reset_to_default()
-    has_project.value = false
     last_saved_path.value = ""
     _reset_selection_state()
+    current_project.is_loaded.value = false
 
 func _reset_selection_state() -> void:
     focused_page.value    = null

@@ -32,6 +32,8 @@ OpcUaManager="*uid://8phiu00ahgg7"
 LayoutManager="*uid://cjn5wtaokyg8r"
 RecentProjects="*uid://cf5q8hhp6qhwy"
 ProjectManager="*uid://cxcfp36bffx2p"
+ReactiveTypeRegistry="*uid://u4m6loh0vxlf"
+ReactiveWidgetFactory="*uid://cay55wsepjx2n"
 
 [debug]
 

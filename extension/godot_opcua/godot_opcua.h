@@ -77,78 +77,26 @@ struct SubscriptionEntry {
 class GodotOpcUa : public RefCounted {
     GDCLASS(GodotOpcUa, RefCounted)
 
-private:
-    // ── Authentication ────────────────────────────────────────────────────────
-    enum class AuthMode { Anonymous, Username };
-    AuthMode _auth_mode = AuthMode::Anonymous;
-    String   _auth_username;
-    String   _auth_password;
-
-    // ── OPC UA client ─────────────────────────────────────────────────────────
-    UA_Client *_client   = nullptr;
-    String     _last_url;
-
-    // ── Subscriptions: handle → entry ─────────────────────────────────────────
-    std::unordered_map<int, SubscriptionEntry> _subscriptions;
-    int _next_sub_handle = 1;
-
-    // ── Item registry: tag_name (utf8) → context (owned) ─────────────────────
-    // unique_ptr gives stable heap addresses for the open62541 context pointer.
-    std::unordered_map<std::string, std::unique_ptr<MonitoredItemContext>> _item_registry;
-
-    // ── Value cache: tag_name → entry Dictionary ──────────────────────────────
-    // {value, timestamp_ms, quality, quality_good, tick}
-    // Written from _on_data_change (main thread only — no mutex needed).
-    Dictionary _latest_values;
-
-    // ── Browse ────────────────────────────────────────────────────────────────
-    int _max_browse_depth = 5;
-
-    // ── Type conversion ───────────────────────────────────────────────────────
-    Variant    _ua_variant_to_godot(const UA_Variant &ua_var) const;
-    bool       _godot_to_ua_variant(const Variant &gd_var, UA_Variant &out) const;
-    Dictionary _make_tag_entry(const UA_DataValue &dv) const;
-    static Error _map_ua_status_to_error(UA_StatusCode rs);
-    String _ua_builtin_type_name(UA_UInt32 numeric_id) const;
-
-    // ── Node ID helpers ───────────────────────────────────────────────────────
-    static String      _node_id_to_string(const UA_NodeId &id);
-    static const char *_node_class_to_string(UA_NodeClass nc);
-
-    // ── Connection ────────────────────────────────────────────────────────────
-    UA_StatusCode _do_connect(UA_Client *client, const String &url);
-
-    // ── Subscription internals ────────────────────────────────────────────────
-
-    /// Create a new UA_Client with default config; does not connect.
-    bool _init_client();
-
-    /// Create/recreate the server-side OPC UA Subscription for one entry.
-    bool _create_subscription_server_side(int handle, SubscriptionEntry &entry);
-
-    /// Create/recreate one server-side MonitoredItem for a context.
-    void _create_monitored_item(MonitoredItemContext &ctx, UA_UInt32 sub_id);
-
-    // ── Browse helpers ────────────────────────────────────────────────────────
-    bool _browse_with_continuation(const UA_NodeId &nodeId,
-                                   Array           &out_children,
-                                   int              depth);
-    void _process_browse_result(Array                &out_children,
-                                const UA_BrowseResult &result,
-                                int                    depth);
-
-    // ── Data-change callback (fires on main thread inside iterate()) ──────────
-    static void _on_data_change(UA_Client    *client,
-                                UA_UInt32     subId,  void *subContext,
-                                UA_UInt32     monId,  void *monContext,
-                                UA_DataValue *value);
-
-protected:
-    static void _bind_methods();
-
 public:
     GodotOpcUa();
     ~GodotOpcUa() override;
+
+    enum DataType {
+        DATATYPE_AUTO     = 0,
+        DATATYPE_BOOLEAN  = 1,
+        DATATYPE_SBYTE    = 2,
+        DATATYPE_BYTE     = 3,
+        DATATYPE_INT16    = 4,
+        DATATYPE_UINT16   = 5,
+        DATATYPE_INT32    = 6,
+        DATATYPE_UINT32   = 7,
+        DATATYPE_INT64    = 8,
+        DATATYPE_UINT64   = 9,
+        DATATYPE_FLOAT    = 10,
+        DATATYPE_DOUBLE   = 11,
+        DATATYPE_STRING   = 12,
+        DATATYPE_DATETIME = 13,
+    };
 
     // ── Connection ────────────────────────────────────────────────────────────
 
@@ -177,10 +125,11 @@ public:
     Variant    read_node(Ref<OpcUaNodeId> node_id);
     Dictionary read_node_data_type(const String &node_id_string);
     Dictionary read_nodes(Array node_ids);
-    bool       write_node(Ref<OpcUaNodeId> node_id, const Variant &value);
+    bool       write_node(Ref<OpcUaNodeId> node_id, const Variant &value, int type_hint = DATATYPE_AUTO);
     Dictionary call_ua_method(Ref<OpcUaNodeId> object_id,
                               Ref<OpcUaNodeId> method_id,
-                              Array            input_args);
+                              Array            input_args,
+                              Array            input_types);
 
     // ── Subscription management ───────────────────────────────────────────────
 
@@ -236,6 +185,85 @@ public:
 
     Array discover_servers(String discovery_url);
     Array get_endpoints(String url);
+
+protected:
+    static void _bind_methods();
+
+private:
+    // ── Authentication ────────────────────────────────────────────────────────
+    enum class AuthMode { Anonymous, Username };
+    AuthMode _auth_mode = AuthMode::Anonymous;
+    String   _auth_username;
+    String   _auth_password;
+
+    // ── OPC UA client ─────────────────────────────────────────────────────────
+    UA_Client *_client   = nullptr;
+    String     _last_url;
+
+    // ── Caching ────────────────────────────────────────────────────────────────
+    HashMap<String, DataType> _data_type_cache;
+    HashMap<String, std::vector<DataType>> _method_arg_type_cache;
+
+    // ── Subscriptions: handle → entry ─────────────────────────────────────────
+    std::unordered_map<int, SubscriptionEntry> _subscriptions;
+    int _next_sub_handle = 1;
+
+    // ── Item registry: tag_name (utf8) → context (owned) ─────────────────────
+    // unique_ptr gives stable heap addresses for the open62541 context pointer.
+    std::unordered_map<std::string, std::unique_ptr<MonitoredItemContext>> _item_registry;
+
+    // ── Value cache: tag_name → entry Dictionary ──────────────────────────────
+    // {value, timestamp_ms, quality, quality_good, tick}
+    // Written from _on_data_change (main thread only — no mutex needed).
+    Dictionary _latest_values;
+
+    // ── Browse ────────────────────────────────────────────────────────────────
+    int _max_browse_depth = 5;
+
+    // ── Type conversion ───────────────────────────────────────────────────────
+    DataType              _resolve_data_type(const UA_NodeId &nid, const String &tag_name);
+    Variant               _ua_variant_to_godot(const UA_Variant &ua_var) const;
+    bool                  _godot_to_ua_variant(const Variant &value, DataType type, UA_Variant &out) const;
+    std::vector<DataType> _resolve_method_input_types(const UA_NodeId &method_nid, const String &tag_name, size_t expected_count);
+    Dictionary            _make_tag_entry(const UA_DataValue &dv) const;
+    static Error          _map_ua_status_to_error(UA_StatusCode rs);
+    String                _ua_builtin_type_name(UA_UInt32 numeric_id) const;
+    DataType              _ua_typeid_to_enum(const UA_NodeId &type_id) const;
+
+
+    // ── Node ID helpers ───────────────────────────────────────────────────────
+    static String      _node_id_to_string(const UA_NodeId &id);
+    static const char *_node_class_to_string(UA_NodeClass nc);
+
+    // ── Connection ────────────────────────────────────────────────────────────
+    UA_StatusCode _do_connect(UA_Client *client, const String &url);
+
+    // ── Subscription internals ────────────────────────────────────────────────
+
+    /// Create a new UA_Client with default config; does not connect.
+    bool _init_client();
+
+    /// Create/recreate the server-side OPC UA Subscription for one entry.
+    bool _create_subscription_server_side(int handle, SubscriptionEntry &entry);
+
+    /// Create/recreate one server-side MonitoredItem for a context.
+    void _create_monitored_item(MonitoredItemContext &ctx, UA_UInt32 sub_id);
+
+    // ── Browse helpers ────────────────────────────────────────────────────────
+    bool _browse_with_continuation(const UA_NodeId &nodeId,
+                                   Array           &out_children,
+                                   int              depth);
+    void _process_browse_result(Array                &out_children,
+                                const UA_BrowseResult &result,
+                                int                    depth);
+
+    // ── Data-change callback (fires on main thread inside iterate()) ──────────
+    static void _on_data_change(UA_Client    *client,
+                                UA_UInt32     subId,  void *subContext,
+                                UA_UInt32     monId,  void *monContext,
+                                UA_DataValue *value);
 };
 
 } // namespace godot
+
+VARIANT_ENUM_CAST(godot::GodotOpcUa::DataType)

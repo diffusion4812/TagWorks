@@ -47,6 +47,21 @@ GodotOpcUa::~GodotOpcUa() {
 // ============================================================================
 
 void GodotOpcUa::_bind_methods() {
+    // ── Datatypes ─────────────────────────────────────────────────────────────
+    BIND_ENUM_CONSTANT(DATATYPE_AUTO);
+    BIND_ENUM_CONSTANT(DATATYPE_BOOLEAN);
+    BIND_ENUM_CONSTANT(DATATYPE_SBYTE);
+    BIND_ENUM_CONSTANT(DATATYPE_BYTE);
+    BIND_ENUM_CONSTANT(DATATYPE_INT16);
+    BIND_ENUM_CONSTANT(DATATYPE_UINT16);
+    BIND_ENUM_CONSTANT(DATATYPE_INT32);
+    BIND_ENUM_CONSTANT(DATATYPE_UINT32);
+    BIND_ENUM_CONSTANT(DATATYPE_INT64);
+    BIND_ENUM_CONSTANT(DATATYPE_UINT64);
+    BIND_ENUM_CONSTANT(DATATYPE_FLOAT);
+    BIND_ENUM_CONSTANT(DATATYPE_DOUBLE);
+    BIND_ENUM_CONSTANT(DATATYPE_STRING);
+    BIND_ENUM_CONSTANT(DATATYPE_DATETIME);
 
     // ── Connection ────────────────────────────────────────────────────────────
     ClassDB::bind_method(D_METHOD("connect_to_server", "url"),
@@ -70,8 +85,9 @@ void GodotOpcUa::_bind_methods() {
                          &GodotOpcUa::read_node_data_type);
     ClassDB::bind_method(D_METHOD("read_nodes", "node_ids"),
                          &GodotOpcUa::read_nodes);
-    ClassDB::bind_method(D_METHOD("write_node", "node_id", "value"),
-                         &GodotOpcUa::write_node);
+    ClassDB::bind_method(D_METHOD("write_node", "node_id", "value", "type_hint"),
+                          &GodotOpcUa::write_node, DEFVAL(DATATYPE_AUTO));
+
     ClassDB::bind_method(D_METHOD("call_ua_method",
                                    "object_id", "method_id", "input_args"),
                          &GodotOpcUa::call_ua_method);
@@ -172,48 +188,131 @@ Variant GodotOpcUa::_ua_variant_to_godot(const UA_Variant &ua_var) const {
     return Variant(out);
 }
 
-bool GodotOpcUa::_godot_to_ua_variant(const Variant &gd_var, UA_Variant &out) const {
+std::vector<GodotOpcUa::DataType> GodotOpcUa::_resolve_method_input_types(
+        const UA_NodeId &method_nid, const String &tag_name, size_t expected_count) {
+
+    const String cache_key = tag_name + String("::in_args");
+    if (_method_arg_type_cache.has(cache_key)) {
+        return _method_arg_type_cache[cache_key];
+    }
+
+    std::vector<DataType> types;
+
+    UA_RelativePathElement rpe;
+    UA_RelativePathElement_init(&rpe);
+    rpe.referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HASPROPERTY);
+    rpe.isInverse       = false;
+    rpe.includeSubtypes = false;
+    rpe.targetName      = UA_QUALIFIEDNAME(0, const_cast<char *>("InputArguments"));
+
+    UA_BrowsePath bp;
+    UA_BrowsePath_init(&bp);
+    bp.startingNode              = method_nid;
+    bp.relativePath.elementsSize = 1;
+    bp.relativePath.elements     = &rpe;
+
+    UA_BrowsePathResult bpr = UA_Client_translateBrowsePathToNodeIds(_client, &bp);
+
+    if (bpr.statusCode == UA_STATUSCODE_GOOD && bpr.targetsSize > 0) {
+        const UA_NodeId arg_node = bpr.targets[0].targetId.nodeId;
+
+        UA_Variant val;
+        UA_Variant_init(&val);
+        const UA_StatusCode sc = UA_Client_readValueAttribute(_client, arg_node, &val);
+
+        if (sc == UA_STATUSCODE_GOOD && val.type == &UA_TYPES[UA_TYPES_ARGUMENT]) {
+            const UA_Argument *args = static_cast<const UA_Argument *>(val.data);
+            for (size_t i = 0; i < val.arrayLength; ++i) {
+                types.push_back(_ua_typeid_to_enum(args[i].dataType));
+            }
+        }
+        UA_Variant_clear(&val);
+    }
+
+    UA_BrowsePathResult_clear(&bpr);
+
+    if (types.size() != expected_count) {
+        UtilityFunctions::push_warning(
+            String("GodotOpcUa: Could not fully resolve input argument types for ") +
+            tag_name + " — provide explicit input_types where needed.");
+    }
+
+    _method_arg_type_cache[cache_key] = types;
+    return types;
+}
+
+GodotOpcUa::DataType GodotOpcUa::_resolve_data_type(const UA_NodeId &nid, const String &tag_name) {
+    if (_data_type_cache.has(tag_name)) {
+        return _data_type_cache[tag_name];
+    }
+
+    UA_NodeId type_id;
+    UA_StatusCode sc = UA_Client_readDataTypeAttribute(_client, nid, &type_id);
+    if (sc != UA_STATUSCODE_GOOD) {
+        UtilityFunctions::push_error(
+            String("GodotOpcUa: Could not resolve DataType for ") + tag_name +
+            " → " + String(UA_StatusCode_name(sc)));
+        return DATATYPE_AUTO;
+    }
+
+    DataType resolved = _ua_typeid_to_enum(type_id);
+    UA_NodeId_clear(&type_id);
+
+    _data_type_cache[tag_name] = resolved;
+    return resolved;
+}
+
+bool GodotOpcUa::_godot_to_ua_variant(const Variant &value, DataType type, UA_Variant &out) const {
     UA_Variant_init(&out);
 
-    auto scalar_copy = [&](const void *val, const UA_DataType *type) -> bool {
-        const UA_StatusCode sc = UA_Variant_setScalarCopy(&out, val, type);
-        if (sc != UA_STATUSCODE_GOOD) {
-            UtilityFunctions::push_error(
-                String("GodotOpcUa: UA_Variant_setScalarCopy failed: ") +
-                String(UA_StatusCode_name(sc)));
-            UA_Variant_clear(&out);
-            return false;
+    switch (type) {
+        case DATATYPE_BOOLEAN: {
+            UA_Boolean v = (bool)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_BOOLEAN]) == UA_STATUSCODE_GOOD;
         }
-        return true;
-    };
-
-    switch (gd_var.get_type()) {
-        case Variant::BOOL: {
-            const UA_Boolean v = static_cast<bool>(gd_var) ? UA_TRUE : UA_FALSE;
-            return scalar_copy(&v, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        case DATATYPE_INT16: {
+            UA_Int16 v = (int16_t)(int64_t)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_INT16]) == UA_STATUSCODE_GOOD;
         }
-        case Variant::INT: {
-            const UA_Int64 v = static_cast<int64_t>(gd_var);
-            return scalar_copy(&v, &UA_TYPES[UA_TYPES_INT64]);
+        case DATATYPE_INT32: {
+            UA_Int32 v = (int32_t)(int64_t)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_INT32]) == UA_STATUSCODE_GOOD;
         }
-        case Variant::FLOAT: {
-            const UA_Double v = static_cast<double>(gd_var);
-            return scalar_copy(&v, &UA_TYPES[UA_TYPES_DOUBLE]);
+        case DATATYPE_UINT32: {
+            UA_UInt32 v = (uint32_t)(int64_t)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_UINT32]) == UA_STATUSCODE_GOOD;
         }
-        case Variant::STRING: {
-            const CharString utf8 = static_cast<String>(gd_var).utf8();
-            UA_String s;
-            UA_String_init(&s);
-            s.length = static_cast<size_t>(utf8.length());
-            s.data   = reinterpret_cast<UA_Byte *>(const_cast<char *>(utf8.get_data()));
-            return scalar_copy(&s, &UA_TYPES[UA_TYPES_STRING]);
+        case DATATYPE_FLOAT: {
+            UA_Float v = (float)(double)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_FLOAT]) == UA_STATUSCODE_GOOD;
         }
+        case DATATYPE_DOUBLE: {
+            UA_Double v = (double)value;
+            return UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_DOUBLE]) == UA_STATUSCODE_GOOD;
+        }
+        case DATATYPE_STRING: {
+            CharString cs = String(value).utf8();
+            UA_String v = UA_String_fromChars(cs.get_data());
+            bool ok = UA_Variant_setScalarCopy(&out, &v, &UA_TYPES[UA_TYPES_STRING]) == UA_STATUSCODE_GOOD;
+            UA_String_clear(&v);
+            return ok;
+        }
+        // ... extend for SBYTE, BYTE, UINT16, INT64, UINT64, DATETIME, etc.
         default:
-            UtilityFunctions::push_warning(
-                String("GodotOpcUa: Cannot convert Variant type '") +
-                Variant::get_type_name(gd_var.get_type()) + "'.");
             return false;
     }
+}
+
+GodotOpcUa::DataType GodotOpcUa::_ua_typeid_to_enum(const UA_NodeId &type_id) const {
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_BOOLEAN].typeId)) return DATATYPE_BOOLEAN;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_INT16].typeId))   return DATATYPE_INT16;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_INT32].typeId))   return DATATYPE_INT32;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_UINT32].typeId))  return DATATYPE_UINT32;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_FLOAT].typeId))   return DATATYPE_FLOAT;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_DOUBLE].typeId))  return DATATYPE_DOUBLE;
+    if (UA_NodeId_equal(&type_id, &UA_TYPES[UA_TYPES_STRING].typeId))  return DATATYPE_STRING;
+    // ... extend for remaining types
+    return DATATYPE_AUTO; // unrecognized/unsupported
 }
 
 // ============================================================================
@@ -884,13 +983,29 @@ Dictionary GodotOpcUa::read_nodes(Array node_ids) {
 // write_node
 // ============================================================================
 
-bool GodotOpcUa::write_node(Ref<OpcUaNodeId> node_id, const Variant &value) {
+bool GodotOpcUa::write_node(Ref<OpcUaNodeId> node_id, const Variant &value, int type_hint) {
     if (node_id.is_null() || _client == nullptr) return false;
 
-    UA_Variant ua_val;
-    if (!_godot_to_ua_variant(value, ua_val)) return false;
-
     UA_NodeId nid = node_id->to_ua_node_id();
+
+    DataType resolved_type = (DataType)type_hint;
+    if (resolved_type == DATATYPE_AUTO) {
+        resolved_type = _resolve_data_type(nid, node_id->to_tag_name());
+        if (resolved_type == DATATYPE_AUTO) {
+            UA_NodeId_clear(&nid);
+            return false; // resolution failed, error already logged
+        }
+    }
+
+    UA_Variant ua_val;
+    if (!_godot_to_ua_variant(value, resolved_type, ua_val)) {
+        UtilityFunctions::push_error(
+            String("GodotOpcUa: Value ") + String(value) +
+            " is not compatible with expected type for " + node_id->to_tag_name());
+        UA_NodeId_clear(&nid);
+        return false;
+    }
+
     const UA_StatusCode sc = UA_Client_writeValueAttribute(_client, nid, &ua_val);
     UA_NodeId_clear(&nid);
     UA_Variant_clear(&ua_val);
@@ -910,7 +1025,8 @@ bool GodotOpcUa::write_node(Ref<OpcUaNodeId> node_id, const Variant &value) {
 
 Dictionary GodotOpcUa::call_ua_method(Ref<OpcUaNodeId> object_id,
                                         Ref<OpcUaNodeId> method_id,
-                                        Array            input_args) {
+                                        Array            input_args,
+                                        Array            input_types) {
     Dictionary result;
     result["success"]     = false;
     result["output_args"] = Array();
@@ -926,18 +1042,41 @@ Dictionary GodotOpcUa::call_ua_method(Ref<OpcUaNodeId> object_id,
     }
 
     const size_t in_count = static_cast<size_t>(input_args.size());
-    std::vector<UA_Variant> in_vars(in_count);
-    for (size_t i = 0; i < in_count; ++i) {
-        UA_Variant_init(&in_vars[i]);
-        if (!_godot_to_ua_variant(input_args[static_cast<int>(i)], in_vars[i])) {
-            result["error"] = "Failed to convert input arg " + String::num_int64(i);
-            for (size_t j = 0; j < i; ++j) UA_Variant_clear(&in_vars[j]);
-            return result;
-        }
+
+    if (!input_types.is_empty() && static_cast<size_t>(input_types.size()) != in_count) {
+        result["error"] = "input_types size must match input_args size";
+        return result;
     }
 
     UA_NodeId obj_nid = object_id->to_ua_node_id();
     UA_NodeId mth_nid = method_id->to_ua_node_id();
+
+    // Resolve expected argument types from the server (cached), used when no explicit hint is given.
+    const std::vector<DataType> arg_types =
+        _resolve_method_input_types(mth_nid, method_id->to_tag_name(), in_count);
+
+    std::vector<UA_Variant> in_vars(in_count);
+    for (size_t i = 0; i < in_count; ++i) {
+        UA_Variant_init(&in_vars[i]);
+
+        DataType type_hint = DATATYPE_AUTO;
+        if (!input_types.is_empty()) {
+            type_hint = (DataType)(int)input_types[static_cast<int>(i)];
+        }
+        if (type_hint == DATATYPE_AUTO && i < arg_types.size()) {
+            type_hint = arg_types[i];
+        }
+
+        if (type_hint == DATATYPE_AUTO ||
+            !_godot_to_ua_variant(input_args[static_cast<int>(i)], type_hint, in_vars[i])) {
+            result["error"] = "Failed to convert input arg " + String::num_int64(i) +
+                               " — type could not be resolved or value is incompatible";
+            for (size_t j = 0; j < i; ++j) UA_Variant_clear(&in_vars[j]);
+            UA_NodeId_clear(&obj_nid);
+            UA_NodeId_clear(&mth_nid);
+            return result;
+        }
+    }
 
     UA_Variant *out_vars  = nullptr;
     size_t      out_count = 0;

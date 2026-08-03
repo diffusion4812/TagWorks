@@ -21,7 +21,7 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     event_name    = ReactiveString.new("", self, "event_name")
 
     if not data.is_empty():
-        from_data(data)
+        deserialize(data)
 
 func _describe_value() -> String:
     return ""
@@ -62,20 +62,29 @@ func _indent(code: String) -> String:
         out.append("\t" + l)
     return "\n".join(out)
 
-func from_data(data: Dictionary) -> void:
-    action_type.value   = data.get("action_type", ActionType.NONE)
-    script_source.value = data.get("script_source", "")
-    scene_path.value     = data.get("scene_path", "")
-    event_name.value     = data.get("event_name", "")
-    target_node.from_data(data.get("target_node", {}))
-    value.from_data(data.get("value", {}))
+# ── Serialization ─────────────────────────────────────────────────────────────
 
-func to_data() -> Dictionary:
+func deserialize(data: Variant) -> void:
+    assert(data is Dictionary, "ReactiveActionBinding.deserialize expects a Dictionary")
+    var d: Dictionary = data as Dictionary
+
+    action_type.value   = d.get("action_type", ActionType.NONE)
+    script_source.value = d.get("script_source", "")
+    scene_path.value    = d.get("scene_path", "")
+    event_name.value    = d.get("event_name", "")
+
+    target_node.deserialize(d.get("target_node", {}))
+    value.deserialize(d.get("value", {}))
+
+    _log("DESERIALIZED", _get_type_name())
+    manually_emit()
+
+func serialize() -> Variant:
     return {
-        "action_type": action_type.value,
+        "action_type":   action_type.value,
         "script_source": script_source.value,
-        "scene_path": scene_path.value,
-        "event_name": event_name.value,
-        "target_node": target_node.to_data(),
-        "value": value.to_data(),
+        "scene_path":    scene_path.value,
+        "event_name":    event_name.value,
+        "target_node":   target_node.serialize(),
+        "value":         value.serialize(),
     }

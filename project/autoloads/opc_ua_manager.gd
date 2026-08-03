@@ -85,9 +85,6 @@ func _ready() -> void:
 func _rebuild_all() -> void:
     _teardown_all()
 
-    if not AppState.has_project.value:
-        return
-
     var seen_ids: Dictionary = {}
     for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
         var server_id: String = cfg.id.value

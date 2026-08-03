@@ -70,12 +70,12 @@ func _connect_signals() -> void:
 
     # has_project toggles on load/new/close — this is what resets selection
     # state and switches the panel, not a project "pointer" change.
-    AppState.has_project.connect_self_changed(_on_has_project_changed)
+    AppState.current_project.is_loaded.connect_self_changed(_on_has_project_changed)
 
 # ── Project access helpers ────────────────────────────────────────────────────
 
 func _has_project() -> bool:
-    return AppState.has_project.value
+    return AppState.current_project.is_loaded.value
 
 # ── Project load / close handling ─────────────────────────────────────────────
 
