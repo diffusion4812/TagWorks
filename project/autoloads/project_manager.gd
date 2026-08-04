@@ -66,6 +66,7 @@ func _on_open_project_requested(path: String) -> void:
 
     AppState.load_project(payload)
     if AppState.current_project.is_loaded.value:
+        AppState.current_project.file_path.value = path
         RecentProjects.add(path, AppState.current_project.project_name.value)
 
 

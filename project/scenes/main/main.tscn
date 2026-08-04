@@ -3,7 +3,6 @@
 [ext_resource type="Theme" uid="uid://2pnop8nm7lxm" path="res://resources/base_theme.tres" id="1_ouso4"]
 [ext_resource type="Script" uid="uid://ddgc0oskbohlj" path="res://scenes/main/main.gd" id="2_blune"]
 [ext_resource type="Script" uid="uid://b5uyhhaq24c5j" path="res://scenes/safe_area_container.gd" id="3_th5th"]
-[ext_resource type="PackedScene" uid="uid://kk1oivxbhmqy" path="res://scenes/main/start_screen.tscn" id="4_ouso4"]
 [ext_resource type="PackedScene" uid="uid://bo0tkqp8g6tm3" path="res://scenes/dialogs/pages_panel/pages_panel.tscn" id="5_raeie"]
 [ext_resource type="Script" uid="uid://dwudljs54kucl" path="res://scenes/dialogs/pages_panel/canvas_container.gd" id="6_hxu8e"]
 [ext_resource type="PackedScene" uid="uid://cngi5xaoyrkxg" path="res://scenes/dialogs/widget_palette/widget_palette.tscn" id="7_nvumn"]
@@ -69,21 +68,9 @@ item_6/id = 6
 
 [node name="EditMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar" unique_id=1488450228]
 unique_name_in_owner = true
+oversampling_override = 1.0
 title = "Edit"
-item_count = 5
-item_0/text = "Select All"
-item_0/id = 0
-item_1/text = "Delete"
-item_1/id = 1
-item_2/text = "Duplicate"
-item_2/id = 2
-item_3/text = "Bring to Front"
-item_3/id = 3
-item_4/text = "Send to Back"
-item_4/id = 4
-
-[node name="EditMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar/EditMenu" unique_id=222763689]
-title = "Edit"
+size = Vector2i(148, 143)
 item_count = 5
 item_0/text = "Select All"
 item_0/id = 0
@@ -116,13 +103,9 @@ text = "Edit Mode"
 [node name="WorkArea" type="HSplitContainer" parent="SafeAreaContainer/RootLayout" unique_id=1534408628]
 layout_mode = 2
 size_flags_vertical = 3
-split_offsets = PackedInt32Array(109)
+split_offsets = PackedInt32Array(-250)
 drag_nested_intersections = true
-split_offset = 109
-
-[node name="StartupContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=356782099 instance=ExtResource("4_ouso4")]
-unique_name_in_owner = true
-layout_mode = 2
+split_offset = -250
 
 [node name="PageContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1090117370]
 unique_name_in_owner = true

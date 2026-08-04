@@ -2,69 +2,136 @@
 
 [ext_resource type="Script" uid="uid://dswy0dmg6mk1o" path="res://scenes/main/start_screen.gd" id="1_wsj8e"]
 [ext_resource type="PackedScene" uid="uid://cl7a71de6ssk0" path="res://scenes/main/recent_project_row.tscn" id="2_58f5j"]
+[ext_resource type="PackedScene" uid="uid://chrkq14f3x3w0" path="res://scenes/main/main.tscn" id="3_8bt6j"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wsj8e"]
+bg_color = Color(0.16078432, 0.16078432, 0.16078432, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
 
 [sub_resource type="LabelSettings" id="LabelSettings_fxvbf"]
 font_size = 34
 
-[node name="StartScreen" type="CenterContainer" unique_id=356782099]
+[sub_resource type="FontVariation" id="FontVariation_wsj8e"]
+variation_embolden = 1.0
+
+[node name="PanelContainer" type="PanelContainer" unique_id=550712082]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_wsj8e")
 script = ExtResource("1_wsj8e")
 recent_project_row_scene = ExtResource("2_58f5j")
+main_scene = ExtResource("3_8bt6j")
 
-[node name="PanelContainer" type="PanelContainer" parent="." unique_id=1742679791]
-custom_minimum_size = Vector2(480, 480)
-layout_mode = 2
-
-[node name="MarginContainer" type="MarginContainer" parent="PanelContainer" unique_id=1140065325]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1140065325]
 layout_mode = 2
 theme_override_constants/margin_left = 32
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 32
 theme_override_constants/margin_bottom = 18
 
-[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/MarginContainer" unique_id=1424157002]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=1424157002]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="TitleLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer" unique_id=430485526]
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=430485526]
+unique_name_in_owner = true
 layout_mode = 2
-text = "Tag Commander"
+text = "SPLASH_TITLE"
 label_settings = SubResource("LabelSettings_fxvbf")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="HBoxContainer" type="HBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer" unique_id=1218123201]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1218123201]
 layout_mode = 2
 theme_override_constants/separation = 56
 alignment = 1
 
-[node name="NewProjectButton" type="Button" parent="PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=2132431173]
+[node name="NewProjectButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=2132431173]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "New project"
+text = "SPLASH_NEW_PROJECT"
 
-[node name="OpenProjectButton" type="Button" parent="PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=853578048]
+[node name="OpenProjectButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=853578048]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Open project"
+text = "SPLASH_OPEN_PROJECT"
 
-[node name="RecentProjectsSection" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer" unique_id=948909466]
+[node name="RecentProjectsSection" type="VBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=948909466]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="RecentProjectsLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer/RecentProjectsSection" unique_id=529314810]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/RecentProjectsSection" unique_id=743765230]
 layout_mode = 2
-text = "Recent projects:"
 
-[node name="ScrollContainer" type="ScrollContainer" parent="PanelContainer/MarginContainer/VBoxContainer/RecentProjectsSection" unique_id=2088625140]
+[node name="RecentProjectsLabel" type="Label" parent="MarginContainer/VBoxContainer/RecentProjectsSection/HBoxContainer" unique_id=529314810]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SPLASH_RECENT_PROJECTS"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/RecentProjectsSection" unique_id=2088625140]
 layout_mode = 2
 size_flags_vertical = 3
 theme_type_variation = &"RecentProjects"
 
-[node name="RecentProjectsList" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer/RecentProjectsSection/ScrollContainer" unique_id=987335300]
+[node name="RecentProjectsList" type="VBoxContainer" parent="MarginContainer/VBoxContainer/RecentProjectsSection/ScrollContainer" unique_id=987335300]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=819464631]
+layout_mode = 2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="MarginContainer/VBoxContainer/VBoxContainer" unique_id=1069051173]
+layout_mode = 2
+
+[node name="RuntimeOnlyCheckButton" type="CheckButton" parent="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer2" unique_id=1669037827]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RuntimeOnlyLabel" type="Label" parent="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer2" unique_id=96579855]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SPLASH_RUNTIME_ONLY"
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="MarginContainer/VBoxContainer/VBoxContainer" unique_id=115563666]
+layout_mode = 2
+
+[node name="LanguageOptionButton" type="OptionButton" parent="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer3" unique_id=1270761161]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+
+[node name="Control2" type="Control" parent="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer3" unique_id=1800379449]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VersionLabel" type="Label" parent="MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer3" unique_id=1386771879]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SPLASH_VERSION"
+
+[node name="CloseButton" type="Button" parent="." unique_id=74783373]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 0
+theme_override_fonts/font = SubResource("FontVariation_wsj8e")
+text = "✕"
+flat = true
+icon_alignment = 1

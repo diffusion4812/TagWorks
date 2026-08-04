@@ -98,7 +98,6 @@ func serialize() -> Dictionary:
 ## simply observes a "changed" signal — no rebinding required anywhere.
 func load_from_dict(payload: Dictionary) -> void:
     project_name.value = payload.get("project_name", "")
-    file_path.value    = payload.get("file_path", "")
 
     opc_ua_servers.clear()
     for server_dict: Dictionary in payload.get("opc_ua_servers", []):

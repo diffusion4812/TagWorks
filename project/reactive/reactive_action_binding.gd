@@ -34,8 +34,6 @@ func execute(context: Dictionary = {}) -> void:
             _run_script(context)
         ActionType.NAVIGATE_SCENE:
             AppState.request_scene_change(scene_path.value)
-        #ActionType.EMIT_APP_EVENT:
-        #    WidgetEventBus.custom_event.emit(event_name.value, context)
 
 func _write_tag(v: Variant) -> void:
     if target_node.server_id.value.is_empty() or target_node.node_id.value.is_empty():

@@ -27,6 +27,11 @@ var active_theme : Theme
 ## server list. Used to avoid removing fixed entries during a rebuild.
 const SERVER_MENU_FIXED_ITEM_COUNT: int = 1
 
+## Reserved IDs for the dynamic "Connect All" / "Disconnect All" items.
+## Kept out of the range used by fixed static items to avoid collisions.
+const CONNECT_ALL_ID: int = 1000
+const DISCONNECT_ALL_ID: int = 1001
+
 # ── State ─────────────────────────────────────────────────────────────────────
 
 ## Tracks dynamically created server submenus keyed by server_id.
@@ -38,13 +43,21 @@ var _server_submenus: Dictionary = {}
 ## { server_id: { "cfg": ReactiveOpcUaServer, "callable": Callable } }
 var _status_bindings: Dictionary = {}
 
-var one_shot_startup: bool = true
-
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+    _setup_window()
     _set_scaling()
     _connect_signals()
+
+## Restores normal window behavior after the borderless splash screen.
+func _setup_window() -> void:
+    var window: Window = get_window()
+    window.borderless = false
+    window.unresizable = false
+    window.min_size = Vector2i(1024, 720)
+    window.size = Vector2i(1600, 900)
+    window.move_to_center()
 
 ## Scales the UI relative to the screen DPI so the layout is consistent
 ## across devices with different pixel densities.
@@ -68,36 +81,45 @@ func _connect_signals() -> void:
     # ── Startup ───────────────────────────────────────────────────────────────
     IntentBus.open_project_dialog_requested.connect(func() -> void: _open_load_dialog())
 
-    # ── Server registry (sourced from the reactive project) ───────────────────
-    # AppState.current_project is a permanent instance — bind once, forever.
-    # Structural changes to opc_ua_servers (add/remove/reorder) always
-    # trigger a menu rebuild, with no rebinding needed on project load/close.
+    # ── Server registry ────────────────────────────────────────────────────────
     AppState.current_project.opc_ua_servers.connect_self_changed(
         func(_origin: Reactive) -> void:
             _rebuild_server_menu()
     )
 
-    # ── File dialog ───────────────────────────────────────────────────────────
+    # ── File dialog ────────────────────────────────────────────────────────────
     file_dialog.file_selected.connect(_on_file_dialog_selected)
 
-    # ── AppState ──────────────────────────────────────────────────────────────
-    AppState.edit_mode.connect_self_changed(
-        func(edit_mode: ReactiveBool) -> void:
-            edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
-    )
+    # ── AppState (named handlers so we can call them directly) ────────────────
+    AppState.edit_mode.connect_self_changed(_on_edit_mode_changed)
+    AppState.current_project.project_name.connect_self_changed(_on_project_name_changed)
+    AppState.current_project.is_loaded.connect_self_changed(_on_project_loaded_changed)
 
-    AppState.current_project.project_name.connect_self_changed(
-        func(new_name: ReactiveString) -> void:
-            get_window().title = new_name.value
-    )
+    # ── Sync current state ─────────────────────────────────────────────────────
+    # connect_self_changed only fires on FUTURE changes. If the project was
+    # created/opened by the splash screen before this scene existed, we must
+    # manually apply the current values now, or the UI stays stale.
+    _sync_state()
 
-    AppState.current_project.is_loaded.connect_self_changed(
-        func(is_loaded: ReactiveBool) -> void:
-            startup_container.visible = false
-            page_container.visible = is_loaded.value
-            canvas_container.visible = is_loaded.value
-            inspector_container.visible = is_loaded.value
-    )
+
+func _sync_state() -> void:
+    _on_edit_mode_changed(AppState.edit_mode)
+    _on_project_name_changed(AppState.current_project.project_name)
+    _on_project_loaded_changed(AppState.current_project.is_loaded)
+    _rebuild_server_menu()
+
+func _on_edit_mode_changed(edit_mode: ReactiveBool) -> void:
+    edit_mode_toggle.set_pressed_no_signal(edit_mode.value)
+
+
+func _on_project_name_changed(new_name: ReactiveString) -> void:
+    get_window().title = new_name.value
+
+
+func _on_project_loaded_changed(is_loaded: ReactiveBool) -> void:
+    page_container.visible = is_loaded.value
+    canvas_container.visible = is_loaded.value
+    inspector_container.visible = is_loaded.value
 
 # ── System ────────────────────────────────────────────────────────────────────
 
@@ -154,7 +176,19 @@ func _on_edit_menu_pressed(_id: int) -> void:
 
 func _on_server_menu_pressed(id: int) -> void:
     match id:
-        0: connection_dialog.popup_centered(Vector2i(800, 520))
+        0:                    connection_dialog.popup_centered(Vector2i(900, 720))
+        CONNECT_ALL_ID:       _connect_all_servers()
+        DISCONNECT_ALL_ID:    _disconnect_all_servers()
+
+
+func _connect_all_servers() -> void:
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
+        OpcUaManager.connect_server(cfg.id.value)
+
+
+func _disconnect_all_servers() -> void:
+    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
+        OpcUaManager.disconnect_server(cfg.id.value)
 
 # ── Server Menu — Reactive Rebuild ────────────────────────────────────────────
 
@@ -175,6 +209,8 @@ func _rebuild_server_menu() -> void:
     if AppState.current_project.opc_ua_servers.value.is_empty():
         return
 
+    server_menu.add_item("Connect All",    CONNECT_ALL_ID)
+    server_menu.add_item("Disconnect All", DISCONNECT_ALL_ID)
     server_menu.add_separator()
 
     for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
@@ -184,7 +220,6 @@ func _rebuild_server_menu() -> void:
         submenu.name = "sub_%s" % server_id
         submenu.add_item("Connect",    0)
         submenu.add_item("Disconnect", 1)
-        submenu.add_item("Status",     2)
         submenu.id_pressed.connect(
             func(id: int) -> void:
                 match id:

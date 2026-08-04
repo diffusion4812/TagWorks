@@ -1,0 +1,56 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Tag Commander 1.0\n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Splash screen — window title
+msgid "SPLASH_TITLE"
+msgstr ""
+
+#. Splash screen — primary action, creates a new project
+msgid "SPLASH_NEW_PROJECT"
+msgstr ""
+
+#. Splash screen — primary action, opens an existing project via file dialog
+msgid "SPLASH_OPEN_PROJECT"
+msgstr ""
+
+#. Splash screen — section heading above the recent projects list
+msgid "SPLASH_RECENT_PROJECTS"
+msgstr ""
+
+#. Splash screen — placeholder shown when no recent projects exist
+msgid "SPLASH_NO_RECENT"
+msgstr ""
+
+#. Splash screen — label for a recent project row showing last-opened date
+#. {date} is replaced at runtime with a formatted date string
+msgid "SPLASH_PROJECT_LAST_OPENED"
+msgstr ""
+
+#. Splash screen — button/action to remove an entry from the recent list
+msgid "SPLASH_REMOVE_RECENT"
+msgstr ""
+
+#. Splash screen — shown on a recent project row when its file no longer exists on disk
+msgid "SPLASH_PROJECT_MISSING"
+msgstr ""
+
+#. Splash screen — footer toggle enabling runtime-only mode
+msgid "SPLASH_RUNTIME_ONLY"
+msgstr ""
+
+#. Splash screen — tooltip/label for the window close button
+msgid "SPLASH_CLOSE"
+msgstr ""
+
+#. Splash screen — footer, current application version (e.g. "Version {version}")
+msgid "SPLASH_VERSION"
+msgstr ""

@@ -30,6 +30,8 @@ var selected_widget : ReactiveVariant
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
+var runtime_only    : ReactiveBool
+
 ## Whether the application is currently in edit mode.
 var edit_mode       : ReactiveBool
 
@@ -37,9 +39,6 @@ var edit_mode       : ReactiveBool
 
 ## Set when a project operation fails. Carries a human-readable message.
 var last_error      : ReactiveString
-
-## The path of the most recently saved project file.
-var last_saved_path : ReactiveString
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +49,6 @@ func _ready() -> void:
     selected_widget  = ReactiveVariant.new(null, null, "app_state.selected_widget")
     edit_mode        = ReactiveBool.new(false, null,   "app_state.edit_mode")
     last_error       = ReactiveString.new("", null,    "app_state.last_error")
-    last_saved_path  = ReactiveString.new("", null,    "app_state.last_saved_path")
 
     active_page.connect_self_changed(
         func(_active_page: ReactiveVariant) -> void:
@@ -80,14 +78,12 @@ func load_project(payload: Dictionary) -> bool:
 ## Resets current_project to a fresh, empty project (e.g. "File > New").
 func new_project() -> void:
     current_project.reset_to_default()
-    last_saved_path.value = ""
     _reset_selection_state()
     current_project.is_loaded.value = true
 
 ## Closes the current project, returning to the default empty state.
 func close_project() -> void:
     current_project.reset_to_default()
-    last_saved_path.value = ""
     _reset_selection_state()
     current_project.is_loaded.value = false
 
