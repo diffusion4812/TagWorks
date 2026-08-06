@@ -16,6 +16,8 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_right = 448.0
+offset_bottom = 252.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("1_ouso4")
@@ -41,13 +43,14 @@ script = ExtResource("3_th5th")
 [node name="RootLayout" type="VBoxContainer" parent="SafeAreaContainer" unique_id=974261623]
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="SafeAreaContainer/RootLayout" unique_id=1685998553]
+[node name="MenuBarContainer" type="HBoxContainer" parent="SafeAreaContainer/RootLayout" unique_id=1685998553]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MenuBar" type="MenuBar" parent="SafeAreaContainer/RootLayout/HBoxContainer" unique_id=2078278252]
+[node name="MenuBar" type="MenuBar" parent="SafeAreaContainer/RootLayout/MenuBarContainer" unique_id=2078278252]
 layout_mode = 2
 
-[node name="FileMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar" unique_id=987690994]
+[node name="FileMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/MenuBarContainer/MenuBar" unique_id=987690994]
 unique_name_in_owner = true
 title = "File"
 item_count = 7
@@ -66,7 +69,7 @@ item_5/separator = true
 item_6/text = "Exit"
 item_6/id = 6
 
-[node name="EditMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar" unique_id=1488450228]
+[node name="EditMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/MenuBarContainer/MenuBar" unique_id=1488450228]
 unique_name_in_owner = true
 oversampling_override = 1.0
 title = "Edit"
@@ -83,18 +86,18 @@ item_3/id = 3
 item_4/text = "Send to Back"
 item_4/id = 4
 
-[node name="ServerMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar" unique_id=615043290]
+[node name="ServerMenu" type="PopupMenu" parent="SafeAreaContainer/RootLayout/MenuBarContainer/MenuBar" unique_id=615043290]
 unique_name_in_owner = true
 title = "Server"
 item_count = 1
 item_0/text = "Connection Settings"
 item_0/id = 0
 
-[node name="ServerStatusTimer" type="Timer" parent="SafeAreaContainer/RootLayout/HBoxContainer/MenuBar" unique_id=1613434662]
+[node name="ServerStatusTimer" type="Timer" parent="SafeAreaContainer/RootLayout/MenuBarContainer/MenuBar" unique_id=1613434662]
 unique_name_in_owner = true
 autostart = true
 
-[node name="EditModeButton" type="Button" parent="SafeAreaContainer/RootLayout/HBoxContainer" unique_id=710010889]
+[node name="EditModeButton" type="Button" parent="SafeAreaContainer/RootLayout/MenuBarContainer" unique_id=710010889]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -103,13 +106,12 @@ text = "Edit Mode"
 [node name="WorkArea" type="HSplitContainer" parent="SafeAreaContainer/RootLayout" unique_id=1534408628]
 layout_mode = 2
 size_flags_vertical = 3
-split_offsets = PackedInt32Array(-250)
+split_offsets = PackedInt32Array(-250, 0)
 drag_nested_intersections = true
 split_offset = -250
 
 [node name="PageContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1090117370]
 unique_name_in_owner = true
-visible = false
 custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
 size_flags_stretch_ratio = 0.4
@@ -120,15 +122,14 @@ layout_mode = 2
 
 [node name="CanvasContainer" type="TabContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1430019445]
 unique_name_in_owner = true
-visible = false
 custom_minimum_size = Vector2(400, 400)
 layout_mode = 2
 size_flags_horizontal = 3
+drag_to_rearrange_enabled = true
 script = ExtResource("6_hxu8e")
 
 [node name="InspectorContainer" type="VSplitContainer" parent="SafeAreaContainer/RootLayout/WorkArea" unique_id=1030319876]
 unique_name_in_owner = true
-visible = false
 custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
 drag_nested_intersections = true

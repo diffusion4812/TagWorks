@@ -3,15 +3,16 @@ extends PanelContainer
 @export var recent_project_row_scene: PackedScene
 @export var main_scene: PackedScene
 
-@onready var _close_button          : Button = %CloseButton
-@onready var _title_label           : Label = %TitleLabel
-@onready var _recent_list           : VBoxContainer = %RecentProjectsList
-@onready var _new_project_button    : Button = %NewProjectButton
-@onready var _open_project_button   : Button = %OpenProjectButton
-@onready var _recent_projects_label : Label = %RecentProjectsLabel
-@onready var _runtime_only_label    : Label = %RuntimeOnlyLabel
-@onready var _version_label         : Label = %VersionLabel
-@onready var _language_option       : OptionButton = %LanguageOptionButton
+@onready var _close_button              : Button = %CloseButton
+@onready var _title_label               : Label = %TitleLabel
+@onready var _recent_list               : VBoxContainer = %RecentProjectsList
+@onready var _new_project_button        : Button = %NewProjectButton
+@onready var _open_project_button       : Button = %OpenProjectButton
+@onready var _recent_projects_label     : Label = %RecentProjectsLabel
+@onready var _runtime_only_check_button : CheckButton = %RuntimeOnlyCheckButton
+@onready var _runtime_only_label        : Label = %RuntimeOnlyLabel
+@onready var _version_label             : Label = %VersionLabel
+@onready var _language_option           : OptionButton = %LanguageOptionButton
 
 var _dragging: bool = false
 var _drag_offset: Vector2i
@@ -20,6 +21,9 @@ func _ready() -> void:
     _close_button.pressed.connect(func() -> void: get_tree().quit(0))
     _new_project_button.pressed.connect(_on_new_project_pressed)
     _open_project_button.pressed.connect(_on_open_project_pressed)
+    _runtime_only_check_button.toggled.connect(func(toggled: bool) -> void: AppState.runtime_only.value = toggled)
+    AppState.runtime_only.connect_self_changed(func(runtime_only: ReactiveBool) -> void: _new_project_button.disabled = runtime_only.value)
+
     _populate_language_options()
     _language_option.item_selected.connect(_on_language_option_selected)
     _refresh_recent_list()

@@ -6,10 +6,11 @@ extends Control
 # Child References
 # ─────────────────────────────────────────────
 
-@onready var page_tree    : Tree      = %PageTree
-@onready var btn_add_page : Button    = %AddPageButton
-@onready var btn_delete   : Button    = %DeletePageButton
-@onready var context_menu : PopupMenu = %PageContextMenu
+@onready var _button_container : HBoxContainer = %ButtonContainer
+@onready var _page_tree        : Tree          = %PageTree
+@onready var _btn_add_page     : Button        = %AddPageButton
+@onready var _btn_delete       : Button        = %DeletePageButton
+@onready var _context_menu     : PopupMenu     = %PageContextMenu
 
 # ─────────────────────────────────────────────
 # Constants
@@ -35,17 +36,18 @@ var _item_map  : Dictionary = {}
 # ─────────────────────────────────────────────
 
 func _ready() -> void:
+    _button_container.visible = not AppState.runtime_only.value
     _setup_tree()
     _connect_signals()
     _update_button_states()
 
 func _setup_tree() -> void:
-    page_tree.hide_root        = true
-    page_tree.allow_rmb_select = true
-    page_tree.allow_reselect   = true
-    page_tree.drop_mode_flags  = Tree.DROP_MODE_INBETWEEN | Tree.DROP_MODE_ON_ITEM
+    _page_tree.hide_root        = true
+    _page_tree.allow_rmb_select = true
+    _page_tree.allow_reselect   = true
+    _page_tree.drop_mode_flags  = Tree.DROP_MODE_INBETWEEN | Tree.DROP_MODE_ON_ITEM
 
-    page_tree.set_drag_forwarding(
+    _page_tree.set_drag_forwarding(
         _get_drag_data,
         _can_drop_data,
         _drop_data
@@ -53,38 +55,39 @@ func _setup_tree() -> void:
 
 
 func _connect_signals() -> void:
-    btn_add_page.pressed.connect(func() -> void:
+    _btn_add_page.pressed.connect(func() -> void:
         _create_page("")
     )
 
-    btn_delete.pressed.connect(func() -> void:
+    _btn_delete.pressed.connect(func() -> void:
         var page: ReactivePage = AppState.focused_page.value as ReactivePage
         if page == null or page.page_id.value.is_empty():
             return
         _delete_page(page.page_id.value)
     )
 
-    context_menu.id_pressed.connect(_on_context_menu_id_pressed)
-    page_tree.item_mouse_selected.connect(
+    _context_menu.id_pressed.connect(_on__context_menu_id_pressed)
+    _page_tree.item_mouse_selected.connect(
         func(_mouse_position: Vector2, mouse_button_index: int) -> void:
             _on_item_mouse_selected(mouse_button_index, false)
     )
-    page_tree.nothing_selected.connect(
+    _page_tree.nothing_selected.connect(
         func() -> void:
             AppState.focused_page.value = null
     )
-    page_tree.item_activated.connect(
+    _page_tree.item_activated.connect(
         func() -> void:
             _on_item_mouse_selected(MOUSE_BUTTON_LEFT, true)
     )
-    page_tree.item_edited.connect(_on_item_edited)
+    _page_tree.item_edited.connect(_on_item_edited)
 
     AppState.current_project.pages.connect_self_changed(_on_page_hierarchy_changed)
+    _rebuild_tree()
     AppState.active_page.connect_self_changed(_on_active_page_changed)
     AppState.focused_page.connect_self_changed(
         func(_origin: ReactiveVariant) -> void:
             if _origin.value == null:
-                page_tree.deselect_all()
+                _page_tree.deselect_all()
     )
 
 # ─────────────────────────────────────────────
@@ -92,10 +95,10 @@ func _connect_signals() -> void:
 # ─────────────────────────────────────────────
 
 func _rebuild_tree() -> void:
-    page_tree.clear()
+    _page_tree.clear()
     _item_map.clear()
 
-    _tree_root = page_tree.create_item()
+    _tree_root = _page_tree.create_item()
     _tree_root.set_text(0, "")
     _tree_root.set_selectable(0, true)
 
@@ -120,7 +123,7 @@ func _build_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
 
 
 func _create_item(parent: TreeItem, page: ReactivePage) -> TreeItem:
-    var item: TreeItem = page_tree.create_item(parent)
+    var item: TreeItem = _page_tree.create_item(parent)
     item.set_text(0, page.page_name.value)
     item.set_metadata(0, page)
     item.set_editable(0, false)
@@ -181,29 +184,29 @@ func _delete_page(page_id: String) -> void:
 # Context Menu
 # ─────────────────────────────────────────────
 
-func _show_context_menu() -> void:
-    var selected: TreeItem = page_tree.get_selected()
+func _show__context_menu() -> void:
+    var selected: TreeItem = _page_tree.get_selected()
     var has_page: bool = selected != null and selected != _tree_root
 
-    context_menu.clear()
-    context_menu.add_item("Add Page", MenuAction.ADD_PAGE)
-    context_menu.add_separator()
-    context_menu.add_item("Delete",   MenuAction.DELETE_PAGE)
-    context_menu.set_item_disabled(
-        context_menu.get_item_index(MenuAction.DELETE_PAGE),
+    _context_menu.clear()
+    _context_menu.add_item("Add Page", MenuAction.ADD_PAGE)
+    _context_menu.add_separator()
+    _context_menu.add_item("Delete",   MenuAction.DELETE_PAGE)
+    _context_menu.set_item_disabled(
+        _context_menu.get_item_index(MenuAction.DELETE_PAGE),
         not has_page
     )
-    context_menu.popup_on_parent(
+    _context_menu.popup_on_parent(
         Rect2(get_viewport().get_mouse_position(), Vector2.ZERO)
     )
 
 
-func _on_context_menu_id_pressed(id: int) -> void:
+func _on__context_menu_id_pressed(id: int) -> void:
     match id:
         MenuAction.ADD_PAGE:
             _create_page("")
         MenuAction.DELETE_PAGE:
-            var selected: TreeItem = page_tree.get_selected()
+            var selected: TreeItem = _page_tree.get_selected()
             if selected == null or selected == _tree_root:
                 return
             var page: ReactivePage = selected.get_metadata(0) as ReactivePage
@@ -217,7 +220,7 @@ func _on_context_menu_id_pressed(id: int) -> void:
 func _on_item_mouse_selected(mouse_button_index: int, double_clicked: bool) -> void:
     match mouse_button_index:
         MOUSE_BUTTON_LEFT:
-            var item: TreeItem = page_tree.get_selected()
+            var item: TreeItem = _page_tree.get_selected()
             if item == null or item == _tree_root:
                 return
 
@@ -235,7 +238,7 @@ func _on_item_mouse_selected(mouse_button_index: int, double_clicked: bool) -> v
             AppState.focused_page.value = page
 
         MOUSE_BUTTON_RIGHT:
-            _show_context_menu()
+            _show__context_menu()
 
 
 func _on_active_page_changed(active_page: ReactiveVariant) -> void:
@@ -253,7 +256,7 @@ func _on_active_page_changed(active_page: ReactiveVariant) -> void:
 
 
 func _on_item_edited() -> void:
-    var item: TreeItem = page_tree.get_selected()
+    var item: TreeItem = _page_tree.get_selected()
     if item == null or item == _tree_root:
         return
 
@@ -278,9 +281,9 @@ func _on_item_edited() -> void:
 
 
 func _update_button_states() -> void:
-    var selected: TreeItem = page_tree.get_selected()
+    var selected: TreeItem = _page_tree.get_selected()
     var has_page: bool     = selected != null and selected != _tree_root
-    btn_delete.disabled = not has_page
+    _btn_delete.disabled = not has_page
 
 # ─────────────────────────────────────────────
 # AppState Handlers
@@ -300,7 +303,7 @@ func _on_page_hierarchy_changed(_pages: ReactiveArray) -> void:
 # ─────────────────────────────────────────────
 
 func _get_drag_data(_position: Vector2) -> Variant:
-    var selected: TreeItem = page_tree.get_selected()
+    var selected: TreeItem = _page_tree.get_selected()
     if selected == null or selected == _tree_root:
         return null
 
@@ -310,13 +313,13 @@ func _get_drag_data(_position: Vector2) -> Variant:
 
     var preview: Label = Label.new()
     preview.text  = page.page_name.value
-    page_tree.set_drag_preview(preview)
+    _page_tree.set_drag_preview(preview)
 
     return { "page": page }
 
 
 func _can_drop_data(pos: Vector2, data: Variant) -> bool:
-    page_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
+    _page_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
 
     if not data is Dictionary or not data.has("page"):
         return false
@@ -325,7 +328,7 @@ func _can_drop_data(pos: Vector2, data: Variant) -> bool:
     if dragged == null:
         return false
 
-    var target: TreeItem = page_tree.get_item_at_position(pos)
+    var target: TreeItem = _page_tree.get_item_at_position(pos)
     if target == null:
         return false
 
@@ -347,7 +350,7 @@ func _drop_data(pos: Vector2, data: Variant) -> void:
     if dragged == null:
         return
 
-    var target_item: TreeItem = page_tree.get_item_at_position(pos)
+    var target_item: TreeItem = _page_tree.get_item_at_position(pos)
     if target_item == null:
         return
 
@@ -368,7 +371,7 @@ func _drop_data(pos: Vector2, data: Variant) -> void:
     if target_page == null:
         return
 
-    var drop_mode: int = page_tree.get_drop_section_at_position(pos)
+    var drop_mode: int = _page_tree.get_drop_section_at_position(pos)
     project.move_page(dragged.page_id.value, target_page, drop_mode)
 
 # ─────────────────────────────────────────────
@@ -380,7 +383,7 @@ func _select_page_by_id(page_id: String) -> void:
     _item_map[page_id].select(0)
 
 func _get_selected_page_id() -> String:
-    var selected: TreeItem = page_tree.get_selected()
+    var selected: TreeItem = _page_tree.get_selected()
     if selected == null or selected == _tree_root:
         return ""
     var page: ReactivePage = selected.get_metadata(0) as ReactivePage

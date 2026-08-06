@@ -18,6 +18,7 @@ corner_radius_bottom_left = 10
 
 [sub_resource type="LabelSettings" id="LabelSettings_fxvbf"]
 font_size = 34
+font_color = Color(0.8784314, 0.49411765, 0.23921569, 1)
 
 [sub_resource type="FontVariation" id="FontVariation_wsj8e"]
 variation_embolden = 1.0

@@ -3,12 +3,12 @@ extends Control
 
 # ── Child references ──────────────────────────────────────────────────────────
 
+@onready var menu_bar_container :  HBoxContainer         = %MenuBarContainer
 @onready var file_menu :           PopupMenu             = %FileMenu
 @onready var edit_menu :           PopupMenu             = %EditMenu
 @onready var server_menu :         PopupMenu             = %ServerMenu
 @onready var edit_mode_toggle :    Button                = %EditModeButton
 
-@onready var startup_container :         CenterContainer       = %StartupContainer
 @onready var page_container :            VSplitContainer       = %PageContainer
 @onready var canvas_container :          PageTabContainer      = %CanvasContainer
 @onready var inspector_container :       VSplitContainer       = %InspectorContainer
@@ -48,6 +48,7 @@ var _status_bindings: Dictionary = {}
 func _ready() -> void:
     _setup_window()
     _set_scaling()
+    _apply_runtime_mode()
     _connect_signals()
 
 ## Restores normal window behavior after the borderless splash screen.
@@ -55,8 +56,8 @@ func _setup_window() -> void:
     var window: Window = get_window()
     window.borderless = false
     window.unresizable = false
-    window.min_size = Vector2i(1024, 720)
-    window.size = Vector2i(1600, 900)
+    window.min_size = Vector2i(800, 600)
+    window.size = Vector2i(1024, 720)
     window.move_to_center()
 
 ## Scales the UI relative to the screen DPI so the layout is consistent
@@ -65,6 +66,32 @@ func _set_scaling() -> void:
     var screen_dpi: int = DisplayServer.screen_get_dpi()
     var scale_factor: float = maxf(screen_dpi / 120.0, 1.0)
     get_tree().root.content_scale_factor = scale_factor
+
+## Locks down the UI for runtime-only builds: hides the menu bar and
+## edit-mode toggle entirely (edit mode is permanently disabled in this
+## mode, so exposing File/Edit/Server menus serves no purpose and only
+## invites accidental interaction with a production HMI). A hidden
+## keyboard shortcut is enabled instead, allowing authorized staff to
+## shut down gracefully rather than force-killing the process.
+func _apply_runtime_mode() -> void:
+    var runtime_only: bool = AppState.runtime_only.value
+    menu_bar_container.visible = not runtime_only
+    inspector_container.visible = not runtime_only
+
+func _unhandled_key_input(event: InputEvent) -> void:
+    if not AppState.runtime_only.value:
+        return
+
+    if event is InputEventKey and event.pressed \
+        and event.ctrl_pressed and event.alt_pressed and event.keycode == KEY_Q:
+        _graceful_shutdown()
+
+
+## Disconnects all OPC UA servers before quitting, avoiding dangling
+## subscriptions/sessions from an abrupt process termination.
+func _graceful_shutdown() -> void:
+    _disconnect_all_servers()
+    get_tree().quit()
 
 
 func _connect_signals() -> void:

@@ -4,10 +4,11 @@ extends PanelContainer
 signal open_requested(file_path: String)
 signal remove_requested(file_path: String)
 
-@onready var _name_label: Label = %NameLabel
-@onready var _path_label: Label = %PathLabel
-@onready var _time_label: Label = %TimeLabel
-@onready var _warning_icon: TextureRect = %WarningIcon
+@onready var _name_label    : Label = %NameLabel
+@onready var _path_label    : Label = %PathLabel
+@onready var _time_label    : Label = %TimeLabel
+@onready var _remove_button : Button = %RemoveButton
+@onready var _warning_icon  : Label = %WarningIcon
 
 var _file_path: String = ""
 var _exists: bool = true
@@ -35,6 +36,7 @@ func _ready() -> void:
     gui_input.connect(_on_gui_input)
     mouse_entered.connect(_on_mouse_entered)
     mouse_exited.connect(_on_mouse_exited)
+    _remove_button.pressed.connect(func() -> void: remove_requested.emit(_file_path))
 
 func setup(entry: Dictionary) -> void:
     _file_path = entry.get("file_path", "")

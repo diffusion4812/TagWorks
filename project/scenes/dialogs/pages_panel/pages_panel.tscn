@@ -11,15 +11,16 @@ script = ExtResource("1_jrqfq")
 [node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=853418761]
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=586066840]
+[node name="ButtonContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=586066840]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="AddPageButton" type="Button" parent="VBoxContainer/HBoxContainer" unique_id=1654278091]
+[node name="AddPageButton" type="Button" parent="VBoxContainer/ButtonContainer" unique_id=1654278091]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Add"
 
-[node name="DeletePageButton" type="Button" parent="VBoxContainer/HBoxContainer" unique_id=1936198274]
+[node name="DeletePageButton" type="Button" parent="VBoxContainer/ButtonContainer" unique_id=1936198274]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Delete"

@@ -47,6 +47,7 @@ func _ready() -> void:
     focused_page     = ReactiveVariant.new(null, null, "app_state.focused_page")
     active_page      = ReactiveVariant.new(null, null, "app_state.active_page")
     selected_widget  = ReactiveVariant.new(null, null, "app_state.selected_widget")
+    runtime_only     = ReactiveBool.new(false, null, "app_state.runtime_only")
     edit_mode        = ReactiveBool.new(false, null,   "app_state.edit_mode")
     last_error       = ReactiveString.new("", null,    "app_state.last_error")
 

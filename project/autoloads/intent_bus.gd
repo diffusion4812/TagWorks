@@ -19,6 +19,10 @@ signal delete_widget_requested(widget: ReactiveWidget)
 signal add_server_requested()
 @warning_ignore("unused_signal")
 signal delete_server_requested(server: ReactiveOpcUaServer)
+@warning_ignore("unused_signal")
+signal connect_all_servers()
+@warning_ignore("unused_signal")
+signal disconnect_all_servers()
 
 # ── Groups ────────────────────────────────────────────────────────────────────
 @warning_ignore("unused_signal")
