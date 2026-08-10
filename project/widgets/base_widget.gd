@@ -37,12 +37,15 @@ var container_name: String = "Container":
 # ─────────────────────────────────────────────
 
 func _ready() -> void:
+    super._ready()
     add_to_group("widgets")
     _raw_position = position
 
     if is_container:
         z_index = Z_INDEX_BASE
 
+func _get_selection_identity() -> Variant:
+    return data
 
 ## Initialises this widget from a ReactiveWidget data object.
 func init(widget_data: ReactiveWidget) -> void:
@@ -119,15 +122,12 @@ func get_protected_controls() -> Array[Control]:
 func _on_widget_moved(_widget: SelectableControl) -> void:
     data.properties.value["position"].value = position
 
-
 func _on_widget_resized(_widget: SelectableControl) -> void:
     data.properties.value["position"].value = position
     data.properties.value["size"].value     = size
 
-
 func _on_reactive_position_changed(reactive_position: ReactiveVector2) -> void:
     position = reactive_position.value
-
 
 func _on_reactive_size_changed(reactive_size: ReactiveVector2) -> void:
     size = reactive_size.value
@@ -139,13 +139,6 @@ func _on_reactive_size_changed(reactive_size: ReactiveVector2) -> void:
 func _elevate_child(child: Control) -> void:
     if is_container:
         child.z_index = z_index + 1
-
-# ─────────────────────────────────────────────
-# Selection
-# ─────────────────────────────────────────────
-
-func _apply_selected_style(active: bool) -> void:
-    modulate = Color(1.2, 1.2, 1.2) if active else Color.WHITE
 
 # ─────────────────────────────────────────────
 # Serialisation

@@ -67,32 +67,11 @@ func _set_scaling() -> void:
     var scale_factor: float = maxf(screen_dpi / 120.0, 1.0)
     get_tree().root.content_scale_factor = scale_factor
 
-## Locks down the UI for runtime-only builds: hides the menu bar and
-## edit-mode toggle entirely (edit mode is permanently disabled in this
-## mode, so exposing File/Edit/Server menus serves no purpose and only
-## invites accidental interaction with a production HMI). A hidden
-## keyboard shortcut is enabled instead, allowing authorized staff to
-## shut down gracefully rather than force-killing the process.
+## Locks down the UI for runtime-only operation
 func _apply_runtime_mode() -> void:
     var runtime_only: bool = AppState.runtime_only.value
     menu_bar_container.visible = not runtime_only
     inspector_container.visible = not runtime_only
-
-func _unhandled_key_input(event: InputEvent) -> void:
-    if not AppState.runtime_only.value:
-        return
-
-    if event is InputEventKey and event.pressed \
-        and event.ctrl_pressed and event.alt_pressed and event.keycode == KEY_Q:
-        _graceful_shutdown()
-
-
-## Disconnects all OPC UA servers before quitting, avoiding dangling
-## subscriptions/sessions from an abrupt process termination.
-func _graceful_shutdown() -> void:
-    _disconnect_all_servers()
-    get_tree().quit()
-
 
 func _connect_signals() -> void:
     # ── System ────────────────────────────────────────────────────────────────
@@ -175,7 +154,6 @@ func _on_os_theme_changed() -> void:
     active_theme = deep_merge_themes(base_theme, dark_theme if DisplayServer.is_dark_mode() else light_theme)
     theme = active_theme
 
-
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
 func _on_mode_toggled(is_edit: bool) -> void:
@@ -196,26 +174,14 @@ func _on_file_menu_pressed(id: int) -> void:
         4: IntentBus.close_project_requested.emit()
         6: get_tree().quit()
 
-
 func _on_edit_menu_pressed(_id: int) -> void:
     pass
-
 
 func _on_server_menu_pressed(id: int) -> void:
     match id:
         0:                    connection_dialog.popup_centered(Vector2i(900, 720))
-        CONNECT_ALL_ID:       _connect_all_servers()
-        DISCONNECT_ALL_ID:    _disconnect_all_servers()
-
-
-func _connect_all_servers() -> void:
-    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
-        OpcUaManager.connect_server(cfg.id.value)
-
-
-func _disconnect_all_servers() -> void:
-    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
-        OpcUaManager.disconnect_server(cfg.id.value)
+        CONNECT_ALL_ID:       IntentBus.connect_all_servers.emit()
+        DISCONNECT_ALL_ID:    IntentBus.disconnect_all_servers.emit()
 
 # ── Server Menu — Reactive Rebuild ────────────────────────────────────────────
 
@@ -260,7 +226,6 @@ func _rebuild_server_menu() -> void:
         server_menu.add_submenu_node_item(_status_prefix(cfg) + cfg.display_name.value, submenu)
 
         _bind_status(cfg, menu_item_index, submenu)
-        _apply_submenu_state(submenu, cfg)
 
 
 # ── Per-server status binding ────────────────────────────────────────────────
@@ -286,18 +251,9 @@ func _unbind_all_status() -> void:
             cfg.connection_status.reactive_changed.disconnect(callback)
     _status_bindings.clear()
 
-
-func _on_server_status_changed(cfg: ReactiveOpcUaServer, menu_item_index: int, submenu: PopupMenu) -> void:
+func _on_server_status_changed(cfg: ReactiveOpcUaServer, menu_item_index: int, _submenu: PopupMenu) -> void:
     if menu_item_index < server_menu.item_count:
         server_menu.set_item_text(menu_item_index, _status_prefix(cfg) + cfg.display_name.value)
-    _apply_submenu_state(submenu, cfg)
-
-
-func _apply_submenu_state(submenu: PopupMenu, cfg: ReactiveOpcUaServer) -> void:
-    var connected: bool = cfg.connection_status.value == ReactiveOpcUaServer.ConnectionStatus.CONNECTED
-    #submenu.set_item_disabled(0, connected)
-    #submenu.set_item_disabled(1, not connected)
-
 
 func _status_prefix(cfg: ReactiveOpcUaServer) -> String:
     match cfg.connection_status.value:

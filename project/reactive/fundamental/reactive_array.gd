@@ -33,6 +33,9 @@ func get_at(i: int) -> Variant:
 func values() -> Array:
     return value
 
+func size() -> int:
+    return value.size()
+
 # ── Write ─────────────────────────────────────────────────────────────────────
 
 func set_at(i: int, v: Variant) -> void:

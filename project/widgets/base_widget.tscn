@@ -3,17 +3,20 @@
 [ext_resource type="Script" uid="uid://dd6vc4yei0eet" path="res://widgets/base_widget.gd" id="1_pysbo"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pysbo"]
+bg_color = Color(0.3764706, 0.3764706, 0.3764706, 1)
 draw_center = false
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
+border_color = Color(0.5019608, 0.5019608, 0.5019608, 1)
 corner_radius_top_left = 5
 corner_radius_top_right = 5
 corner_radius_bottom_right = 5
 corner_radius_bottom_left = 5
 
 [node name="BaseWidget" type="PanelContainer" unique_id=954027860]
+custom_minimum_size = Vector2(10, 10)
 offset_right = 10.0
 offset_bottom = 10.0
 size_flags_horizontal = 0

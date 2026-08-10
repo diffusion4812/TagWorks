@@ -76,6 +76,17 @@ func _ready() -> void:
     )
     _rebuild_all()
 
+    IntentBus.connect_all_servers.connect(
+        func() -> void:
+            for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
+                OpcUaManager.connect_server(cfg.id.value)
+    )
+    IntentBus.disconnect_all_servers.connect(
+        func() -> void:
+            for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
+                OpcUaManager.disconnect_server(cfg.id.value)
+    )
+
 
 # ── Rebuild (no reconciliation) ─────────────────────────────────────────────
 

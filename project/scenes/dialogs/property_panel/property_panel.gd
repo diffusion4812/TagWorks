@@ -19,8 +19,7 @@ func _ready() -> void:
     apply_btn.pressed.connect(_on_apply_btn_pressed)
     close_btn.pressed.connect(_on_close_btn_pressed)
 
-    AppState.selected_widget.connect_self_changed(_on_selected_widget_changed)
-
+    AppState.selected_widgets.connect_self_changed(_on_selected_widgets_changed)
 
 func _on_apply_btn_pressed() -> void:
     _reapply_current_target()
@@ -31,12 +30,14 @@ func _on_close_btn_pressed() -> void:
 
 # ── AppState Handlers ─────────────────────────────────────────────────────────
 
-func _on_selected_widget_changed(selected_widget: ReactiveVariant) -> void:
+func _on_selected_widgets_changed(selected_widgets: ReactiveArray) -> void:
+    if selected_widgets.size() != 1:
+        return
     if _current_widget_node != null and property_changed.is_connected(_current_widget_node._on_property_changed):
         property_changed.disconnect(_current_widget_node._on_property_changed)
     _current_widget_node = null
 
-    _current_target = selected_widget.value as ReactiveWidget
+    _current_target = selected_widgets.get_at(0).value as ReactiveWidget
     if _current_target == null:
         clear()
         return

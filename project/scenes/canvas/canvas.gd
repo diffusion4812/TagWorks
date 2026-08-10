@@ -96,7 +96,6 @@ func _mark_dirty() -> void:
     if page != null:
         page.canvas.is_dirty.value = true
 
-
 func _clear_dirty() -> void:
     var page: ReactivePage = _get_reactive_page()
     if page != null:
@@ -109,7 +108,6 @@ func _build_context_menu() -> void:
     _context_menu.name = "WidgetCanvasContextMenu"
     add_child(_context_menu)
     _context_menu.id_pressed.connect(_on_context_menu_id_pressed)
-
 
 func _show_context_menu_for(target: Node) -> void:
     _context_menu.clear()
@@ -128,21 +126,21 @@ func _show_context_menu_for(target: Node) -> void:
         # Right-clicked the canvas background — offer add via palette
         _context_menu.add_item("Add Widget",       MENU_ADD_CHILD)
         _context_menu.add_separator()
-        
+
         # 1. Create the Server Submenu
         var server_menu : PopupMenu = PopupMenu.new()
         server_menu.name = "ServerSubMenu"
-        
+
         # 2. Populate the Server Submenu with unique IDs
         server_menu.add_item("Connect all", MENU_SERVER_CONNECT_ALL)
         server_menu.add_item("Disconnect all", MENU_SERVER_DISCONNECT_ALL)
-        
+
         # 3. Connect the signal to your handling function
         #server_menu.id_pressed.connect(_on_server_menu_id_pressed)
-        
+
         # 4. Bind it to the parent so it frees automatically on _context_menu.clear()
         _context_menu.add_child(server_menu)
-        
+
         # 5. Add it as a submenu item in the main context menu
         _context_menu.add_submenu_node_item("Server", server_menu)
 
@@ -160,9 +158,17 @@ func _on_context_menu_id_pressed(id: int) -> void:
 
         MENU_DELETE:
             if _context_target is BaseWidget:
-                IntentBus.delete_widget_requested.emit(
-                    (_context_target as BaseWidget).data.widget_id.value
-                )
+                var target_widget: BaseWidget = _context_target as BaseWidget
+
+                # If the right-clicked widget is part of an existing multi-selection,
+                # delete the whole selection; otherwise delete only the target.
+                if _is_selected(target_widget):
+                    for w: ReactiveWidget in AppState.selected_widgets.value.duplicate():
+                        IntentBus.delete_widget_requested.emit(w.widget_id.value)
+                else:
+                    IntentBus.delete_widget_requested.emit(
+                        target_widget.data.widget_id.value
+                    )
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -173,7 +179,7 @@ func _gui_input(event: InputEvent) -> void:
     if event is InputEventMouseButton and event.pressed:
         match event.button_index:
             MOUSE_BUTTON_LEFT:
-                _deselect_current()
+                _deselect_all()
                 get_viewport().set_input_as_handled()
 
             MOUSE_BUTTON_RIGHT:
@@ -181,25 +187,54 @@ func _gui_input(event: InputEvent) -> void:
                 _show_context_menu_for(self)
                 get_viewport().set_input_as_handled()
 
+func _unhandled_key_input(event: InputEvent) -> void:
+    if not AppState.edit_mode.value:
+        return
+    if not _is_active_canvas():
+        return
+
+    if event is InputEventKey and event.pressed and not event.echo:
+        if event.keycode == KEY_DELETE:
+            var ids: Array[String] = []
+            for w: ReactiveWidget in AppState.selected_widgets.value:
+                ids.append(w.widget_id.value)
+            for id: String in ids:
+                IntentBus.delete_widget_requested.emit(id)
+            if not ids.is_empty():
+                get_viewport().set_input_as_handled()
 
 func _on_child_gui_input(event: InputEvent, target: Node) -> void:
     if not AppState.edit_mode.value:
         return
-    if event is InputEventMouseButton \
-            and event.button_index == MOUSE_BUTTON_RIGHT \
-            and event.pressed:
-        _context_target = target
-        _show_context_menu_for(target)
-        get_viewport().set_input_as_handled()
+
+    if event is InputEventMouseButton and event.pressed:
+        if event.button_index == MOUSE_BUTTON_LEFT:
+            var additive: bool = event.ctrl_pressed or event.shift_pressed
+            _select_target(target, additive)
+            get_viewport().set_input_as_handled()
+
+        elif event.button_index == MOUSE_BUTTON_RIGHT:
+            _context_target = target
+            _show_context_menu_for(target)
+            get_viewport().set_input_as_handled()
+
+func _on_widget_selection_requested(widget: SelectableControl) -> void:
+    var additive: bool = Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_SHIFT)
+    _select_target(widget, additive)
+
+func _on_widget_context_menu_requested(widget: SelectableControl) -> void:
+    _context_target = widget
+    _show_context_menu_for(widget)
 
 # ── Selection ─────────────────────────────────────────────────────────────────
 
-func _deselect_current() -> void:
-    var current: ReactiveWidget = AppState.selected_widget.value as ReactiveWidget
-    if current == null:
-        return
-    get_widget_node(current).deselect()
-    AppState.selected_widget.value = null
+func _is_selected(widget: BaseWidget) -> bool:
+    return widget != null and widget.data != null \
+        and AppState.selected_widgets.value.has(widget.data)
+
+
+func _deselect_all() -> void:
+    AppState.selected_widgets.value = []
 
 #TODO: Update this to be more efficient!
 func get_widget_node(w: ReactiveWidget) -> BaseWidget:
@@ -214,28 +249,34 @@ func _find_widget(node: Node, widget_id: ReactiveWidget) -> BaseWidget:
             return found
     return null
 
-func _select_target(target: Node) -> void:
+func _select_target(target: Node, additive: bool = false) -> void:
     if target == null or not target is BaseWidget:
+        if not additive:
+            _deselect_all()
         return
 
     var widget: BaseWidget = target as BaseWidget
 
-    if AppState.selected_widget.value == widget.data:
+    if additive:
+        var selection: Array = AppState.selected_widgets.value.duplicate()
+        if selection.has(widget.data):
+            selection.erase(widget.data)
+        else:
+            selection.append(widget.data)
+        AppState.selected_widgets.value = selection
         return
 
-    _deselect_current()          # ← deselects previous widget
-    widget.select()              # ← canvas instructs new widget to select itself
-    AppState.selected_widget.value = widget.data  # ← state updated
+    if AppState.selected_widgets.value.size() == 1 \
+            and AppState.selected_widgets.value[0] == widget.data:
+        return
 
-
-func _on_widget_selection_requested(widget: SelectableControl) -> void:
-    _select_target(widget)
+    AppState.selected_widgets.value = [widget.data]
 
 # ── Edit Mode ─────────────────────────────────────────────────────────────────
 
 func _on_edit_mode_changed(edit_mode: ReactiveBool) -> void:
     if not edit_mode.value:
-        _deselect_current()
+        _deselect_all()
 
 # ── Widget Spawning ───────────────────────────────────────────────────────────
 
@@ -309,8 +350,8 @@ func _find_deepest_drop_target(root: Control, drop_position: Vector2) -> Control
 func _subscribe_widget(widget: BaseWidget) -> void:
     if not widget.selection_requested.is_connected(_on_widget_selection_requested):
         widget.selection_requested.connect(_on_widget_selection_requested)
-    if not widget.gui_input.is_connected(_on_child_gui_input.bind(widget)):
-        widget.gui_input.connect(_on_child_gui_input.bind(widget))
+    if not widget.context_menu_requested.is_connected(_on_widget_context_menu_requested):
+        widget.context_menu_requested.connect(_on_widget_context_menu_requested)
 
 
 func _subscribe_all_recursive(root: Control) -> void:
@@ -344,7 +385,7 @@ func _collect_nodes_recursive(root: Control, result: Array[Node]) -> void:
 # ── Canvas Operations ─────────────────────────────────────────────────────────
 
 func clear_all_widgets() -> void:
-    _deselect_current()
+    _deselect_all()
     _context_target = null
     for child: Node in get_children():
         if child is BaseWidget:
@@ -364,7 +405,7 @@ func load_page(page: ReactivePage) -> void:
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_add_widget_requested(scene: PackedScene) -> void:
-    _deselect_current()
+    _deselect_all()
     if not _is_active_canvas():
         return
     spawn_widget(scene)
@@ -382,9 +423,11 @@ func _on_delete_widget_requested(widget_id: String) -> void:
 
 
 func _delete_widget(target: BaseWidget) -> void:
-    if AppState.selected_widget.value == target:
-        _deselect_current()
+    if _is_selected(target):
+        var selection: Array = AppState.selected_widgets.value.duplicate()
+        selection.erase(target.data)
+        AppState.selected_widgets.value = selection
+
     _context_target = null
     target.queue_free()
-    AppState.selected_widget.value = null
     _mark_dirty()

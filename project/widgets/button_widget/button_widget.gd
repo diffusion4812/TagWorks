@@ -64,10 +64,6 @@ func _on_edit_mode_changed(enabled: ReactiveBool) -> void:
     button.disabled     = enabled.value
     button.mouse_filter = Control.MOUSE_FILTER_IGNORE if enabled.value else Control.MOUSE_FILTER_STOP
 
-func _on_property_changed(p: String, v: Variant) -> void:
-    pass
-    #data.properties.value[p].value = v
-
 # ─────────────────────────────────────────────
 # Class
 # ─────────────────────────────────────────────
