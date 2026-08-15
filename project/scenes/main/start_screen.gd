@@ -1,7 +1,7 @@
 extends PanelContainer
 
 @export var recent_project_row_scene: PackedScene
-@export var main_scene: PackedScene
+@export_file("*.tscn") var main_scene_path: String
 
 @onready var _close_button              : Button = %CloseButton
 @onready var _title_label               : Label = %TitleLabel
@@ -17,6 +17,10 @@ extends PanelContainer
 var _dragging: bool = false
 var _drag_offset: Vector2i
 
+## True while a new/open/recent-open operation is pending, so we don't
+## allow overlapping requests or launch the main scene prematurely.
+var _project_operation_pending: bool = false
+
 func _ready() -> void:
     _close_button.pressed.connect(func() -> void: get_tree().quit(0))
     _new_project_button.pressed.connect(_on_new_project_pressed)
@@ -27,6 +31,24 @@ func _ready() -> void:
     _populate_language_options()
     _language_option.item_selected.connect(_on_language_option_selected)
     _refresh_recent_list()
+
+    # ── Project lifecycle ────────────────────────────────────────────────────
+    AppState.current_project.is_loaded.connect_self_changed(_on_project_loaded_changed)
+    ProjectManager.last_error.connect_self_changed(_on_project_error_changed)
+
+    ResourceLoader.load_threaded_request(main_scene_path)
+
+func _on_project_loaded_changed(is_loaded: ReactiveBool) -> void:
+    if is_loaded.value:
+        _launch_main_scene()
+
+func _on_project_error_changed(error: ReactiveString) -> void:
+    if not error.value.is_empty():
+        push_warning("SplashScreen: %s" % error.value)
+
+func _on_project_busy_changed(busy: ReactiveBool) -> void:
+    _new_project_button.disabled = busy.value or AppState.runtime_only.value
+    _open_project_button.disabled = busy.value
 
 func _gui_input(event: InputEvent) -> void:
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -55,7 +77,8 @@ func _notification(what : int) -> void:
 func _populate_language_options() -> void:
     var locales: Array[Dictionary] = [
         {"code": "en", "label": "English"},
-        {"code": "de", "label": "Deutsch"}
+        {"code": "de", "label": "Deutsch"},
+        {"code": "fr", "label": "français"}
     ]
     for i: int in locales.size():
         _language_option.add_item(locales[i]["label"])
@@ -89,21 +112,47 @@ func _refresh_recent_list() -> void:
         row.open_requested.connect(_on_recent_project_open_requested)
         row.remove_requested.connect(_on_recent_project_remove_requested)
 
+## Waits (if necessary) for the threaded main-scene load to finish, then
+## performs the actual scene switch.
 func _launch_main_scene() -> void:
-    get_tree().change_scene_to_packed(main_scene)
+    var status: ResourceLoader.ThreadLoadStatus = ResourceLoader.load_threaded_get_status(main_scene_path)
+
+    while status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+        await get_tree().process_frame
+        status = ResourceLoader.load_threaded_get_status(main_scene_path)
+
+    if status != ResourceLoader.THREAD_LOAD_LOADED:
+        push_error("SplashScreen: Failed to load main scene (status: %d)" % status)
+        return
+
+    var packed_scene: PackedScene = ResourceLoader.load_threaded_get(main_scene_path)
+    get_tree().change_scene_to_packed(packed_scene)
+
+## Called once ProjectManager confirms a project was successfully
+## created or opened — the only trigger point for leaving the splash screen.
+func _on_project_ready() -> void:
+    _launch_main_scene()
+
+## Called if ProjectManager reports a failed open attempt (missing file,
+## corrupt JSON, etc.). Re-enables the UI so the user can retry.
+func _on_project_open_failed(reason: String) -> void:
+    push_warning("SplashScreen: Project open failed — %s" % reason)
+    _set_operation_pending(false)
+
+func _set_operation_pending(pending: bool) -> void:
+    _project_operation_pending = pending
+    _new_project_button.disabled = pending or AppState.runtime_only.value
+    _open_project_button.disabled = pending
 
 func _on_new_project_pressed() -> void:
-    _launch_main_scene()
     IntentBus.new_project_requested.emit()
 
 func _on_open_project_pressed() -> void:
-    _launch_main_scene()
     IntentBus.open_project_dialog_requested.emit()
 
 func _on_recent_project_open_requested(file_path: String) -> void:
-    _launch_main_scene()
     IntentBus.open_project_requested.emit(file_path)
 
 func _on_recent_project_remove_requested(file_path: String) -> void:
-    _refresh_recent_list()
     RecentProjects.remove(file_path)
+    _refresh_recent_list()

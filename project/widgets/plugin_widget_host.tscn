@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://8n4h4lqbh2bu"]
 
-[ext_resource type="Script" uid="uid://dd6vc4yei0eet" path="res://widgets/base_widget.gd" id="1_pysbo"]
+[ext_resource type="Script" uid="uid://begd34u1wupw7" path="res://widgets/plugin_widget_host.gd" id="1_sapg5"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pysbo"]
 bg_color = Color(0.3764706, 0.3764706, 0.3764706, 1)
@@ -15,14 +15,14 @@ corner_radius_top_right = 5
 corner_radius_bottom_right = 5
 corner_radius_bottom_left = 5
 
-[node name="BaseWidget" type="PanelContainer" unique_id=954027860]
+[node name="PluginWidgetHost" type="PanelContainer" unique_id=954027860]
 custom_minimum_size = Vector2(10, 10)
 offset_right = 10.0
 offset_bottom = 10.0
 size_flags_horizontal = 0
 size_flags_vertical = 0
 theme_override_styles/panel = SubResource("StyleBoxFlat_pysbo")
-script = ExtResource("1_pysbo")
+script = ExtResource("1_sapg5")
 
 [node name="MarginContainer" type="MarginContainer" parent="." unique_id=82225225]
 layout_mode = 2
@@ -32,4 +32,5 @@ theme_override_constants/margin_right = 2
 theme_override_constants/margin_bottom = 2
 
 [node name="ContentSlot" type="MarginContainer" parent="MarginContainer" unique_id=227595631]
+unique_name_in_owner = true
 layout_mode = 2

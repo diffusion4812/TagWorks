@@ -7,9 +7,6 @@
 [ext_resource type="Script" uid="uid://dwudljs54kucl" path="res://scenes/dialogs/pages_panel/canvas_container.gd" id="6_hxu8e"]
 [ext_resource type="PackedScene" uid="uid://cngi5xaoyrkxg" path="res://scenes/dialogs/widget_palette/widget_palette.tscn" id="7_nvumn"]
 [ext_resource type="PackedScene" uid="uid://dg1rxoysdt2ry" path="res://scenes/dialogs/property_panel/property_panel.tscn" id="8_ou6is"]
-[ext_resource type="PackedScene" uid="uid://byyleyvv2a352" path="res://scenes/dialogs/script_editor/script_editor.tscn" id="9_necax"]
-[ext_resource type="PackedScene" uid="uid://dmlg5i5n4rxtw" path="res://scenes/dialogs/opc_ua_connection_dialog/opc_ua_connection_dialog.tscn" id="10_r4lks"]
-[ext_resource type="PackedScene" uid="uid://dakwhsxj2tr72" path="res://scenes/dialogs/browse_nodes/browse_nodes.tscn" id="11_pg34l"]
 
 [node name="Main" type="Control" unique_id=1699472879]
 layout_mode = 3
@@ -139,21 +136,3 @@ layout_mode = 2
 [node name="PropertyPanel" parent="SafeAreaContainer/RootLayout/WorkArea/InspectorContainer" unique_id=77828116 instance=ExtResource("8_ou6is")]
 layout_mode = 2
 size_flags_horizontal = 3
-
-[node name="Dialogs" type="CanvasLayer" parent="." unique_id=276274510]
-
-[node name="ScriptEditor" parent="Dialogs" unique_id=980154428 instance=ExtResource("9_necax")]
-visible = false
-
-[node name="OpcUaConnectionDialog" parent="Dialogs" unique_id=425608285 instance=ExtResource("10_r4lks")]
-visible = false
-
-[node name="BrowseNodes" parent="Dialogs" unique_id=547478622 instance=ExtResource("11_pg34l")]
-visible = false
-
-[node name="FileDialog" type="FileDialog" parent="Dialogs" unique_id=1008746229]
-oversampling_override = 1.0
-initial_position = 2
-force_native = true
-display_mode = 1
-access = 2

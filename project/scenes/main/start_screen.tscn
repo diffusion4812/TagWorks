@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" uid="uid://dswy0dmg6mk1o" path="res://scenes/main/start_screen.gd" id="1_wsj8e"]
 [ext_resource type="PackedScene" uid="uid://cl7a71de6ssk0" path="res://scenes/main/recent_project_row.tscn" id="2_58f5j"]
-[ext_resource type="PackedScene" uid="uid://chrkq14f3x3w0" path="res://scenes/main/main.tscn" id="3_8bt6j"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wsj8e"]
 bg_color = Color(0.16078432, 0.16078432, 0.16078432, 1)
@@ -32,7 +31,7 @@ grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_wsj8e")
 script = ExtResource("1_wsj8e")
 recent_project_row_scene = ExtResource("2_58f5j")
-main_scene = ExtResource("3_8bt6j")
+main_scene_path = "uid://chrkq14f3x3w0"
 
 [node name="MarginContainer" type="MarginContainer" parent="." unique_id=1140065325]
 layout_mode = 2

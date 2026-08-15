@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Tag Commander 1.0\n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: SMS Group\n"
+"Language-Team: French <fr@li.org>\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "SPLASH_TITLE"
+msgstr "Tag Commander"
+
+msgid "SPLASH_NEW_PROJECT"
+msgstr "Nouveau projet"
+
+msgid "SPLASH_OPEN_PROJECT"
+msgstr "Ouvrir un projet"
+
+msgid "SPLASH_RECENT_PROJECTS"
+msgstr "Projets récents :"
+
+msgid "SPLASH_NO_RECENT"
+msgstr "Aucun projet récent pour le moment"
+
+msgid "SPLASH_PROJECT_LAST_OPENED"
+msgstr "Dernière ouverture : {date}"
+
+msgid "SPLASH_REMOVE_RECENT"
+msgstr "Supprimer"
+
+msgid "SPLASH_PROJECT_MISSING"
+msgstr "Fichier introuvable"
+
+msgid "SPLASH_RUNTIME_ONLY"
+msgstr "Lancer en mode exécution uniquement"
+
+msgid "SPLASH_CLOSE"
+msgstr "Fermer"
+
+msgid "SPLASH_VERSION"
+msgstr "Version {version}"

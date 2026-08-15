@@ -13,9 +13,6 @@ extends Control
 @onready var canvas_container :          PageTabContainer      = %CanvasContainer
 @onready var inspector_container :       VSplitContainer       = %InspectorContainer
 
-@onready var connection_dialog :   OpcUaConnectionDialog = $Dialogs/OpcUaConnectionDialog
-@onready var file_dialog :         FileDialog            = $Dialogs/FileDialog
-
 var active_theme : Theme
 @onready var base_theme : Theme = preload("res://resources/base_theme.tres")
 @onready var dark_theme : Theme = preload("res://resources/dark_theme.tres")
@@ -93,9 +90,6 @@ func _connect_signals() -> void:
             _rebuild_server_menu()
     )
 
-    # ── File dialog ────────────────────────────────────────────────────────────
-    file_dialog.file_selected.connect(_on_file_dialog_selected)
-
     # ── AppState (named handlers so we can call them directly) ────────────────
     AppState.edit_mode.connect_self_changed(_on_edit_mode_changed)
     AppState.current_project.project_name.connect_self_changed(_on_project_name_changed)
@@ -166,11 +160,7 @@ func _on_file_menu_pressed(id: int) -> void:
         0: IntentBus.new_project_requested.emit()
         1: IntentBus.open_project_dialog_requested.emit()
         2: _request_save()
-        3:
-            if AppState.current_project.file_path.value.is_empty():
-                _open_save_dialog("projects/", AppState.current_project.file_path.value)
-            else:
-                _open_save_dialog("projects/")
+        3: _open_save_dialog("projects/", AppState.current_project.file_path.value)
         4: IntentBus.close_project_requested.emit()
         6: get_tree().quit()
 
@@ -179,7 +169,10 @@ func _on_edit_menu_pressed(_id: int) -> void:
 
 func _on_server_menu_pressed(id: int) -> void:
     match id:
-        0:                    connection_dialog.popup_centered(Vector2i(900, 720))
+        0:
+            WindowManager.open_window("opc_ua_connection_dialog", {
+                "size": Vector2i(900, 720)
+            })
         CONNECT_ALL_ID:       IntentBus.connect_all_servers.emit()
         DISCONNECT_ALL_ID:    IntentBus.disconnect_all_servers.emit()
 
@@ -275,26 +268,46 @@ func _request_save() -> void:
     else:
         IntentBus.save_project_requested.emit()
 
-func _open_save_dialog(current_dir: String = "", current_file: String = "") -> void:
-    file_dialog.file_mode   = FileDialog.FILE_MODE_SAVE_FILE
-    file_dialog.access      = FileDialog.ACCESS_USERDATA
-    file_dialog.filters     = PackedStringArray(["*.json ; Project Files"])
-    file_dialog.current_dir = current_dir
-    file_dialog.current_file = current_file
-    file_dialog.popup_centered(Vector2i(800, 600))
-
-
 func _open_load_dialog() -> void:
-    file_dialog.file_mode   = FileDialog.FILE_MODE_OPEN_FILE
-    file_dialog.access      = FileDialog.ACCESS_USERDATA
-    file_dialog.filters     = PackedStringArray(["*.json ; Project Files"])
-    file_dialog.current_dir = "projects/"
-    file_dialog.popup_centered(Vector2i(800, 600))
+    WindowManager.open_window("filedialog", {
+        "params": {
+            "title": "Open Project",
+            "file_mode": FileDialog.FILE_MODE_OPEN_FILE,
+            "access": FileDialog.ACCESS_FILESYSTEM,
+            "filters": PackedStringArray(["*.json ; Project Files"])
+        },
+        "callbacks": {
+            "file_selected": _on_load_dialog_selected
+        }
+    })
 
+## Opens the "Save Project As" dialog.
+##
+## current_dir  : Default directory to display when no project file is set.
+## current_path : Pre-fills the filename field if a path is already known
+##                (e.g. the project was previously saved).
+func _open_save_dialog(current_dir: String = "", current_path: String = "") -> void:
+    var params: Dictionary = {
+        "title": "Save Project As",
+        "file_mode": FileDialog.FILE_MODE_SAVE_FILE,
+        "access": FileDialog.ACCESS_FILESYSTEM,
+        "filters": PackedStringArray(["*.json ; Project Files"])
+    }
 
-func _on_file_dialog_selected(path: String) -> void:
-    match file_dialog.file_mode:
-        FileDialog.FILE_MODE_SAVE_FILE:
-            IntentBus.save_project_as_requested.emit(path)
-        FileDialog.FILE_MODE_OPEN_FILE:
-            IntentBus.open_project_requested.emit(path)
+    if not current_path.is_empty():
+        params["current_path"] = current_path
+    elif not current_dir.is_empty():
+        params["current_dir"] = current_dir
+
+    WindowManager.open_window("filedialog", {
+        "params": params,
+        "callbacks": {
+            "file_selected": _on_save_dialog_selected
+        }
+    })
+
+func _on_load_dialog_selected(path: String) -> void:
+    IntentBus.open_project_requested.emit(path)
+
+func _on_save_dialog_selected(path: String) -> void:
+    IntentBus.save_project_as_requested.emit(path)

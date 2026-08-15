@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://i6gdfpekjne2"]
 
-[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/base_widget.tscn" id="1_grp56"]
+[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/plugin_widget_host.tscn" id="1_grp56"]
 [ext_resource type="Script" uid="uid://df2l4l721feto" path="res://widgets/led_indicator_widget/led_indicator_widget.gd" id="2_n6rof"]
 
 [sub_resource type="Gradient" id="Gradient_n6rof"]

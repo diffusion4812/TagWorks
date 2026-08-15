@@ -9,7 +9,7 @@ func get_widget_class() -> String:
     return plugin_id
 
 func init(widget_data: ReactiveWidget) -> void:
-    var descriptor: WidgetExtensionDescriptor = WidgetExtensionRegistry.get_descriptor(plugin_id)
+    var descriptor: WidgetExtensionDescriptor = AppState.loaded_widget_extensions.get_entry(plugin_id)
     if descriptor != null:
         is_container = descriptor.is_container
         widget_label = descriptor.display_name

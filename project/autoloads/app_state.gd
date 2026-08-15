@@ -35,6 +35,8 @@ var runtime_only    : ReactiveBool
 ## Whether the application is currently in edit mode.
 var edit_mode       : ReactiveBool
 
+var loaded_widget_extensions: ReactiveDictionary
+
 # ── Operation State ───────────────────────────────────────────────────────────
 
 ## Set when a project operation fails. Carries a human-readable message.
@@ -43,13 +45,14 @@ var last_error      : ReactiveString
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-    current_project  = ReactiveProject.new(null, "app_state.current_project")
-    focused_page     = ReactiveVariant.new(null, null, "app_state.focused_page")
-    active_page      = ReactiveVariant.new(null, null, "app_state.active_page")
-    selected_widgets = ReactiveArray.new([], null, "app_state.selected_widgets")
-    runtime_only     = ReactiveBool.new(false, null, "app_state.runtime_only")
-    edit_mode        = ReactiveBool.new(false, null,   "app_state.edit_mode")
-    last_error       = ReactiveString.new("", null,    "app_state.last_error")
+    current_project          = ReactiveProject.new(null, "app_state.current_project")
+    focused_page             = ReactiveVariant.new(null, null, "app_state.focused_page")
+    active_page              = ReactiveVariant.new(null, null, "app_state.active_page")
+    selected_widgets         = ReactiveArray.new([], null, "app_state.selected_widgets")
+    runtime_only             = ReactiveBool.new(false, null, "app_state.runtime_only")
+    edit_mode                = ReactiveBool.new(false, null, "app_state.edit_mode")
+    loaded_widget_extensions = ReactiveDictionary.new({}, null, "app_state.loaded_widget_extensions")
+    last_error               = ReactiveString.new("", null, "app_state.last_error")
 
     active_page.connect_self_changed(
         func(_active_page: ReactiveVariant) -> void:

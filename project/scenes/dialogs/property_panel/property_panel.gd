@@ -1,8 +1,6 @@
 class_name PropertyPanel
 extends PanelContainer
 
-@onready var opc_ua_connection_dialog:    OpcUaConnectionDialog     = $"../../../../../Dialogs/OpcUaConnectionDialog"
-var script_editor:   Node            = null
 var _current_target: ReactiveWidget  = null
 var _current_widget_node: BaseWidget = null
 
@@ -37,7 +35,7 @@ func _on_selected_widgets_changed(selected_widgets: ReactiveArray) -> void:
         property_changed.disconnect(_current_widget_node._on_property_changed)
     _current_widget_node = null
 
-    _current_target = selected_widgets.get_at(0).value as ReactiveWidget
+    _current_target = selected_widgets.get_at(0) as ReactiveWidget
     if _current_target == null:
         clear()
         return
@@ -77,7 +75,12 @@ func _load_widget(node: Node, widget: ReactiveWidget) -> void:
         child.queue_free()
 
     panel_title.text = widget.widget_type.value
-    node.build_properties(WidgetPropertyBuilder.new(self, widget))
+
+    var base_widget: BaseWidget = node as BaseWidget
+    if base_widget != null:
+        base_widget.build_properties(WidgetPropertyBuilder.new(self, widget))
+    else:
+        push_warning("Properties panel: node '%s' is not a BaseWidget." % node.name)
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
 
@@ -87,12 +90,6 @@ func _reapply_current_target() -> void:
             IntentBus.change_widget_property_requested.emit(_current_target, id, _current_target.properties[id])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-func _open_script_editor(_prop: String) -> void:
-    if not is_instance_valid(script_editor):
-        push_warning("PropertyPanel: script_editor is not assigned.")
-        return
-    script_editor.show()
 
 ## Looks up a ReactiveOpcUaServer by id within the current project.
 ## Returns null if no project is loaded or no server matches.

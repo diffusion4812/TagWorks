@@ -1,6 +1,8 @@
 [gd_scene format=3 uid="uid://k1r0xkl2ci8r"]
 
 [ext_resource type="Script" uid="uid://b3h0adru02vvd" path="res://tests/test_runner.gd" id="1_evx4h"]
+[ext_resource type="PackedScene" uid="uid://chrkq14f3x3w0" path="res://scenes/main/main.tscn" id="2_6vd4x"]
 
 [node name="TestRunner_gd" type="Node" unique_id=851160296]
 script = ExtResource("1_evx4h")
+main_scene = ExtResource("2_6vd4x")

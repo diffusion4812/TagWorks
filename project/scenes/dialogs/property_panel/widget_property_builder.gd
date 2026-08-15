@@ -74,10 +74,16 @@ func add_dynamic_field(p: String, l: String, v: ReactiveDictionary) -> void:
 
     var container: VBoxContainer = VBoxContainer.new()
     container.add_child(row)
-    container.add_child(_build_dynamic_field_editor(p, field))
+
+    if field.is_vector_field():
+        container.add_child(_build_vector_field_editor(p, field))
+    else:
+        container.add_child(_build_dynamic_field_editor(p, field))
+
     _panel.extra_props.add_child(container)
 
 func add_action_field(p: String, l: String, v: ReactiveDictionary) -> void:
+    print("hellasdasdso")
     var action: ReactiveActionBinding = v.value[p]
 
     var row: HBoxContainer = HBoxContainer.new()
@@ -292,7 +298,8 @@ func _build_dynamic_field_editor(p: String, field: ReactiveDynamicField) -> Cont
             ReactiveDynamicField.SourceType.OPC_TAG:
                 editor_slot.add_child(_make_tag_editor(p, field))
             ReactiveDynamicField.SourceType.SCRIPT:
-                editor_slot.add_child(_make_script_editor(p, field))
+                pass
+                #editor_slot.add_child(_make_script_editor(p, field))
 
     source_dropdown.item_selected.connect(func(idx: int) -> void:
         field.source_type.value = source_dropdown.get_item_id(idx)
@@ -302,6 +309,84 @@ func _build_dynamic_field_editor(p: String, field: ReactiveDynamicField) -> Cont
 
     rebuild.call()
     return wrapper
+
+func _build_variant_array_editor(field: ReactiveDynamicField) -> Control:
+    var edit: TextEdit = TextEdit.new()
+    edit.custom_minimum_size = Vector2(260, 80)
+    edit.text = var_to_str(field.constant_value.value)
+
+    var status: Label = Label.new()
+    status.modulate = Color.CRIMSON
+
+    edit.text_changed.connect(func() -> void:
+        var parsed: Variant = str_to_var(edit.text)
+        if parsed == null and not edit.text.strip_edges().is_empty():
+            status.text = "Invalid literal — expected e.g. [1.0, true, \"idle\", Color.RED]"
+            return
+        status.text = ""
+        field.constant_value.value = parsed
+    )
+
+    var randomize_btn: Button = Button.new()
+    randomize_btn.text = "Randomize (test data)"
+    randomize_btn.pressed.connect(func() -> void:
+        var n: int = 32
+        var existing: Variant = str_to_var(edit.text)
+        if existing is Array:
+            n = max(existing.size(), 1)
+        var test: Array = []
+        test.resize(n)
+        for i in n:
+            test[i] = randf_range(-10.0, 10.0)
+        field.constant_value.value = test
+        edit.text = var_to_str(test)
+    )
+
+    var wrapper: VBoxContainer = VBoxContainer.new()
+    wrapper.add_child(edit)
+    wrapper.add_child(status)
+    wrapper.add_child(randomize_btn)
+    return wrapper
+
+func _build_vector_field_editor(p: String, field: ReactiveDynamicField) -> Control:
+    var root: VBoxContainer = VBoxContainer.new()
+
+    var source_selector: OptionButton = OptionButton.new()
+    source_selector.add_item("Constant", ReactiveDynamicField.SourceType.CONSTANT)
+    source_selector.add_item("OPC Tag (native array)", ReactiveDynamicField.SourceType.OPC_TAG)
+    source_selector.add_item("OPC Tags (per-zone)", ReactiveDynamicField.SourceType.OPC_TAG_ARRAY)
+    source_selector.add_item("Script", ReactiveDynamicField.SourceType.SCRIPT)
+    source_selector.selected = field.source_type.value
+    source_selector.item_selected.connect(func(idx: int) -> void:
+        field.source_type.value = source_selector.get_item_id(idx)
+    )
+    root.add_child(source_selector)
+
+    match field.source_type.value:
+        ReactiveDynamicField.SourceType.CONSTANT:
+            root.add_child(_build_variant_array_editor(field))
+        ReactiveDynamicField.SourceType.OPC_TAG:
+            root.add_child(_build_tag_binding_editor(field.tag_binding))
+        ReactiveDynamicField.SourceType.OPC_TAG_ARRAY:
+            root.add_child(_build_tag_array_editor(field.tag_array_binding))
+        ReactiveDynamicField.SourceType.SCRIPT:
+            pass
+            #root.add_child(_build_script_editor(field.script_source))
+
+    return root
+
+func _build_tag_array_editor(binding: ReactiveOpcUaTagArrayBinding) -> Control:
+    var list: VBoxContainer = VBoxContainer.new()
+    for t in binding.tag_bindings.value:
+        list.add_child(_build_tag_binding_editor(t))
+
+    var add_btn: Button = Button.new()
+    add_btn.text = "Add Zone Tag"
+    add_btn.pressed.connect(func() -> void:
+        binding.add_tag("", "", "")
+    )
+    list.add_child(add_btn)
+    return list
 
 func _make_constant_editor(p: String, f: ReactiveDynamicField) -> Control:
     var field: LineEdit = LineEdit.new()
@@ -320,7 +405,7 @@ func _make_tag_editor(p: String, f: ReactiveDynamicField) -> Control:
         _panel.property_changed.emit(p, f)
     )
 
-func _make_script_editor(p: String, f: ReactiveDynamicField) -> Control:
+func _build_script_editor(p: String, f: ReactiveDynamicField) -> Control:
     var edit: TextEdit = TextEdit.new()
     edit.text                  = f.script_source.value
     edit.custom_minimum_size.y = 80
@@ -474,8 +559,19 @@ func _build_tag_binding_editor(
     )
 
     browse_btn.pressed.connect(func() -> void:
-        _panel.opc_ua_connection_dialog.browse(func(result: ReactiveOpcUaTagBinding) -> void:
-            binding_prop.server_id.value       = result.server_id.value
+        var server_id: String = binding_prop.server_id.value
+        var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(server_id)
+
+        if server == null:
+            printerr("Cannot browse: no server selected for this tag binding")
+            return
+
+        var opc_ua_connection_dialog: Node = WindowManager.open_window("opc_ua_connection_dialog", {
+            "auto_popup": false
+        })
+
+        opc_ua_connection_dialog.browse(func(result: ReactiveOpcUaTagBinding) -> void:
+            binding_prop.server_id.value       = server_id
             binding_prop.subscription_id.value = result.subscription_id.value
             binding_prop.tag_id.value          = result.tag_id.value
             if on_change.is_valid():

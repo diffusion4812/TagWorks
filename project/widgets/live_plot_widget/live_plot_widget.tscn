@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://b8klp71xvy545"]
 
-[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/base_widget.tscn" id="1_xhlou"]
+[ext_resource type="PackedScene" uid="uid://8n4h4lqbh2bu" path="res://widgets/plugin_widget_host.tscn" id="1_xhlou"]
 [ext_resource type="Script" uid="uid://cjs1pmj0x76xe" path="res://widgets/live_plot_widget/live_plot_widget.gd" id="2_1sxqx"]
 [ext_resource type="Script" uid="uid://oq5ffach138u" path="res://widgets/live_plot_widget/live_plot.gd" id="3_spfc7"]
 

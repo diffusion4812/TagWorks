@@ -37,6 +37,7 @@ ProjectManager="*uid://cxcfp36bffx2p"
 ReactiveTypeRegistry="*uid://u4m6loh0vxlf"
 ReactiveWidgetFactory="*uid://cay55wsepjx2n"
 WidgetExtensionRegistry="*uid://b4ff3mgf2yis"
+WindowManager="*uid://bh8balwa2xnfd"
 
 [debug]
 
@@ -60,6 +61,7 @@ window/handheld/orientation=1
 folder_colors={
 "res://autoloads/": "pink",
 "res://reactive/": "orange",
+"res://scenes/": "pink",
 "res://scenes/dialogs/": "red",
 "res://tests/": "green",
 "res://translations/": "teal",
@@ -73,7 +75,7 @@ theme/custom="uid://2pnop8nm7lxm"
 
 [internationalization]
 
-locale/translations=PackedStringArray("res://translations/en.po", "res://translations/de.po")
+locale/translations=PackedStringArray("res://translations/en.po", "res://translations/de.po", "res://translations/fr.po")
 
 [physics]
 

@@ -447,7 +447,9 @@ func _open_browser_for_server(server_id: String, on_picked: Callable = Callable(
     if server == null:
         return
 
-    var browse_nodes: BrowseNodes = get_node("/root/Main/Dialogs/BrowseNodes")
+    var browse_nodes: Node = WindowManager.open_window("browse_nodes", {
+            "auto_popup": false
+        })
     browse_nodes.browse(server, on_picked)
 
 # ── Form dirty tracking ───────────────────────────────────────────────────────

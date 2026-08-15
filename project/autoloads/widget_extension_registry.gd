@@ -4,58 +4,82 @@ const SDK_API_VERSION: String  = "1"
 const EXTENSIONS_DIR: String   = "user://extensions/"
 
 signal extension_registered(descriptor: WidgetExtensionDescriptor)
-signal extension_import_failed(reason: String)
 
-var _descriptors: Dictionary = {} # id -> WidgetExtensionDescriptor
+func _ready() -> void:
+    DirAccess.make_dir_recursive_absolute(EXTENSIONS_DIR)
+    var dir: DirAccess = DirAccess.open(EXTENSIONS_DIR)
+    if dir == null:
+        push_error("WidgetExtensionRegistry: cannot open '%s' (%s)."
+            % [EXTENSIONS_DIR, DirAccess.get_open_error()])
+        return
 
-func get_descriptor(id: String) -> WidgetExtensionDescriptor:
-    return _descriptors.get(id, null)
+    dir.list_dir_begin()
+    var entry: String = dir.get_next()
+    while entry != "":
+        if not dir.current_is_dir() and entry.get_extension().to_lower() == "zip":
+            _register_descriptor(import_extension_zip(EXTENSIONS_DIR.path_join(entry)))
+        entry = dir.get_next()
+    dir.list_dir_end()
 
 func _register_descriptor(descriptor: WidgetExtensionDescriptor) -> bool:
-    if _descriptors.has(descriptor.id):
+    if AppState.loaded_widget_extensions.has_entry(descriptor.id):
         return false
-    _descriptors[descriptor.id] = descriptor
+
+    _bake_host_scene(descriptor)
+
+    AppState.loaded_widget_extensions.set_entry(descriptor.id, descriptor)
     extension_registered.emit(descriptor)
+
     return true
+
+func _bake_host_scene(descriptor: WidgetExtensionDescriptor) -> void:
+    var host: PluginWidgetHost = preload("res://widgets/plugin_widget_host.tscn").instantiate()
+    host.plugin_id = descriptor.id
+
+    var packed: PackedScene = PackedScene.new()
+    if packed.pack(host) == OK:
+        descriptor.host_scene = packed
+    else:
+        push_error("WidgetExtensionRegistry: failed to bake host scene for '%s'." % descriptor.id)
+
+    host.queue_free()
 
 func import_extension_zip(zip_path: String) -> WidgetExtensionDescriptor:
     var reader: ZIPReader = ZIPReader.new()
     if reader.open(zip_path) != OK or not reader.file_exists("manifest.json"):
-        extension_import_failed.emit("Invalid or unreadable extension package.")
+        push_error("Invalid or unreadable extension package.")
         return null
 
     var manifest: Variant = JSON.parse_string(
         reader.read_file("manifest.json").get_string_from_utf8()
     )
     if typeof(manifest) != TYPE_DICTIONARY:
-        extension_import_failed.emit("manifest.json is malformed.")
+        push_error("manifest.json is malformed.")
         reader.close(); return null
 
     var error: String = _validate_manifest(manifest)
     if error != "":
-        extension_import_failed.emit(error)
+        push_error(error)
         reader.close(); return null
 
     var id: String = manifest["id"]
-    if _descriptors.has(id):
-        extension_import_failed.emit("Extension '%s' is already registered." % id)
+    if AppState.loaded_widget_extensions.has_entry(id):
+        push_error("Extension '%s' is already registered." % id)
         reader.close(); return null
 
     var install_dir: String = EXTENSIONS_DIR.path_join(id)
     if _extract_all(reader, install_dir) != OK:
-        extension_import_failed.emit("Failed to extract extension files.")
+        push_error("Failed to extract extension files.")
         reader.close(); return null
     reader.close()
 
     var descriptor: WidgetExtensionDescriptor = _build_descriptor(manifest, install_dir)
     if descriptor == null:
-        extension_import_failed.emit("Failed to load entry scene for '%s'." % id)
+        push_error("Failed to load entry scene for '%s'." % id)
         return null
 
     _run_plugin_hook(manifest, install_dir)
 
-    _descriptors[id] = descriptor
-    extension_registered.emit(descriptor)
     return descriptor
 
 func _validate_manifest(manifest: Dictionary) -> String:
@@ -69,15 +93,26 @@ func _validate_manifest(manifest: Dictionary) -> String:
 
 func _extract_all(reader: ZIPReader, install_dir: String) -> Error:
     DirAccess.make_dir_recursive_absolute(install_dir)
+    var real_prefix: String = install_dir  # e.g. "user://extensions/com.vendor.button_widget"
+
     for path: String in reader.get_files():
-        if path.ends_with("/"):
+        if path.ends_with("/") or path.ends_with(".uid"):
             continue
+
         var dest: String = install_dir.path_join(path)
         DirAccess.make_dir_recursive_absolute(dest.get_base_dir())
+
         var file: FileAccess = FileAccess.open(dest, FileAccess.WRITE)
         if file == null:
             return FileAccess.get_open_error()
-        file.store_buffer(reader.read_file(path))
+
+        if path.ends_with(".tscn") or path.ends_with(".tres") or path.ends_with(".gd"):
+            var text: String = reader.read_file(path).get_string_from_utf8()
+            text = text.replace("res://__EXT__", real_prefix)
+            file.store_string(text)
+        else:
+            file.store_buffer(reader.read_file(path))
+
         file.close()
     return OK
 
@@ -117,12 +152,27 @@ func _run_plugin_hook(manifest: Dictionary, install_dir: String) -> void:
     if plugin_script_name.is_empty():
         return
 
-    var script: Script = ResourceLoader.load(install_dir.path_join(plugin_script_name)) as Script
+    var script_path: String = install_dir.path_join(plugin_script_name)
+    var script: Script = ResourceLoader.load(script_path) as Script
     if script == null:
+        push_error(
+            "plugin.gd failed to load or compile at '%s'." % script_path
+        )
         return
 
-    var instance: WidgetExtensionPlugin = script.new() as WidgetExtensionPlugin
+    var raw_instance: Object = script.new()
+    if raw_instance == null:
+        push_error(
+            "plugin.gd's script failed to instantiate at '%s'." % script_path
+        )
+        return
+
+    var instance: WidgetExtensionPlugin = raw_instance as WidgetExtensionPlugin
     if instance == null:
+        push_error(
+            "plugin.gd does not extend WidgetExtensionPlugin (got: %s)." \
+            % raw_instance.get_script().get_global_name() if raw_instance.get_script() else "unknown script"
+        )
         return
 
     var context: WidgetExtensionContext = WidgetExtensionContext.new(

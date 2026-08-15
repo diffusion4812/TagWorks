@@ -1,8 +1,9 @@
 extends Node
 
 func _ready() -> void:
-    register("button", ButtonWidget)
-    register("label",  LabelWidget)
+    pass
+    #register("button", ButtonWidget)
+    #register("label",  LabelWidget)
 
 ## Registry mapping widget_type string → GDScript Script (the class to instantiate).
 ## Populate this once at startup (e.g. in an autoload's _ready()).

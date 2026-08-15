@@ -42,22 +42,22 @@ func _ready() -> void:
 func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
     var type: String = reactive_widget.widget_type.value
 
-    if not ProjectManager.NODE_REGISTRY.has(type):
+    if not AppState.loaded_widget_extensions.has_entry(type):
         push_error("ProjectManager: Unknown node type '%s'." % type)
         return
 
-    var packed: PackedScene = ProjectManager.NODE_REGISTRY[type] as PackedScene
+    var packed: PackedScene = AppState.loaded_widget_extensions.get_entry(type).host_scene as PackedScene
     if packed == null:
         push_error("ProjectManager: Failed to load scene for '%s'." % type)
         return
 
     var instance: Node = packed.instantiate()
-    if not instance is BaseWidget:
+    if not instance is PluginWidgetHost:
         push_error("ProjectManager: Scene is not a BaseWidget for type '%s'." % type)
         instance.queue_free()
         return
 
-    var widget: BaseWidget = instance as BaseWidget
+    var widget: PluginWidgetHost = instance as PluginWidgetHost
 
     # Initialise from backing data BEFORE entering the tree, so _ready()
     # (triggered by add_child) can safely rely on `data` being set.
@@ -65,8 +65,8 @@ func _restore_node(parent: Control, reactive_widget: ReactiveWidget) -> void:
 
     parent.add_child(widget)
 
-    if parent is BaseWidget and (parent as BaseWidget).is_container:
-        (parent as BaseWidget)._elevate_child(widget)
+    if parent is PluginWidgetHost and (parent as PluginWidgetHost).is_container:
+        (parent as PluginWidgetHost)._elevate_child(widget)
 
     if not widget.is_container:
         return
@@ -250,12 +250,12 @@ func _find_widget(node: Node, widget_id: ReactiveWidget) -> BaseWidget:
     return null
 
 func _select_target(target: Node, additive: bool = false) -> void:
-    if target == null or not target is BaseWidget:
+    if target == null or not target is PluginWidgetHost:
         if not additive:
             _deselect_all()
         return
 
-    var widget: BaseWidget = target as BaseWidget
+    var widget: PluginWidgetHost = target as PluginWidgetHost
 
     if additive:
         var selection: Array = AppState.selected_widgets.value.duplicate()

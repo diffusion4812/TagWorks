@@ -84,7 +84,7 @@ func deserialize(data: Dictionary) -> void:
     subscriptions.clear()
     for subscription_data: Dictionary in data.get("subscriptions", []):
         var subscription: ReactiveOpcUaSubscription = ReactiveOpcUaSubscription.new(subscription_data, self, "subscription")
-        subscriptions.set(subscription.id.value, subscription)
+        subscriptions.set_entry(subscription.id.value, subscription)
 
 func serialize() -> Dictionary:
     var serialised_subscriptions: Array = []

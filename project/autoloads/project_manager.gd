@@ -4,14 +4,20 @@ const SAVE_DIR     :String = "user://projects/"
 const FILE_VERSION :int    = 2
 
 const NODE_REGISTRY: Dictionary = {
-    "ButtonWidget":       preload("res://widgets/button_widget/button_widget.tscn"),
     "LabelWidget":        preload("res://widgets/label_widget/label_widget.tscn"),
     "NumericFieldWidget": preload("res://widgets/numeric_field_widget/numeric_field_widget.tscn"),
     "LivePlotWidget":     preload("res://widgets/live_plot_widget/live_plot_widget.tscn"),
     "LedIndicatorWidget": preload("res://widgets/led_indicator_widget/led_indicator_widget.tscn"),
 }
 
+const PROJECT_FILE_FILTER: PackedStringArray = ["*.json ; Project Files"]
+
 var project: ReactiveProject = null
+
+## Reactive status owned exclusively by ProjectManager — the single
+## source of truth for the outcome of the last load/save attempt.
+## Success is observed separately via AppState.current_project.is_loaded.
+var last_error: ReactiveString = ReactiveString.new("")
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -21,12 +27,13 @@ func _ready() -> void:
     IntentBus.save_project_as_requested.connect(_on_save_project_as_requested)
     IntentBus.open_project_requested.connect(_on_open_project_requested)
     IntentBus.close_project_requested.connect(_on_close_project_requested)
+    IntentBus.open_project_dialog_requested.connect(_on_open_project_dialog_requested)
+    IntentBus.save_project_as_dialog_requested.connect(_on_save_project_as_dialog_requested)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 func has_active_project() -> bool:
     return not AppState.current_project.value.file_path.value.is_empty()
-
 
 func get_current_project_path() -> String:
     return AppState.current_project.value.file_path.value
@@ -34,11 +41,13 @@ func get_current_project_path() -> String:
 # ── IntentBus Handlers ────────────────────────────────────────────────────────
 
 func _on_new_project_requested() -> void:
+    last_error.value = ""
     AppState.new_project()
+
 
 func _on_save_project_requested() -> void:
     if AppState.current_project.file_path.value.is_empty():
-        push_warning("ProjectManager: Save requested but no active project path.")
+        _on_save_project_as_dialog_requested()
         return
     _save(AppState.current_project.file_path.value)
 
@@ -48,68 +57,119 @@ func _on_save_project_as_requested(path: String) -> void:
 
 
 func _on_open_project_requested(path: String) -> void:
+    last_error.value = ""
+
     if not FileAccess.file_exists(path):
-        AppState.last_error.value = "Project file not found: %s" % path
+        _fail("Project file not found: %s" % path)
         return
 
     var file: FileAccess = FileAccess.open(path, FileAccess.READ)
     if file == null:
-        AppState.last_error.value = "Failed to open file for reading: %s" % path
+        _fail("Failed to open file for reading: %s" % path)
         return
 
     var payload: Variant = JSON.parse_string(file.get_as_text())
     file.close()
 
     if not payload is Dictionary:
-        AppState.last_error.value = "Invalid project file format."
+        _fail("Invalid project file format.")
         return
 
     AppState.load_project(payload)
+
     if AppState.current_project.is_loaded.value:
         AppState.current_project.file_path.value = path
         RecentProjects.add(path, AppState.current_project.project_name.value)
+    else:
+        _fail("Project failed to initialize after loading.")
 
 
 func _on_close_project_requested() -> void:
     AppState.close_project()
 
+
+func _fail(reason: String) -> void:
+    push_warning("ProjectManager: %s" % reason)
+    last_error.value = reason
+
+# ── File Dialogs ──────────────────────────────────────────────────────────────
+
+func _on_open_project_dialog_requested() -> void:
+    _ensure_save_dir()
+
+    WindowManager.open_window("filedialog", {
+        "params": {
+            "title":       "Open Project",
+            "file_mode":   FileDialog.FILE_MODE_OPEN_FILE,
+            "access":      FileDialog.ACCESS_FILESYSTEM,
+            "current_dir": SAVE_DIR,
+            "filters":     PROJECT_FILE_FILTER
+        },
+        "callbacks": {
+            "file_selected": _on_open_dialog_selected
+        }
+    })
+
+
+func _on_save_project_as_dialog_requested() -> void:
+    _ensure_save_dir()
+
+    var params: Dictionary = {
+        "title":     "Save Project As",
+        "file_mode": FileDialog.FILE_MODE_SAVE_FILE,
+        "access":    FileDialog.ACCESS_FILESYSTEM,
+        "filters":   PROJECT_FILE_FILTER
+    }
+
+    var current_path: String = AppState.current_project.file_path.value
+    if not current_path.is_empty():
+        params["current_path"] = current_path
+    else:
+        params["current_dir"] = SAVE_DIR
+
+    WindowManager.open_window("filedialog", {
+        "params": params,
+        "callbacks": {
+            "file_selected": _on_save_dialog_selected
+        }
+    })
+
+
+func _on_open_dialog_selected(path: String) -> void:
+    _on_open_project_requested(path)
+
+
+func _on_save_dialog_selected(path: String) -> void:
+    _save(path)
+
 # ── Save ──────────────────────────────────────────────────────────────────────
 
-## Serialises the full reactive project tree to JSON.
 func _save(path: String) -> void:
     _ensure_save_dir()
 
     var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
     if file == null:
-        push_error("Failed to open file for writing: %s" % path)
+        _fail("Failed to open file for writing: %s" % path)
         return
 
     file.store_string(JSON.stringify(AppState.current_project.serialize(), "\t"))
     file.close()
 
     AppState.current_project.file_path.value = path
-
     RecentProjects.add(AppState.current_project.file_path.value, AppState.current_project.project_name.value)
 
 # ── Canvas Restore ────────────────────────────────────────────────────────────
 
-## Recursively walks all pages and rebuilds each page's live widget scene
-## tree from the widget dictionaries stored in ReactivePage.canvas.
 func _restore_all_canvases(pages: ReactiveArray) -> void:
     for item: Variant in pages.values():
         var page: ReactivePage = item as ReactivePage
         if page == null:
             continue
-
         _restore_canvas(page)
         _restore_all_canvases(page.children)
 
 
-## Restores the widget scene tree for a single page from its ReactiveCanvas.
 func _restore_canvas(page: ReactivePage) -> void:
-    # Resolve the scene node responsible for hosting this page's widgets.
-    # Each WidgetHost node should expose a page_id property and belong to
-    # the "widget_host" group so it can be matched to its ReactivePage.
     var host: Control = _find_host_for_page(page)
     if host == null:
         push_warning("ProjectManager: No widget host found for page '%s'." % page.page_id.value)
@@ -122,7 +182,6 @@ func _restore_canvas(page: ReactivePage) -> void:
             _restore_node(host, item)
 
 
-## Resolves the scene node responsible for hosting widgets for the given page.
 func _find_host_for_page(page: ReactivePage) -> Control:
     var hosts: Array[Node] = get_tree().get_nodes_in_group("widget_host")
     for node: Node in hosts:
@@ -133,8 +192,6 @@ func _find_host_for_page(page: ReactivePage) -> Control:
 
 # ── Node Restore ──────────────────────────────────────────────────────────────
 
-## Instantiates and deserialises a single widget from a serialised Dictionary,
-## then recurses into container children.
 func _restore_node(parent: Control, data: Dictionary) -> void:
     var type: String = data.get("type", "")
 

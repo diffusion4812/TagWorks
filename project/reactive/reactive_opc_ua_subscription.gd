@@ -19,19 +19,20 @@ func _init(data: Dictionary = {}, initial_owner: Reactive = null, label: String 
     )
 
     if not data.is_empty():
-        from_data(data)
+        deserialize(data)
 
 func _describe_value() -> String:
     return ""
 
-func from_data(data: Dictionary) -> void:
+func deserialize(data: Dictionary) -> void:
     id.value = data.get("id", "")
+    display_name.value = data.get("display_name", "")
     pub_interval_ms.value = data.get("pub_interval_ms", 1000.0)
 
     tags.clear()
     for tag_data: Dictionary in data.get("tags", []):
         var tag: ReactiveOpcUaTag = ReactiveOpcUaTag.new(tag_data, self, "tag")
-        var key: String = tag.node_id.value
+        var key: String = tag.id.value
         if tags.has_entry(key):
             push_warning("ReactiveOpcUaSubscription: duplicate node id '%s' — overwriting." % key)
         tags.set_entry(key, tag)
@@ -46,6 +47,7 @@ func to_data() -> Dictionary:
 
     return {
         "id": id.value,
+        "display_name,": display_name.value,
         "pub_interval_ms": pub_interval_ms.value,
         "tags": result,
     }
