@@ -1,9 +1,14 @@
 class_name ReactiveVariant
 extends Reactive
 
+func variants_equal(a: Variant, b: Variant) -> bool:
+    if typeof(a) != typeof(b):
+        return false
+    return a == b
+
 var value: Variant:
     set(v):
-        if value == v:
+        if variants_equal(value, v):
             return
         value = v
         _log("CHANGED", _describe_value())

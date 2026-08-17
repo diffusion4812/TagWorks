@@ -98,12 +98,15 @@ func _rebuild_tree() -> void:
     _page_tree.clear()
     _item_map.clear()
 
-    _tree_root = _page_tree.create_item()
-    _tree_root.set_text(0, "")
-    _tree_root.set_selectable(0, true)
-
     if not AppState.current_project.is_loaded.value:
         return
+
+    _tree_root = _page_tree.create_item()
+    _tree_root.set_text(0, AppState.current_project.project_name.value)
+    _tree_root.set_selectable(0, true)
+
+    _page_tree.hide_root = not AppState.runtime_only
+
 
     for item: Variant in AppState.current_project.pages.values():
         var page: ReactivePage = item as ReactivePage

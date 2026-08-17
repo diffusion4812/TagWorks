@@ -10,7 +10,7 @@ extends PanelContainer
 @onready var _open_project_button       : Button = %OpenProjectButton
 @onready var _recent_projects_label     : Label = %RecentProjectsLabel
 @onready var _runtime_only_check_button : CheckButton = %RuntimeOnlyCheckButton
-@onready var _runtime_only_label        : Label = %RuntimeOnlyLabel
+@onready var _runtime_only_label        : Button = %RuntimeOnlyLabel
 @onready var _version_label             : Label = %VersionLabel
 @onready var _language_option           : OptionButton = %LanguageOptionButton
 
@@ -26,7 +26,12 @@ func _ready() -> void:
     _new_project_button.pressed.connect(_on_new_project_pressed)
     _open_project_button.pressed.connect(_on_open_project_pressed)
     _runtime_only_check_button.toggled.connect(func(toggled: bool) -> void: AppState.runtime_only.value = toggled)
-    AppState.runtime_only.connect_self_changed(func(runtime_only: ReactiveBool) -> void: _new_project_button.disabled = runtime_only.value)
+    _runtime_only_label.pressed.connect(func() -> void: AppState.runtime_only.value = not AppState.runtime_only.value)
+    AppState.runtime_only.connect_self_changed(
+        func(runtime_only: ReactiveBool) -> void:
+            _new_project_button.disabled = runtime_only.value
+            _runtime_only_check_button.button_pressed = runtime_only.value
+    )
 
     _populate_language_options()
     _language_option.item_selected.connect(_on_language_option_selected)
@@ -40,6 +45,8 @@ func _ready() -> void:
 
 func _on_project_loaded_changed(is_loaded: ReactiveBool) -> void:
     if is_loaded.value:
+        if AppState.runtime_only.value:
+            IntentBus.connect_all_servers.emit()
         _launch_main_scene()
 
 func _on_project_error_changed(error: ReactiveString) -> void:
@@ -127,11 +134,6 @@ func _launch_main_scene() -> void:
 
     var packed_scene: PackedScene = ResourceLoader.load_threaded_get(main_scene_path)
     get_tree().change_scene_to_packed(packed_scene)
-
-## Called once ProjectManager confirms a project was successfully
-## created or opened — the only trigger point for leaving the splash screen.
-func _on_project_ready() -> void:
-    _launch_main_scene()
 
 ## Called if ProjectManager reports a failed open attempt (missing file,
 ## corrupt JSON, etc.). Re-enables the UI so the user can retry.

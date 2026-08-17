@@ -13,6 +13,7 @@ func _ready() -> void:
     register("ReactiveVariant",         ReactiveVariant)
     register("ReactiveVector2",         ReactiveVector2)
     register("ReactiveDictionary",      ReactiveDictionary)
+    register("ReactiveConstantField",    ReactiveConstantField)
     register("ReactiveDynamicField",    ReactiveDynamicField)
     register("ReactiveActionBinding",   ReactiveActionBinding)
     register("ReactiveOpcUaTagBinding", ReactiveOpcUaTagBinding)

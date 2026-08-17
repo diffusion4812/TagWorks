@@ -1,9 +1,9 @@
-# WidgetCanvas.gd
 class_name WidgetCanvas
 extends Panel
 
 var _context_target : Node      = null
 var _context_menu   : PopupMenu = null
+var _server_submenu : PopupMenu = null
 var _page_id        : String    = ""
 
 # ── Context Menu Item IDs ─────────────────────────────────────────────────────
@@ -109,6 +109,11 @@ func _build_context_menu() -> void:
     add_child(_context_menu)
     _context_menu.id_pressed.connect(_on_context_menu_id_pressed)
 
+    _server_submenu = PopupMenu.new()
+    _server_submenu.name = "ServerSubMenu"
+    _server_submenu.id_pressed.connect(_on_context_menu_id_pressed)
+    _context_menu.add_child(_server_submenu)
+
 func _show_context_menu_for(target: Node) -> void:
     _context_menu.clear()
 
@@ -123,26 +128,15 @@ func _show_context_menu_for(target: Node) -> void:
         _context_menu.add_item("Delete",           MENU_DELETE)
 
     else:
-        # Right-clicked the canvas background — offer add via palette
-        _context_menu.add_item("Add Widget",       MENU_ADD_CHILD)
-        _context_menu.add_separator()
+        if AppState.edit_mode.value:
+            _context_menu.add_item("Add Widget", MENU_ADD_CHILD)
+            _context_menu.add_separator()
 
-        # 1. Create the Server Submenu
-        var server_menu : PopupMenu = PopupMenu.new()
-        server_menu.name = "ServerSubMenu"
+        _server_submenu.clear()
+        _server_submenu.add_item("Connect all",    MENU_SERVER_CONNECT_ALL)
+        _server_submenu.add_item("Disconnect all", MENU_SERVER_DISCONNECT_ALL)
 
-        # 2. Populate the Server Submenu with unique IDs
-        server_menu.add_item("Connect all", MENU_SERVER_CONNECT_ALL)
-        server_menu.add_item("Disconnect all", MENU_SERVER_DISCONNECT_ALL)
-
-        # 3. Connect the signal to your handling function
-        #server_menu.id_pressed.connect(_on_server_menu_id_pressed)
-
-        # 4. Bind it to the parent so it frees automatically on _context_menu.clear()
-        _context_menu.add_child(server_menu)
-
-        # 5. Add it as a submenu item in the main context menu
-        _context_menu.add_submenu_node_item("Server", server_menu)
+        _context_menu.add_submenu_node_item("Server", _server_submenu)
 
     _context_menu.popup(Rect2i(DisplayServer.mouse_get_position(), Vector2i.ZERO))
 
@@ -170,17 +164,18 @@ func _on_context_menu_id_pressed(id: int) -> void:
                         target_widget.data.widget_id.value
                     )
 
+        MENU_SERVER_CONNECT_ALL:       IntentBus.connect_all_servers.emit()
+        MENU_SERVER_DISCONNECT_ALL:    IntentBus.disconnect_all_servers.emit()
+
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _gui_input(event: InputEvent) -> void:
-    if not AppState.edit_mode.value:
-        return
-
     if event is InputEventMouseButton and event.pressed:
         match event.button_index:
             MOUSE_BUTTON_LEFT:
-                _deselect_all()
-                get_viewport().set_input_as_handled()
+                if AppState.edit_mode.value:
+                    _deselect_all()
+                    get_viewport().set_input_as_handled()
 
             MOUSE_BUTTON_RIGHT:
                 _context_target = self

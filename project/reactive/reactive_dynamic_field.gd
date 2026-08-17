@@ -3,8 +3,8 @@ extends Reactive
 
 enum SourceType { CONSTANT, OPC_TAG, OPC_TAG_ARRAY, SCRIPT }
 
-var source_type        : ReactiveInt
-var constant_value     : ReactiveVariant
+var source_type         : ReactiveInt
+var constant_value      : ReactiveVariant
 var tag_binding         : ReactiveOpcUaTagBinding
 var tag_array_binding   : ReactiveOpcUaTagArrayBinding
 var script_source       : ReactiveString
@@ -12,14 +12,17 @@ var resolved            : ReactiveVariant
 
 var _tag_value_ref      : ReactiveVariant = null
 var _array_tag_refs     : Array[ReactiveVariant] = []
+var _array_tag_callables: Array[Callable] = []
 var _context_provider   : Callable = Callable()
 var _is_deserializing   : bool = false
 var _is_vector_field    : bool = false
+var _vector_type        : int = TYPE_NIL
 
 func _init(default_value: Variant = null, initial_owner: Reactive = null, label: String = "ReactiveDynamicField") -> void:
     super._init(initial_owner, label)
 
     _is_vector_field = _is_array_like(default_value)
+    _vector_type      = typeof(default_value)
 
     source_type       = ReactiveInt.new(SourceType.CONSTANT, self, "source_type")
     constant_value    = ReactiveVariant.new(default_value, self, "constant_value")
@@ -114,21 +117,26 @@ func _unbind_tag() -> void:
 func _bind_tag_array() -> void:
     var bindings: Array = tag_array_binding.tag_bindings.value
     _array_tag_refs.resize(bindings.size())
+    _array_tag_callables.resize(bindings.size())
 
     for i in bindings.size():
         var binding: ReactiveOpcUaTagBinding = bindings[i]
         var tag: ReactiveOpcUaTag = _resolve_tag_from_binding(binding)
         if tag == null:
             _array_tag_refs[i] = null
+            _array_tag_callables[i] = Callable()
             continue
 
         var value_ref: ReactiveVariant = tag.value
         _array_tag_refs[i] = value_ref
-        # Any zone updating triggers a full reassembly — keeps `resolved`
-        # atomic (no torn reads on the consumer side) at the cost of
-        # rebuilding the whole array per tick change. Acceptable for
-        # typical flatness zone counts (< a few hundred).
-        value_ref.connect_self_changed(func(_v: ReactiveVariant) -> void: _assemble_array_vector())
+
+        # Store the exact bound Callable so _unbind_tag_array() can
+        # disconnect precisely this connection later — Godot has no
+        # built-in "disconnect everything owned by X" helper, so this
+        # must be tracked manually rather than relying on introspection.
+        var callable: Callable = func(_v: ReactiveVariant) -> void: _assemble_array_vector()
+        _array_tag_callables[i] = callable
+        value_ref.connect_self_changed(callable)
 
     _assemble_array_vector()
 
@@ -147,9 +155,13 @@ func _resolve_tag_from_binding(t: ReactiveOpcUaTagBinding) -> ReactiveOpcUaTag:
     return subscription.tags.get_entry(t.tag_id.value)
 
 func _assemble_array_vector() -> void:
-    # Generic Variant array — each element keeps its native OPC type.
-    # Consumers (e.g. FlatnessDisplay) are responsible for coercing to
-    # float where numeric interpretation is required.
+    # Intentionally left as a generic Array (never coerced via
+    # rebuild_typed_array/_vector_type): each zone tag is an independent
+    # OPC subscription and may resolve to a different native type
+    # (float, bool, String, or null if unresolved). Forcing this into the
+    # field's nominal Packed*Array type would silently corrupt or throw
+    # on any non-uniform tag result. Consumers (e.g. FlatnessDisplay) are
+    # expected to coerce per-element as needed.
     var out: Array = []
     out.resize(_array_tag_refs.size())
     for i in _array_tag_refs.size():
@@ -158,10 +170,14 @@ func _assemble_array_vector() -> void:
     resolved.value = out
 
 func _unbind_tag_array() -> void:
-    for ref in _array_tag_refs:
-        if ref != null:
-            ref.disconnect_all_owned_by(self)  # see note below
+    for i in _array_tag_refs.size():
+        var ref: ReactiveVariant = _array_tag_refs[i]
+        var callable: Callable = _array_tag_callables[i] if i < _array_tag_callables.size() else Callable()
+        if ref != null and callable.is_valid() and ref.reactive_changed.is_connected(callable):
+            ref.reactive_changed.disconnect(callable)
+
     _array_tag_refs.clear()
+    _array_tag_callables.clear()
 
 # ── Script binding ───────────────────────────────────────────────────────────
 
@@ -183,11 +199,46 @@ func _bind_script() -> void:
 # ── Vector helpers ───────────────────────────────────────────────────────────
 
 func _normalize_vector(v: Variant) -> Variant:
-    # Pass-through by design: coercing arbitrary Variant content to a
-    # specific packed type here would silently corrupt non-numeric tags
-    # (bool, String, Color, etc.). Type coercion, if needed, belongs at
-    # the consuming widget, where the expected semantics are known.
     return v
+
+func _array_to_dict(v: Variant) -> Dictionary:
+    var dict: Dictionary = {}
+    var arr: Array = Array(v) if v != null else []
+    for i in arr.size():
+        dict[str(i)] = ReactiveVariantCodec.encode_variant(arr[i])
+    return dict
+
+func _dict_to_array(d: Dictionary) -> Variant:
+    var keys: Array = d.keys()
+    keys.sort_custom(func(a, b): return int(a) < int(b))
+
+    var arr: Array = []
+    for k in keys:
+        arr.append(ReactiveVariantCodec.decode_variant(d[k]))
+
+    match _vector_type:
+        TYPE_PACKED_FLOAT32_ARRAY: return PackedFloat32Array(arr)
+        TYPE_PACKED_FLOAT64_ARRAY: return PackedFloat64Array(arr)
+        TYPE_PACKED_INT32_ARRAY:   return PackedInt32Array(arr)
+        TYPE_PACKED_INT64_ARRAY:   return PackedInt64Array(arr)
+        TYPE_PACKED_STRING_ARRAY:  return PackedStringArray(arr)
+        TYPE_PACKED_COLOR_ARRAY:   return PackedColorArray(arr)
+        TYPE_PACKED_VECTOR2_ARRAY: return PackedVector2Array(arr)
+        TYPE_PACKED_VECTOR3_ARRAY: return PackedVector3Array(arr)
+        TYPE_PACKED_BYTE_ARRAY:    return PackedByteArray(arr)
+        _: return arr
+
+    match _vector_type:
+        TYPE_PACKED_FLOAT32_ARRAY: return PackedFloat32Array(arr)
+        TYPE_PACKED_FLOAT64_ARRAY: return PackedFloat64Array(arr)
+        TYPE_PACKED_INT32_ARRAY:   return PackedInt32Array(arr)
+        TYPE_PACKED_INT64_ARRAY:   return PackedInt64Array(arr)
+        TYPE_PACKED_STRING_ARRAY:  return PackedStringArray(arr)
+        TYPE_PACKED_COLOR_ARRAY:   return PackedColorArray(arr)
+        TYPE_PACKED_VECTOR2_ARRAY: return PackedVector2Array(arr)
+        TYPE_PACKED_VECTOR3_ARRAY: return PackedVector3Array(arr)
+        TYPE_PACKED_BYTE_ARRAY:    return PackedByteArray(arr)
+        _: return arr
 
 # ── Serialization ─────────────────────────────────────────────────────────────
 
@@ -198,11 +249,14 @@ func deserialize(data: Variant) -> void:
     _is_deserializing = true
     source_type.value = d.get("source_type", SourceType.CONSTANT)
 
-    if d.has("constant_value_b64"):
-        var bytes: PackedByteArray = Marshalls.base64_to_raw(d["constant_value_b64"])
-        constant_value.value = bytes_to_var(bytes)
+    _is_vector_field = d.get("is_vector_field", _is_vector_field)
+    _vector_type       = d.get("vector_type", _vector_type)
+
+    var stored_value: Variant = d.get("constant_value", null)
+    if _is_vector_field and stored_value is Dictionary:
+        constant_value.value = _dict_to_array(stored_value)
     else:
-        constant_value.value = d.get("constant_value", null)
+        constant_value.value = ReactiveVariantCodec.decode_variant(stored_value)
 
     script_source.value = d.get("script_source", "")
     tag_binding.deserialize(d.get("tag_binding", {}))
@@ -217,15 +271,15 @@ func serialize() -> Variant:
     var out: Dictionary = {
         "source_type":       source_type.value,
         "script_source":     script_source.value,
+        "is_vector_field":   _is_vector_field,
+        "vector_type":        _vector_type,
         "tag_binding":       tag_binding.serialize(),
         "tag_array_binding": tag_array_binding.serialize(),
     }
 
     if _is_vector_field:
-        # var_to_bytes() handles arbitrary Variant content generically —
-        # Array of mixed types, PackedFloat32Array, nested structures, etc.
-        out["constant_value_b64"] = Marshalls.raw_to_base64(var_to_bytes(constant_value.value))
+        out["constant_value"] = _array_to_dict(constant_value.value)
     else:
-        out["constant_value"] = constant_value.value
+        out["constant_value"] = ReactiveVariantCodec.encode_variant(constant_value.value)
 
     return out

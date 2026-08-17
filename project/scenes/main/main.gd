@@ -45,7 +45,6 @@ var _status_bindings: Dictionary = {}
 func _ready() -> void:
     _setup_window()
     _set_scaling()
-    _apply_runtime_mode()
     _connect_signals()
 
 ## Restores normal window behavior after the borderless splash screen.
@@ -63,12 +62,6 @@ func _set_scaling() -> void:
     var screen_dpi: int = DisplayServer.screen_get_dpi()
     var scale_factor: float = maxf(screen_dpi / 120.0, 1.0)
     get_tree().root.content_scale_factor = scale_factor
-
-## Locks down the UI for runtime-only operation
-func _apply_runtime_mode() -> void:
-    var runtime_only: bool = AppState.runtime_only.value
-    menu_bar_container.visible = not runtime_only
-    inspector_container.visible = not runtime_only
 
 func _connect_signals() -> void:
     # ── System ────────────────────────────────────────────────────────────────
@@ -93,7 +86,12 @@ func _connect_signals() -> void:
     # ── AppState (named handlers so we can call them directly) ────────────────
     AppState.edit_mode.connect_self_changed(_on_edit_mode_changed)
     AppState.current_project.project_name.connect_self_changed(_on_project_name_changed)
-    AppState.current_project.is_loaded.connect_self_changed(_on_project_loaded_changed)
+
+    # UI visibility depends on BOTH runtime_only and is_loaded — a single
+    # handler keeps the combined rule consistent regardless of which one
+    # changes.
+    AppState.runtime_only.connect_self_changed(_update_ui_visibility)
+    AppState.current_project.is_loaded.connect_self_changed(_update_ui_visibility)
 
     # ── Sync current state ─────────────────────────────────────────────────────
     # connect_self_changed only fires on FUTURE changes. If the project was
@@ -105,7 +103,7 @@ func _connect_signals() -> void:
 func _sync_state() -> void:
     _on_edit_mode_changed(AppState.edit_mode)
     _on_project_name_changed(AppState.current_project.project_name)
-    _on_project_loaded_changed(AppState.current_project.is_loaded)
+    _update_ui_visibility()
     _rebuild_server_menu()
 
 func _on_edit_mode_changed(edit_mode: ReactiveBool) -> void:
@@ -116,10 +114,21 @@ func _on_project_name_changed(new_name: ReactiveString) -> void:
     get_window().title = new_name.value
 
 
-func _on_project_loaded_changed(is_loaded: ReactiveBool) -> void:
-    page_container.visible = is_loaded.value
-    canvas_container.visible = is_loaded.value
-    inspector_container.visible = is_loaded.value
+## Single source of truth for UI visibility. Reacts to changes in either
+## runtime_only or is_loaded, since inspector visibility depends on both.
+##
+## - menu_bar_container : depends only on runtime_only
+## - inspector_container: depends on is_loaded AND NOT runtime_only
+## - page_container      : depends only on is_loaded
+## - canvas_container     : depends only on is_loaded
+func _update_ui_visibility(_origin: Reactive = null) -> void:
+    var runtime_only: bool = AppState.runtime_only.value
+    var is_loaded: bool = AppState.current_project.is_loaded.value
+
+    menu_bar_container.visible = not runtime_only
+    inspector_container.visible = is_loaded and not runtime_only
+    page_container.visible = is_loaded
+    canvas_container.visible = is_loaded
 
 # ── System ────────────────────────────────────────────────────────────────────
 

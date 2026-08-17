@@ -1,661 +1,560 @@
 class_name WidgetPropertyBuilder
+extends RefCounted
 
-var _panel       : PropertyPanel
-var _target_data : ReactiveWidget
+## Builds the property/event editor rows for a widget's inspector panel.
+##
+## Responsibilities:
+##  - Routes rows into the "Properties" or "Events" tab depending on which
+##    add_* method is called (widget scripts never specify a tab directly).
+##  - Renders a per-row source dropdown (Constant / Script / OPC Tag /
+##    OPC Tags per-zone) scoped to what the given field type supports.
+##  - Provides array-aware editors (add/remove rows) for both constant
+##    arrays and per-zone OPC tag arrays.
+##
+## NOTE: `_build_tag_binding_editor()` assumes AppState.current_project
+## exposes `opc_ua_servers` / `subscriptions` / `tags` as dictionary-like
+## containers with `.value` (Dictionary) and `.get_entry(id)`. Adjust the
+## population logic below if your ReactiveProject API differs.
 
-func _init(panel: PropertyPanel, target_data: ReactiveWidget) -> void:
-    _panel       = panel
-    _target_data = target_data
+var _panel: Object  # exposes ._properties and ._events (Control containers)
 
-## Directly emits a property value without creating any UI field.
-## Used by emit_all() to synchronise current widget state after
-## fields have been built.
-func emit(prop: String, value: Variant) -> void:
-    IntentBus.change_widget_property_requested.emit(_target_data, prop, value)
+func _init(panel: Object) -> void:
+    _panel = panel
 
-# ── Private helpers ───────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+# PUBLIC API — called from widget scripts' build_properties()
+# ══════════════════════════════════════════════════════════════════════════
 
-func _make_script_button(prop: String) -> Button:
-    var button: Button = Button.new()
-    button.text         = "{}"
-    button.tooltip_text = "Open script editor"
-    button.pressed.connect(func() -> void: _panel._open_script_editor(prop))
-    return button
+func add_dynamic_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveDynamicField = props.value[prop]
+    var is_vector: bool = field.is_vector_field()
 
-# ── Field builders ────────────────────────────────────────────────────────────
+    var factories: Dictionary = {
+        ReactiveDynamicField.SourceType.CONSTANT: (
+            _constant_array_editor_factory(field) if is_vector
+            else _constant_auto_editor_factory(field)
+        ),
+        ReactiveDynamicField.SourceType.SCRIPT: _script_editor_factory(field),
+        ReactiveDynamicField.SourceType.OPC_TAG: _tag_editor_factory(field.tag_binding),
+    }
+    if is_vector:
+        factories[ReactiveDynamicField.SourceType.OPC_TAG_ARRAY] = _tag_array_editor_factory(field)
 
-func add_float_field(lbl: String, target: ReactiveVariant) -> void:
-    var row   :HBoxContainer = HBoxContainer.new()
-    var label :Label = Label.new()
-    var field :LineEdit = LineEdit.new()
+    _build_field_row(lbl, field, factories, _panel._properties)
 
+func add_constant_color_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveConstantField = props.value[prop]
+    var factories: Dictionary = {
+        ReactiveConstantField.SourceType.CONSTANT: _constant_color_editor_factory(field),
+        ReactiveConstantField.SourceType.SCRIPT: _script_editor_factory(field),
+    }
+    _build_field_row(lbl, field, factories, _panel._properties)
+
+func add_constant_float_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveConstantField = props.value[prop]
+    var factories: Dictionary = {
+        ReactiveConstantField.SourceType.CONSTANT: _constant_float_editor_factory(field),
+        ReactiveConstantField.SourceType.SCRIPT: _script_editor_factory(field),
+    }
+    _build_field_row(lbl, field, factories, _panel._properties)
+
+func add_constant_string_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveConstantField = props.value[prop]
+    var factories: Dictionary = {
+        ReactiveConstantField.SourceType.CONSTANT: _constant_string_editor_factory(field),
+        ReactiveConstantField.SourceType.SCRIPT: _script_editor_factory(field),
+    }
+    _build_field_row(lbl, field, factories, _panel._properties)
+
+func add_constant_bool_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveConstantField = props.value[prop]
+    var factories: Dictionary = {
+        ReactiveConstantField.SourceType.CONSTANT: _constant_bool_editor_factory(field),
+        ReactiveConstantField.SourceType.SCRIPT: _script_editor_factory(field),
+    }
+    _build_field_row(lbl, field, factories, _panel._properties)
+
+func add_constant_array_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var field: ReactiveConstantField = props.value[prop]
+    var factories: Dictionary = {
+        ReactiveConstantField.SourceType.CONSTANT: _constant_array_editor_factory(field),
+        ReactiveConstantField.SourceType.SCRIPT: _script_editor_factory(field),
+    }
+    _build_field_row(lbl, field, factories, _panel._properties)
+
+func add_action_field(prop: String, lbl: String, props: ReactiveDictionary) -> void:
+    var action: ReactiveActionBinding = props.value[prop]
+
+    var row: HBoxContainer = HBoxContainer.new()
+    var label: Label = Label.new()
     label.text                  = lbl
     label.custom_minimum_size.x = 100
-    field.text                  = str(target.value)
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.add_child(label)
+    row.add_child(_build_action_binding_editor(action))
 
-    field.text_submitted.connect(func(v: String) -> void:
-        _panel.property_changed.emit(target.label, float(v))
-        field.text = str(target.value) # re-sync after widget accepts/refuses
+    _panel._events.add_child(row)
+    _panel._events.add_child(HSeparator.new())
+
+# ══════════════════════════════════════════════════════════════════════════
+# GENERIC ROW SCAFFOLDING (label + source dropdown + swappable body)
+# ══════════════════════════════════════════════════════════════════════════
+
+func _build_field_row(
+    label_text: String,
+    field: Object,
+    editor_factories: Dictionary,
+    container: Control
+) -> void:
+    var wrapper: VBoxContainer = VBoxContainer.new()
+
+    var header: HBoxContainer = HBoxContainer.new()
+    var label: Label = Label.new()
+    label.text                  = label_text
+    label.custom_minimum_size.x = 100
+    label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    header.add_child(label)
+    header.add_child(_make_source_dropdown(field))
+
+    var body: MarginContainer = MarginContainer.new()
+    body.add_theme_constant_override("margin_left", 100)
+
+    var rebuild_body: Callable = func() -> void:
+        if not is_instance_valid(body):
+            return
+        for c in body.get_children():
+            c.queue_free()
+        var factory: Callable = editor_factories.get(field.source_type.value, Callable())
+        if factory.is_valid():
+            body.add_child(factory.call())
+
+    var on_source_type_changed: Callable = func(_s) -> void: rebuild_body.call()
+    field.source_type.connect_self_changed(on_source_type_changed)
+
+    # Same cleanup pattern as the tag array row — prevents this row's
+    # rebuild_body listener from leaking onto field.source_type across
+    # repeated panel rebuilds.
+    wrapper.tree_exiting.connect(func() -> void:
+        if field.source_type.reactive_changed.is_connected(on_source_type_changed):
+            field.source_type.reactive_changed.disconnect(on_source_type_changed)
     )
 
-    row.add_child(label)
-    row.add_child(field)
-    #row.add_child(_make_script_button(target))
-    _panel.extra_props.add_child(row)
+    rebuild_body.call()
+
+    wrapper.add_child(header)
+    wrapper.add_child(body)
+    container.add_child(wrapper)
+    container.add_child(HSeparator.new())
+
+func _make_source_dropdown(field: Object) -> MenuButton:
+    var btn: MenuButton = MenuButton.new()
+    btn.text         = "⚙"
+    btn.tooltip_text = "Change data source"
+
+    var popup: PopupMenu = btn.get_popup()
+    popup.clear()
+
+    var is_dynamic: bool = field is ReactiveDynamicField
+    var is_vector: bool = field.is_vector_field()
+
+    var id_to_source_type: Dictionary = {}
+
+    popup.add_item("Constant", 0)
+    id_to_source_type[0] = field.SourceType.CONSTANT
+
+    popup.add_item("Script", 1)
+    id_to_source_type[1] = field.SourceType.SCRIPT
+
+    if is_dynamic:
+        popup.add_item("OPC Tag (native array)" if is_vector else "OPC Tag", 2)
+        id_to_source_type[2] = field.SourceType.OPC_TAG
+
+        if is_vector:
+            popup.add_item("OPC Tags (per zone)", 3)
+            id_to_source_type[3] = field.SourceType.OPC_TAG_ARRAY
+
+    # Reflect current selection as the button's tooltip for quick reference
+    btn.tooltip_text = "Data source: %s" % _source_type_display_name(field)
+
+    popup.id_pressed.connect(func(id: int) -> void:
+        field.source_type.value = id_to_source_type[id]
+        btn.tooltip_text = "Data source: %s" % _source_type_display_name(field)
+    )
+
+    return btn
+
+func _source_type_display_name(field: Object) -> String:
+    var is_dynamic: bool = field is ReactiveDynamicField
+    match field.source_type.value:
+        0: return "Constant"
+        1: return "Script"
+        2: return "OPC Tag" if is_dynamic else "Unknown"
+        3: return "OPC Tags (per zone)"
+        _: return "Unknown"
+
+# ══════════════════════════════════════════════════════════════════════════
+# SCALAR CONSTANT EDITORS
+# ══════════════════════════════════════════════════════════════════════════
+
+func _constant_color_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var picker: ColorPickerButton = ColorPickerButton.new()
+        picker.color                 = field.constant_value.value
+        picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        picker.custom_minimum_size.y = 32
+        picker.color_changed.connect(func(v: Color) -> void: field.constant_value.value = v)
+        return picker
+
+func _constant_float_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var spin: SpinBox = SpinBox.new()
+        spin.min_value              = -1000000.0
+        spin.max_value               = 1000000.0
+        spin.step                    = 0.01
+        spin.allow_greater           = true
+        spin.allow_lesser            = true
+        spin.value                   = float(field.constant_value.value)
+        spin.size_flags_horizontal   = Control.SIZE_EXPAND_FILL
+        spin.value_changed.connect(func(v: float) -> void: field.constant_value.value = v)
+        return spin
+
+func _constant_string_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var edit: LineEdit = LineEdit.new()
+        edit.text                  = str(field.constant_value.value)
+        edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        edit.text_changed.connect(func(v: String) -> void: field.constant_value.value = v)
+        return edit
+
+func _constant_bool_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var check: CheckBox = CheckBox.new()
+        check.button_pressed = bool(field.constant_value.value)
+        check.toggled.connect(func(v: bool) -> void: field.constant_value.value = v)
+        return check
+
+# Fallback used by add_dynamic_field for non-vector fields whose underlying
+# type isn't known ahead of time — inspects the current resolved value to
+# pick a reasonable editor. Prefer the explicit add_constant_*_field
+# variants when the type is known statically.
+func _constant_auto_editor_factory(field: Object) -> Callable:
+    var v: Variant = field.constant_value.value
+    if v is Color:
+        return _constant_color_editor_factory(field)
+    if v is bool:
+        return _constant_bool_editor_factory(field)
+    if v is String:
+        return _constant_string_editor_factory(field)
+    return _constant_float_editor_factory(field)
+
+# ══════════════════════════════════════════════════════════════════════════
+# ARRAY (CONSTANT) EDITOR — add/remove rows, per-value editing
+# ══════════════════════════════════════════════════════════════════════════
+
+func _constant_array_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var list: VBoxContainer = VBoxContainer.new()
+        var rows: VBoxContainer = VBoxContainer.new()
+        var arr: Array = Array(field.constant_value.value) if field.constant_value.value != null else []
+
+        var rebuild: Callable
+        rebuild = func() -> void:
+            for c in rows.get_children():
+                c.queue_free()
+            for i in arr.size():
+                rows.add_child(_build_constant_array_row(arr, i, field, rebuild))
+
+        var footer: HBoxContainer = HBoxContainer.new()
+
+        var add_btn: Button = Button.new()
+        add_btn.text = "Add Zone"
+        add_btn.pressed.connect(func() -> void:
+            arr.append(0.0)
+            field.constant_value.value = field.rebuild_typed_array(arr)
+            rebuild.call()
+        )
+
+        var fill_btn: Button = Button.new()
+        fill_btn.text = "Set All Equal"
+        fill_btn.pressed.connect(func() -> void:
+            for i in arr.size():
+                arr[i] = 1.0
+            field.constant_value.value = field.rebuild_typed_array(arr)
+            rebuild.call()
+        )
+
+        var clear_btn: Button = Button.new()
+        clear_btn.text = "Clear"
+        clear_btn.pressed.connect(func() -> void:
+            arr.clear()
+            field.constant_value.value = field.rebuild_typed_array(arr)
+            rebuild.call()
+        )
+
+        footer.add_child(add_btn)
+        footer.add_child(fill_btn)
+        footer.add_child(clear_btn)
+
+        rebuild.call()
+        list.add_child(rows)
+        list.add_child(footer)
+        return list
 
 
-func add_int_field(prop: String, lbl: String, current: int) -> void:
-    var row   :HBoxContainer = HBoxContainer.new()
-    var label :Label = Label.new()
-    var field :LineEdit = LineEdit.new()
-
-    label.text                  = lbl
-    label.custom_minimum_size.x = 100
-    field.text                  = str(current)
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    field.text_submitted.connect(func(v: String) -> void: emit(prop, int(v)))
-
-    row.add_child(label)
-    row.add_child(field)
-    row.add_child(_make_script_button(prop))
-    _panel.extra_props.add_child(row)
-
-
-func add_dynamic_field(p: String, l: String, v: ReactiveDictionary) -> void:
-    var field: ReactiveDynamicField = v.value[p]
-
+func _build_constant_array_row(arr: Array, index: int, field: Object, rebuild: Callable) -> Control:
     var row: HBoxContainer = HBoxContainer.new()
-    var label: Label = Label.new()
-    label.text                  = l
-    label.custom_minimum_size.x = 100
-    row.add_child(label)
 
-    var container: VBoxContainer = VBoxContainer.new()
-    container.add_child(row)
+    var idx_label: Label = Label.new()
+    idx_label.text                  = "Zone %d" % index
+    idx_label.custom_minimum_size.x = 60
+    row.add_child(idx_label)
 
-    if field.is_vector_field():
-        container.add_child(_build_vector_field_editor(p, field))
-    else:
-        container.add_child(_build_dynamic_field_editor(p, field))
+    var spin: SpinBox = SpinBox.new()
+    spin.min_value              = -1000000.0
+    spin.max_value               = 1000000.0
+    spin.step                    = 0.01
+    spin.allow_greater           = true
+    spin.allow_lesser            = true
+    spin.value                   = float(arr[index])
+    spin.size_flags_horizontal   = Control.SIZE_EXPAND_FILL
+    spin.value_changed.connect(func(v: float) -> void:
+        arr[index] = v
+        field.constant_value.value = field.rebuild_typed_array(arr)
+    )
+    row.add_child(spin)
 
-    _panel.extra_props.add_child(container)
-
-func add_action_field(p: String, l: String, v: ReactiveDictionary) -> void:
-    print("hellasdasdso")
-    var action: ReactiveActionBinding = v.value[p]
-
-    var row: HBoxContainer = HBoxContainer.new()
-    var label: Label = Label.new()
-    var type_dropdown: OptionButton = OptionButton.new()
-    var editor_slot: VBoxContainer = VBoxContainer.new()
-
-    label.text                  = l
-    label.custom_minimum_size.x = 100
-
-    type_dropdown.add_item("None",           ReactiveActionBinding.ActionType.NONE)
-    type_dropdown.add_item("Write Tag",      ReactiveActionBinding.ActionType.WRITE_TAG)
-    type_dropdown.add_item("Run Script",     ReactiveActionBinding.ActionType.RUN_SCRIPT)
-    type_dropdown.add_item("Navigate Scene", ReactiveActionBinding.ActionType.NAVIGATE_SCENE)
-    type_dropdown.add_item("Emit App Event", ReactiveActionBinding.ActionType.EMIT_APP_EVENT)
-    type_dropdown.select(action.action_type.value)
-
-    row.add_child(label)
-    row.add_child(type_dropdown)
-
-    var container: VBoxContainer = VBoxContainer.new()
-    container.add_child(row)
-    container.add_child(editor_slot)
-
-    var rebuild: Callable = func() -> void:
-        for child: Node in editor_slot.get_children():
-            child.queue_free()
-        match action.action_type.value:
-            ReactiveActionBinding.ActionType.WRITE_TAG:
-                var wrapper: VBoxContainer = VBoxContainer.new()
-                wrapper.add_child(_build_write_target_editor(action.target_node, func() -> void:
-                    _panel.property_changed.emit(p, action)
-                ))
-                wrapper.add_child(_build_dynamic_field_editor(p, action.value))
-                editor_slot.add_child(wrapper)
-            ReactiveActionBinding.ActionType.RUN_SCRIPT:
-                editor_slot.add_child(_make_action_script_editor(p, action))
-            ReactiveActionBinding.ActionType.NAVIGATE_SCENE:
-                editor_slot.add_child(_make_scene_path_editor(p, action))
-            ReactiveActionBinding.ActionType.EMIT_APP_EVENT:
-                editor_slot.add_child(_make_event_name_editor(p, action))
-            ReactiveActionBinding.ActionType.NONE:
-                pass  # nothing to configure
-
-    type_dropdown.item_selected.connect(func(idx: int) -> void:
-        action.action_type.value = type_dropdown.get_item_id(idx)
-        _panel.property_changed.emit(p, action)
+    var remove_btn: Button = Button.new()
+    remove_btn.text = "✕"
+    remove_btn.pressed.connect(func() -> void:
+        arr.remove_at(index)
+        field.constant_value.value = field.rebuild_typed_array(arr)
         rebuild.call()
     )
+    row.add_child(remove_btn)
 
-    rebuild.call()
-    _panel.extra_props.add_child(container)
+    return row
 
-func add_bool_field(prop: String, lbl: String, current: bool) -> void:
-    var row      :HBoxContainer = HBoxContainer.new()
-    var label    :Label = Label.new()
-    var checkbox :CheckBox = CheckBox.new()
+# ══════════════════════════════════════════════════════════════════════════
+# SCRIPT EDITOR — shared by constant + dynamic, scalar + vector fields
+# ══════════════════════════════════════════════════════════════════════════
 
-    label.text                     = lbl
-    label.custom_minimum_size.x    = 100
-    checkbox.button_pressed        = current
-    checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+func _script_editor_factory(field: Object) -> Callable:
+    return func() -> Control:
+        var wrapper: VBoxContainer = VBoxContainer.new()
 
-    checkbox.toggled.connect(func(v: bool) -> void: emit(prop, v))
+        var edit: TextEdit = TextEdit.new()
+        edit.custom_minimum_size = Vector2(220, 60)
+        edit.text                = field.script_source.value
+        edit.wrap_mode            = TextEdit.LINE_WRAPPING_BOUNDARY
 
-    row.add_child(label)
-    row.add_child(checkbox)
-    row.add_child(_make_script_button(prop))
-    _panel.extra_props.add_child(row)
+        var status: Label = Label.new()
+        status.modulate = Color.CRIMSON
 
+        edit.text_changed.connect(func() -> void:
+            field.script_source.value = edit.text
+            status.text = "" if not field.resolved.value == null else "Script did not resolve — check syntax"
+        )
 
-func add_color_field(prop: String, lbl: String, current: Color) -> void:
-    var row    :HBoxContainer = HBoxContainer.new()
-    var label  :Label = Label.new()
-    var picker :ColorPickerButton = ColorPickerButton.new()
+        wrapper.add_child(edit)
+        wrapper.add_child(status)
+        return wrapper
 
-    label.text                   = lbl
-    label.custom_minimum_size.x  = 100
-    picker.color                 = current
-    picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    picker.custom_minimum_size.y = 32
+# ══════════════════════════════════════════════════════════════════════════
+# SINGLE OPC TAG EDITOR — used by scalar OPC_TAG and per-zone tag rows
+# ══════════════════════════════════════════════════════════════════════════
 
-    picker.color_changed.connect(func(v: Color) -> void: emit(prop, v))
+func _tag_editor_factory(binding: ReactiveOpcUaTagBinding) -> Callable:
+    return func() -> Control:
+        return _build_tag_binding_editor(binding)
 
-    row.add_child(label)
-    row.add_child(picker)
-    row.add_child(_make_script_button(prop))
-    _panel.extra_props.add_child(row)
+func _build_tag_binding_editor(binding: ReactiveOpcUaTagBinding) -> Control:
+    var row: HBoxContainer = HBoxContainer.new()
 
+    var server_select: OptionButton = OptionButton.new()
+    var subscription_select: OptionButton = OptionButton.new()
+    var tag_select: OptionButton = OptionButton.new()
 
-func add_string_list_field(prop: String, lbl: String, current: Array[String]) -> void:
-    var working_copy: Array[String] = current.duplicate()
+    for o in [server_select, subscription_select, tag_select]:
+        o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-    var col       :VBoxContainer = VBoxContainer.new()
-    var header    :HBoxContainer = HBoxContainer.new()
-    var title_lbl :Label = Label.new()
+    var project: ReactiveProject = AppState.current_project
 
-    title_lbl.text                  = lbl
-    title_lbl.custom_minimum_size.x = 100
-    header.add_child(title_lbl)
-    col.add_child(header)
+    var populate_servers: Callable = func() -> void:
+        server_select.clear()
+        server_select.add_item("— Select Server —", -1)
+        if project == null:
+            return
+        var ids: Array = project.opc_ua_servers.value.keys()
+        for i in ids.size():
+            server_select.add_item(str(ids[i]), i)
+            server_select.set_item_metadata(i + 1, ids[i])
+        _select_option_by_metadata(server_select, binding.server_id.value)
 
-    var scroll :ScrollContainer = ScrollContainer.new()
-    scroll.size_flags_vertical    = Control.SIZE_EXPAND_FILL
-    scroll.custom_minimum_size.y  = 120
-    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    var populate_subscriptions: Callable
+    var populate_tags: Callable
 
-    var list_container :VBoxContainer = VBoxContainer.new()
-    list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    scroll.add_child(list_container)
-    col.add_child(scroll)
+    populate_subscriptions = func() -> void:
+        subscription_select.clear()
+        subscription_select.add_item("— Select Subscription —", -1)
+        if project == null or binding.server_id.value.is_empty():
+            return
+        var server: ReactiveOpcUaServer = project.opc_ua_servers.get_entry(binding.server_id.value)
+        if server == null:
+            return
+        var ids: Array = server.subscriptions.value.keys()
+        for i in ids.size():
+            subscription_select.add_item(str(ids[i]), i)
+            subscription_select.set_item_metadata(i + 1, ids[i])
+        _select_option_by_metadata(subscription_select, binding.subscription_id.value)
 
-    for i: int in working_copy.size():
-        _add_string_list_entry(prop, list_container, working_copy, i)
+    populate_tags = func() -> void:
+        tag_select.clear()
+        tag_select.add_item("— Select Tag —", -1)
+        if project == null or binding.server_id.value.is_empty() or binding.subscription_id.value.is_empty():
+            return
+        var server: ReactiveOpcUaServer = project.opc_ua_servers.get_entry(binding.server_id.value)
+        if server == null:
+            return
+        var subscription: ReactiveOpcUaSubscription = server.subscriptions.get_entry(binding.subscription_id.value)
+        if subscription == null:
+            return
+        var ids: Array = subscription.tags.value.keys()
+        for i in ids.size():
+            tag_select.add_item(str(ids[i]), i)
+            tag_select.set_item_metadata(i + 1, ids[i])
+        _select_option_by_metadata(tag_select, binding.tag_id.value)
 
-    var add_btn :Button = Button.new()
-    add_btn.text                  = "+ Add Tab"
-    add_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    add_btn.pressed.connect(func() -> void:
-        working_copy.append("New Tab")
-        _add_string_list_entry(prop, list_container, working_copy, working_copy.size() - 1)
-        emit(prop, working_copy.duplicate())
+    server_select.item_selected.connect(func(idx: int) -> void:
+        var meta: Variant = server_select.get_item_metadata(idx)
+        binding.server_id.value = str(meta) if meta != null else ""
+        binding.subscription_id.value = ""
+        binding.tag_id.value = ""
+        populate_subscriptions.call()
+        populate_tags.call()
     )
-    col.add_child(add_btn)
-    _panel.extra_props.add_child(col)
 
-
-func _add_string_list_entry(
-    prop:      String,
-    container: VBoxContainer,
-    list:      Array[String],
-    index:     int
-) -> void:
-    var entry_row :HBoxContainer = HBoxContainer.new()
-
-    var field :LineEdit = LineEdit.new()
-    field.text                  = list[index]
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    field.text_submitted.connect(func(new_text: String) -> void:
-        list[index] = new_text
-        emit(prop, list.duplicate())
+    subscription_select.item_selected.connect(func(idx: int) -> void:
+        var meta: Variant = subscription_select.get_item_metadata(idx)
+        binding.subscription_id.value = str(meta) if meta != null else ""
+        binding.tag_id.value = ""
+        populate_tags.call()
     )
-    entry_row.add_child(field)
 
-    var remove_btn :Button = Button.new()
-    remove_btn.text         = "✕"
-    remove_btn.tooltip_text = "Remove this tab"
-    remove_btn.pressed.connect(func() -> void:
-        list.remove_at(index)
-        entry_row.queue_free()
-        emit(prop, list.duplicate())
+    tag_select.item_selected.connect(func(idx: int) -> void:
+        var meta: Variant = tag_select.get_item_metadata(idx)
+        binding.tag_id.value = str(meta) if meta != null else ""
     )
-    entry_row.add_child(remove_btn)
-    container.add_child(entry_row)
 
+    populate_servers.call()
+    populate_subscriptions.call()
+    populate_tags.call()
 
-func add_node_field(prop: String, lbl: String, v: ReactiveDictionary) -> void:
-    var binding_prop: ReactiveOpcUaTagBinding = v.value[prop] as ReactiveOpcUaTagBinding
+    row.add_child(server_select)
+    row.add_child(subscription_select)
+    row.add_child(tag_select)
+    return row
 
-    var col: VBoxContainer = VBoxContainer.new()
-    var label: Label = Label.new()
-    label.text = lbl
-    col.add_child(label)
-    col.add_child(_build_tag_binding_editor(binding_prop))
-
-    _panel.extra_props.add_child(col)
-
-# ── Option population helpers ─────────────────────────────────────────────────
-func _populate_server_option(option: OptionButton) -> void:
-    option.clear()
-
-    for cfg: ReactiveOpcUaServer in AppState.current_project.opc_ua_servers.values():
-        option.add_item(cfg.display_name.value)
-        option.set_item_metadata(option.item_count - 1, cfg.id.value)
-
-
-func _populate_group_option(option: OptionButton, server_id: String) -> void:
-    option.clear()
-    if server_id == "":
+func _select_option_by_metadata(option: OptionButton, target: String) -> void:
+    if target.is_empty():
+        option.select(0)
         return
-
-    for group: ReactiveOpcUaSubscription in AppState.current_project.opc_ua_servers.get_entry(server_id).subscriptions.values():
-        var item_label: String = "%s  —  %.0f ms" % [group.id.value, group.pub_interval_ms.value]
-        option.add_item(item_label)
-        option.set_item_metadata(option.item_count - 1, group.id.value)
-
-func _select_option_by_metadata(option: OptionButton, metadata_value: String) -> void:
-    for i: int in option.item_count:
-        if option.get_item_metadata(i) == metadata_value:
+    for i in option.item_count:
+        if str(option.get_item_metadata(i)) == target:
             option.select(i)
             return
+    option.select(0)
 
-func _build_dynamic_field_editor(p: String, field: ReactiveDynamicField) -> Control:
-    var wrapper: VBoxContainer = VBoxContainer.new()
-    var source_dropdown: OptionButton = OptionButton.new()
-    var editor_slot: MarginContainer = MarginContainer.new()
+# ══════════════════════════════════════════════════════════════════════════
+# PER-ZONE OPC TAG ARRAY EDITOR — "connect tags to array properties"
+# ══════════════════════════════════════════════════════════════════════════
 
-    source_dropdown.add_item("Constant", ReactiveDynamicField.SourceType.CONSTANT)
-    source_dropdown.add_item("OPC Tag",  ReactiveDynamicField.SourceType.OPC_TAG)
-    source_dropdown.add_item("Script",   ReactiveDynamicField.SourceType.SCRIPT)
-    source_dropdown.select(field.source_type.value)
+func _tag_array_editor_factory(field: ReactiveDynamicField) -> Callable:
+    return func() -> Control:
+        var list: VBoxContainer = VBoxContainer.new()
+        var rows: VBoxContainer = VBoxContainer.new()
+        var binding: ReactiveOpcUaTagArrayBinding = field.tag_array_binding
 
-    wrapper.add_child(source_dropdown)
-    wrapper.add_child(editor_slot)
+        var rebuild: Callable
+        rebuild = func() -> void:
+            # Defensive guard: if this row's controls were already freed
+            # (e.g. the property panel rebuilt itself before this listener
+            # was disconnected), silently no-op instead of crashing.
+            if not is_instance_valid(rows):
+                return
+            for c in rows.get_children():
+                c.queue_free()
+            for i in binding.tag_bindings.value.size():
+                rows.add_child(_build_tag_array_row(binding, i, rebuild))
 
-    var rebuild: Callable = func() -> void:
-        for child: Node in editor_slot.get_children():
-            child.queue_free()
-        match field.source_type.value:
-            ReactiveDynamicField.SourceType.CONSTANT:
-                editor_slot.add_child(_make_constant_editor(p, field))
-            ReactiveDynamicField.SourceType.OPC_TAG:
-                editor_slot.add_child(_make_tag_editor(p, field))
-            ReactiveDynamicField.SourceType.SCRIPT:
-                pass
-                #editor_slot.add_child(_make_script_editor(p, field))
+        var on_tag_bindings_changed: Callable = func(_t) -> void:
+            rebuild.call()
+        binding.tag_bindings.connect_any_changed_self(on_tag_bindings_changed)
 
-    source_dropdown.item_selected.connect(func(idx: int) -> void:
-        field.source_type.value = source_dropdown.get_item_id(idx)
-        _panel.property_changed.emit(p, field)
+        # Ensure the listener above is disconnected the moment this row's
+        # root control leaves the tree (e.g. torn down by a full property
+        # panel rebuild). Without this, every rebuild leaks a listener
+        # that still references this row's now-freed `rows` container,
+        # causing "Lambda capture ... was freed" the next time a tag is
+        # added or removed — since the stale listener remains connected
+        # to the field's (long-lived) tag_array_binding.
+        list.tree_exiting.connect(func() -> void:
+            if binding.tag_bindings.reactive_changed.is_connected(on_tag_bindings_changed):
+                binding.tag_bindings.reactive_changed.disconnect(on_tag_bindings_changed)
+        )
+
+        var add_btn: Button = Button.new()
+        add_btn.text = "Add Zone Tag"
+        add_btn.pressed.connect(func() -> void:
+            binding.add_tag("", "", "")
+        )
+
+        rebuild.call()
+        list.add_child(rows)
+        list.add_child(add_btn)
+        return list
+
+func _build_tag_array_row(binding: ReactiveOpcUaTagArrayBinding, index: int, rebuild: Callable) -> Control:
+    var row: HBoxContainer = HBoxContainer.new()
+
+    var idx_label: Label = Label.new()
+    idx_label.text                  = "Zone %d" % index
+    idx_label.custom_minimum_size.x = 60
+    row.add_child(idx_label)
+
+    var picker: Control = _build_tag_binding_editor(binding.tag_bindings.value[index])
+    picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.add_child(picker)
+
+    var remove_btn: Button = Button.new()
+    remove_btn.text = "✕"
+    remove_btn.pressed.connect(func() -> void:
+        binding.remove_tag(index)
         rebuild.call()
     )
+    row.add_child(remove_btn)
 
-    rebuild.call()
-    return wrapper
+    return row
 
-func _build_variant_array_editor(field: ReactiveDynamicField) -> Control:
-    var edit: TextEdit = TextEdit.new()
-    edit.custom_minimum_size = Vector2(260, 80)
-    edit.text = var_to_str(field.constant_value.value)
+# ══════════════════════════════════════════════════════════════════════════
+# ACTION BINDING EDITOR (Events tab)
+# ══════════════════════════════════════════════════════════════════════════
 
-    var status: Label = Label.new()
-    status.modulate = Color.CRIMSON
-
-    edit.text_changed.connect(func() -> void:
-        var parsed: Variant = str_to_var(edit.text)
-        if parsed == null and not edit.text.strip_edges().is_empty():
-            status.text = "Invalid literal — expected e.g. [1.0, true, \"idle\", Color.RED]"
-            return
-        status.text = ""
-        field.constant_value.value = parsed
-    )
-
-    var randomize_btn: Button = Button.new()
-    randomize_btn.text = "Randomize (test data)"
-    randomize_btn.pressed.connect(func() -> void:
-        var n: int = 32
-        var existing: Variant = str_to_var(edit.text)
-        if existing is Array:
-            n = max(existing.size(), 1)
-        var test: Array = []
-        test.resize(n)
-        for i in n:
-            test[i] = randf_range(-10.0, 10.0)
-        field.constant_value.value = test
-        edit.text = var_to_str(test)
-    )
-
+## NOTE: This assumes ReactiveActionBinding exposes an `action_type`
+## (ReactiveInt) and a `script_source` (ReactiveString) similar in spirit to
+## ReactiveDynamicField. Adjust field names below to match your actual
+## ReactiveActionBinding implementation.
+func _build_action_binding_editor(action: ReactiveActionBinding) -> Control:
     var wrapper: VBoxContainer = VBoxContainer.new()
+
+    var edit: TextEdit = TextEdit.new()
+    edit.custom_minimum_size = Vector2(220, 50)
+    edit.text                = action.script_source.value if "script_source" in action else ""
+    edit.placeholder_text     = "e.g. Widgets.get(\"detail_panel\").set_visible(true)"
+
+    edit.text_changed.connect(func() -> void:
+        if "script_source" in action:
+            action.script_source.value = edit.text
+    )
+
     wrapper.add_child(edit)
-    wrapper.add_child(status)
-    wrapper.add_child(randomize_btn)
     return wrapper
-
-func _build_vector_field_editor(p: String, field: ReactiveDynamicField) -> Control:
-    var root: VBoxContainer = VBoxContainer.new()
-
-    var source_selector: OptionButton = OptionButton.new()
-    source_selector.add_item("Constant", ReactiveDynamicField.SourceType.CONSTANT)
-    source_selector.add_item("OPC Tag (native array)", ReactiveDynamicField.SourceType.OPC_TAG)
-    source_selector.add_item("OPC Tags (per-zone)", ReactiveDynamicField.SourceType.OPC_TAG_ARRAY)
-    source_selector.add_item("Script", ReactiveDynamicField.SourceType.SCRIPT)
-    source_selector.selected = field.source_type.value
-    source_selector.item_selected.connect(func(idx: int) -> void:
-        field.source_type.value = source_selector.get_item_id(idx)
-    )
-    root.add_child(source_selector)
-
-    match field.source_type.value:
-        ReactiveDynamicField.SourceType.CONSTANT:
-            root.add_child(_build_variant_array_editor(field))
-        ReactiveDynamicField.SourceType.OPC_TAG:
-            root.add_child(_build_tag_binding_editor(field.tag_binding))
-        ReactiveDynamicField.SourceType.OPC_TAG_ARRAY:
-            root.add_child(_build_tag_array_editor(field.tag_array_binding))
-        ReactiveDynamicField.SourceType.SCRIPT:
-            pass
-            #root.add_child(_build_script_editor(field.script_source))
-
-    return root
-
-func _build_tag_array_editor(binding: ReactiveOpcUaTagArrayBinding) -> Control:
-    var list: VBoxContainer = VBoxContainer.new()
-    for t in binding.tag_bindings.value:
-        list.add_child(_build_tag_binding_editor(t))
-
-    var add_btn: Button = Button.new()
-    add_btn.text = "Add Zone Tag"
-    add_btn.pressed.connect(func() -> void:
-        binding.add_tag("", "", "")
-    )
-    list.add_child(add_btn)
-    return list
-
-func _make_constant_editor(p: String, f: ReactiveDynamicField) -> Control:
-    var field: LineEdit = LineEdit.new()
-    field.text                  = str(f.constant_value.value)
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    field.text_submitted.connect(func(n: String) -> void:
-        f.constant_value.value = n
-        _panel.property_changed.emit(p, f)
-        field.text = str(f.constant_value.value)
-    )
-    return field
-
-func _make_tag_editor(p: String, f: ReactiveDynamicField) -> Control:
-    return _build_tag_binding_editor(f.tag_binding, func() -> void:
-        _panel.property_changed.emit(p, f)
-    )
-
-func _build_script_editor(p: String, f: ReactiveDynamicField) -> Control:
-    var edit: TextEdit = TextEdit.new()
-    edit.text                  = f.script_source.value
-    edit.custom_minimum_size.y = 80
-    edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    edit.text_changed.connect(func() -> void:
-        f.script_source.value = edit.text
-        _panel.property_changed.emit(p, f)
-    )
-    return edit
-
-func _make_action_script_editor(p: String, a: ReactiveActionBinding) -> Control:
-    var edit: TextEdit = TextEdit.new()
-    edit.text                  = a.script_source.value
-    edit.custom_minimum_size.y = 100
-    edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    edit.text_changed.connect(func() -> void:
-        a.script_source.value = edit.text
-        _panel.property_changed.emit(p, a)
-    )
-    return edit
-
-func _make_scene_path_editor(p: String, a: ReactiveActionBinding) -> Control:
-    var field: LineEdit = LineEdit.new()
-    field.text                  = a.scene_path.value
-    field.placeholder_text      = "res://path/to/scene.tscn"
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    field.text_submitted.connect(func(n: String) -> void:
-        a.scene_path.value = n
-        _panel.property_changed.emit(p, a)
-        field.text = a.scene_path.value
-    )
-    return field
-
-func _make_event_name_editor(p: String, a: ReactiveActionBinding) -> Control:
-    var field: LineEdit = LineEdit.new()
-    field.text                  = a.event_name.value
-    field.placeholder_text      = "custom_event_name"
-    field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    field.text_submitted.connect(func(n: String) -> void:
-        a.event_name.value = n
-        _panel.property_changed.emit(p, a)
-        field.text = a.event_name.value
-    )
-    return field
-
-func _build_tag_binding_editor(
-    binding_prop: ReactiveOpcUaTagBinding,
-    on_change: Callable = Callable()
-) -> Control:
-    var container: VBoxContainer = VBoxContainer.new()
-
-    # ── Server row ─────────────────────────────────────────────
-    var server_row    : HBoxContainer = HBoxContainer.new()
-    var server_label  : Label = Label.new()
-    var server_option : OptionButton = OptionButton.new()
-
-    server_label.text                   = "Server"
-    server_label.custom_minimum_size.x  = 60
-    server_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    _populate_server_option(server_option)
-    _select_option_by_metadata(server_option, binding_prop.server_id.value)
-
-    server_row.add_child(server_label)
-    server_row.add_child(server_option)
-    container.add_child(server_row)
-
-    # ── Group row ──────────────────────────────────────────────
-    var group_row    : HBoxContainer = HBoxContainer.new()
-    var group_label  : Label = Label.new()
-    var group_option : OptionButton = OptionButton.new()
-
-    group_label.text                   = "Group"
-    group_label.custom_minimum_size.x  = 60
-    group_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    _populate_group_option(group_option, binding_prop.server_id.value)
-    _select_option_by_metadata(group_option, binding_prop.subscription_id.value)
-
-    group_row.add_child(group_label)
-    group_row.add_child(group_option)
-    container.add_child(group_row)
-
-    # ── Tag row ────────────────────────────────────────────────
-    var tag_row    : HBoxContainer = HBoxContainer.new()
-    var tag_label  : Label = Label.new()
-    var tag_edit   : LineEdit = LineEdit.new()
-    var browse_btn : Button = Button.new()
-
-    tag_label.text                  = "Tag"
-    tag_label.custom_minimum_size.x = 60
-    tag_edit.text                   = binding_prop.tag_id.value
-    tag_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
-    tag_edit.editable               = false
-    browse_btn.text                 = "Browse"
-
-    tag_row.add_child(tag_label)
-    tag_row.add_child(tag_edit)
-    tag_row.add_child(browse_btn)
-    container.add_child(tag_row)
-
-    # ── Reactive → UI ──────────────────────────────────────────
-    var on_server_changed: Callable = func(_new_value: ReactiveString) -> void:
-        if not is_instance_valid(server_option):
-            return
-        _select_option_by_metadata(server_option, _new_value.value)
-        if is_instance_valid(group_option):
-            _populate_group_option(group_option, _new_value.value)
-            _select_option_by_metadata(group_option, binding_prop.subscription_id.value)
-
-    var on_subscription_changed: Callable = func(_new_value: ReactiveString) -> void:
-        if is_instance_valid(group_option):
-            _select_option_by_metadata(group_option, _new_value.value)
-
-    var on_tag_id_changed: Callable = func(_new_value: ReactiveString) -> void:
-        if is_instance_valid(tag_edit):
-            tag_edit.text = _new_value.value
-
-    binding_prop.server_id.connect_self_changed(on_server_changed)
-    binding_prop.subscription_id.connect_self_changed(on_subscription_changed)
-    binding_prop.tag_id.connect_self_changed(on_tag_id_changed)
-
-    container.tree_exiting.connect(func() -> void:
-        if binding_prop.server_id.reactive_changed.is_connected(on_server_changed):
-            binding_prop.server_id.reactive_changed.disconnect(on_server_changed)
-        if binding_prop.subscription_id.reactive_changed.is_connected(on_subscription_changed):
-            binding_prop.subscription_id.reactive_changed.disconnect(on_subscription_changed)
-        if binding_prop.tag_id.reactive_changed.is_connected(on_tag_id_changed):
-            binding_prop.tag_id.reactive_changed.disconnect(on_tag_id_changed)
-    )
-
-    # ── User intent → binding_prop ────────────────────────────
-    server_option.item_selected.connect(func(_index: int) -> void:
-        var sid: String = server_option.get_item_metadata(server_option.selected)
-        binding_prop.server_id.value       = sid
-        binding_prop.subscription_id.value = ""
-        binding_prop.tag_id.value          = ""
-        if on_change.is_valid():
-            on_change.call()
-    )
-
-    group_option.item_selected.connect(func(_index: int) -> void:
-        var gid: String = group_option.get_item_metadata(group_option.selected)
-        binding_prop.subscription_id.value = gid
-        if on_change.is_valid():
-            on_change.call()
-    )
-
-    browse_btn.pressed.connect(func() -> void:
-        var server_id: String = binding_prop.server_id.value
-        var server: ReactiveOpcUaServer = AppState.current_project.opc_ua_servers.get_entry(server_id)
-
-        if server == null:
-            printerr("Cannot browse: no server selected for this tag binding")
-            return
-
-        var opc_ua_connection_dialog: Node = WindowManager.open_window("opc_ua_connection_dialog", {
-            "auto_popup": false
-        })
-
-        opc_ua_connection_dialog.browse(func(result: ReactiveOpcUaTagBinding) -> void:
-            binding_prop.server_id.value       = server_id
-            binding_prop.subscription_id.value = result.subscription_id.value
-            binding_prop.tag_id.value          = result.tag_id.value
-            if on_change.is_valid():
-                on_change.call()
-        )
-    )
-
-    return container
-
-func _build_write_target_editor(
-    target: ReactiveOpcUaWriteTarget,
-    on_change: Callable = Callable()
-) -> Control:
-    var container: VBoxContainer = VBoxContainer.new()
-
-    # ── Server row ─────────────────────────────────────────────
-    var server_row    : HBoxContainer = HBoxContainer.new()
-    var server_label  : Label = Label.new()
-    var server_option : OptionButton = OptionButton.new()
-
-    server_label.text                   = "Server"
-    server_label.custom_minimum_size.x  = 60
-    server_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-    _populate_server_option(server_option)
-    _select_option_by_metadata(server_option, target.server_id.value)
-
-    server_row.add_child(server_label)
-    server_row.add_child(server_option)
-    container.add_child(server_row)
-
-    # ── Node row (no subscription/group needed for writes) ────
-    var node_row    : HBoxContainer = HBoxContainer.new()
-    var node_label  : Label = Label.new()
-    var node_edit   : LineEdit = LineEdit.new()
-    var browse_btn  : Button = Button.new()
-
-    node_label.text                  = "Node"
-    node_label.custom_minimum_size.x = 60
-    node_edit.text                   = target.node_id.value
-    node_edit.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
-    node_edit.editable               = false
-    browse_btn.text                  = "Browse"
-
-    node_row.add_child(node_label)
-    node_row.add_child(node_edit)
-    node_row.add_child(browse_btn)
-    container.add_child(node_row)
-
-    # ── Reactive → UI ──────────────────────────────────────────
-    var on_server_changed: Callable = func(_v: ReactiveString) -> void:
-        if is_instance_valid(server_option):
-            _select_option_by_metadata(server_option, _v.value)
-
-    var on_node_changed: Callable = func(_v: ReactiveString) -> void:
-        if is_instance_valid(node_edit):
-            node_edit.text = _v.value
-
-    target.server_id.connect_self_changed(on_server_changed)
-    target.node_id.connect_self_changed(on_node_changed)
-
-    container.tree_exiting.connect(func() -> void:
-        if target.server_id.reactive_changed.is_connected(on_server_changed):
-            target.server_id.reactive_changed.disconnect(on_server_changed)
-        if target.node_id.reactive_changed.is_connected(on_node_changed):
-            target.node_id.reactive_changed.disconnect(on_node_changed)
-    )
-
-    # ── User intent → target ────────────────────────────────────
-    server_option.item_selected.connect(func(_index: int) -> void:
-        var sid: String = server_option.get_item_metadata(server_option.selected)
-        target.server_id.value = sid
-        target.node_id.value   = ""  # server changed — clear stale node
-        if on_change.is_valid():
-            on_change.call()
-    )
-
-    browse_btn.pressed.connect(func() -> void:
-        var browse_nodes: BrowseNodes = _panel.get_node("/root/Main/Dialogs/BrowseNodes")
-        browse_nodes.browse(
-            AppState.current_project.opc_ua_servers.get_entry(target.server_id.value),
-            func(result: OpcUaNodeId) -> void:
-                target.node_id.value = result.to_tag_name()
-        )
-    )
-
-    return container

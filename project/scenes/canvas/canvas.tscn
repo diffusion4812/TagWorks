@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://dhcttkq3x2jo6" path="res://scenes/canvas/canvas.gd" id="1_gasuo"]
 
 [node name="Canvas" type="Panel" unique_id=1037499837]
-custom_minimum_size = Vector2(600, 600)
+custom_minimum_size = Vector2(800, 900)
 offset_right = 600.0
 offset_bottom = 600.0
 mouse_filter = 1

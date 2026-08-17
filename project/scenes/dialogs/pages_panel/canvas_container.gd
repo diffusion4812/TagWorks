@@ -117,7 +117,7 @@ func _create_tab_for_page(page: ReactivePage) -> void:
 
     var canvas: WidgetCanvas            = CANVAS_SCENE.instantiate()
     canvas.name                         = "Canvas_%s" % page.page_id.value
-    canvas.custom_minimum_size          = Vector2(600, 600)
+    canvas.custom_minimum_size          = Vector2(800, 900)
     canvas.size_flags_horizontal        = Control.SIZE_SHRINK_BEGIN
     canvas.size_flags_vertical          = Control.SIZE_SHRINK_BEGIN
     canvas.data                         = page.canvas

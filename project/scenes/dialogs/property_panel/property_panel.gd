@@ -4,27 +4,15 @@ extends PanelContainer
 var _current_target: ReactiveWidget  = null
 var _current_widget_node: BaseWidget = null
 
-@onready var panel_title: Label         = $MarginContainer/VBoxContainer/PanelTitle
-@onready var extra_props: VBoxContainer = %ExtraProperties
-@onready var apply_btn:   Button        = %ApplyButton
-@onready var close_btn:   Button        = %CloseButton
+@onready var _properties : VBoxContainer = %Properties
+@onready var _events :     VBoxContainer = %Events
 
 signal property_changed(p: String, v: Variant)
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-    apply_btn.pressed.connect(_on_apply_btn_pressed)
-    close_btn.pressed.connect(_on_close_btn_pressed)
-
     AppState.selected_widgets.connect_self_changed(_on_selected_widgets_changed)
-
-func _on_apply_btn_pressed() -> void:
-    _reapply_current_target()
-
-
-func _on_close_btn_pressed() -> void:
-    IntentBus.deselect_widget_requested.emit()
 
 # ── AppState Handlers ─────────────────────────────────────────────────────────
 
@@ -64,30 +52,24 @@ func _find_widget(node: Node, widget_id: ReactiveWidget) -> BaseWidget:
 # ── Clear / Load ──────────────────────────────────────────────────────────────
 
 func clear() -> void:
-    panel_title.text = ""
     _current_target  = null
-    for child: Node in extra_props.get_children():
+    for child: Node in _properties.get_children():
+        child.queue_free()
+    for child: Node in _events.get_children():
         child.queue_free()
 
 
 func _load_widget(node: Node, widget: ReactiveWidget) -> void:
-    for child: Node in extra_props.get_children():
+    for child: Node in _properties.get_children():
         child.queue_free()
-
-    panel_title.text = widget.widget_type.value
+    for child: Node in _events.get_children():
+        child.queue_free()
 
     var base_widget: BaseWidget = node as BaseWidget
     if base_widget != null:
-        base_widget.build_properties(WidgetPropertyBuilder.new(self, widget))
+        base_widget.build_properties(WidgetPropertyBuilder.new(self))
     else:
         push_warning("Properties panel: node '%s' is not a BaseWidget." % node.name)
-
-# ── Apply ─────────────────────────────────────────────────────────────────────
-
-func _reapply_current_target() -> void:
-    if _current_target != null:
-        for id: String in _current_target.properties.keys():
-            IntentBus.change_widget_property_requested.emit(_current_target, id, _current_target.properties[id])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

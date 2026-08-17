@@ -28,6 +28,8 @@ func _instantiate_content(descriptor: WidgetExtensionDescriptor) -> void:
     %ContentSlot.add_child(_content)
     if _content.has_method("on_widget_ready"):
         _content.call("on_widget_ready", data)
+    if _content.has_method("on_edit_mode_changed"):
+        AppState.edit_mode.connect_self_changed(func(edit_mode: ReactiveBool) -> void: _content.call("on_edit_mode_changed", edit_mode.value))
 
 func build_properties(builder: WidgetPropertyBuilder) -> void:
     if _content != null and _content.has_method("build_properties"):

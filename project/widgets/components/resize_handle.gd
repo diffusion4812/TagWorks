@@ -1,8 +1,6 @@
-# widgets/components/resize_handle.gd
 class_name ResizeHandle
 extends Control
 
-## Renamed from Anchor to HandleAnchor to avoid collision with Control.Anchor
 enum HandleAnchor {
     TOP_LEFT,
     TOP_CENTER,
