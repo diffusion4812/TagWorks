@@ -104,6 +104,24 @@ func _dict_to_array(d: Dictionary) -> Variant:
         TYPE_PACKED_BYTE_ARRAY:    return PackedByteArray(arr)
         _: return arr  # TYPE_ARRAY (generic Variant array) or unknown
 
+## Converts a plain Array back into the field's original native storage
+## type (PackedFloat32Array, PackedColorArray, generic Array, etc.), based
+## on the type captured from the constructor's default_value. Use this
+## instead of hardcoding a specific Packed*Array constructor anywhere a
+## plain Array needs to be written back to constant_value.
+func rebuild_typed_array(arr: Array) -> Variant:
+    match _vector_type:
+        TYPE_PACKED_FLOAT32_ARRAY: return PackedFloat32Array(arr)
+        TYPE_PACKED_FLOAT64_ARRAY: return PackedFloat64Array(arr)
+        TYPE_PACKED_INT32_ARRAY:   return PackedInt32Array(arr)
+        TYPE_PACKED_INT64_ARRAY:   return PackedInt64Array(arr)
+        TYPE_PACKED_STRING_ARRAY:  return PackedStringArray(arr)
+        TYPE_PACKED_COLOR_ARRAY:   return PackedColorArray(arr)
+        TYPE_PACKED_VECTOR2_ARRAY: return PackedVector2Array(arr)
+        TYPE_PACKED_VECTOR3_ARRAY: return PackedVector3Array(arr)
+        TYPE_PACKED_BYTE_ARRAY:    return PackedByteArray(arr)
+        _: return arr  # TYPE_ARRAY (generic Variant array) or unknown
+
 # ── Serialization ─────────────────────────────────────────────────────────────
 
 func deserialize(data: Variant) -> void:

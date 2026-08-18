@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Tag Commander 1.0\n"
+"Project-Id-Version: TagWorks 1.0\n"
 "POT-Creation-Date: 2024-01-01 00:00+0000\n"
 "PO-Revision-Date: 2024-01-01 00:00+0000\n"
 "Last-Translator: SMS Group\n"
@@ -11,7 +11,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 msgid "SPLASH_TITLE"
-msgstr "Tag Commander"
+msgstr "TagWorks"
 
 msgid "SPLASH_NEW_PROJECT"
 msgstr "Neues Projekt"

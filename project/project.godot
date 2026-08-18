@@ -10,14 +10,17 @@ config_version=5
 
 [application]
 
-config/name="Tag Commander"
+config/name="TagWorks"
 config/version="0.0.1"
 run/main_scene="uid://kk1oivxbhmqy"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="TagWorks"
 config/features=PackedStringArray("4.7", "Mobile")
 run/low_processor_mode=true
 run/low_processor_mode_sleep_usec=10000
 boot_splash/show_image=false
-config/icon="res://icon.svg"
+config/icon="uid://dxy3mppjwsw77"
+config/windows_native_icon="res://resources/icon.ico"
 
 [audio]
 
